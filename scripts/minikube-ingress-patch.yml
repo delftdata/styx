@@ -1,0 +1,8 @@
+spec:
+  template:
+    spec:
+      containers:
+      - name: controller
+        ports:
+         - containerPort: 8888
+           hostPort: 8888

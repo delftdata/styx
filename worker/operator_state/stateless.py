@@ -1,0 +1,2 @@
+class Stateless(object):
+    pass

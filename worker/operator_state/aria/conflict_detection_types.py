@@ -1,0 +1,9 @@
+from enum import Enum
+
+
+class AriaConflictDetectionType(Enum):
+    DEFAULT_SERIALIZABLE = 0
+    DETERMINISTIC_REORDERING = 1
+    SNAPSHOT_ISOLATION = 2
+    SERIALIZABLE_REORDER_ON_IN_DEGREE = 3
+    SNAPSHOT_REORDER_ON_IN_DEGREE = 4
