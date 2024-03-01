@@ -9,7 +9,7 @@ and the worker modules as well as pandas, numpy and matplotlib.
 You can use the following commands:
 
 ```
-pip install universalis-package/.  
+pip install styx-package/.  
 pip install -r coordinator/requirements.txt
 pip install -r worker/requirements.txt
 pip install pandas numpy matplotlib
