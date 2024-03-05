@@ -1,5 +1,21 @@
 # Styx: Transactional Stateful Functions on Streaming Dataflows
 
+This repository contains the codebase of Styx described in: https://arxiv.org/abs/2312.06893.
+
+
+##### Cite Styx
+
+```bibtex
+@misc{psarakis2024styx,
+      title={Styx: Transactional Stateful Functions on Streaming Dataflows}, 
+      author={Kyriakos Psarakis and George Siachamis and George Christodoulou and Marios Fragkoulis and Asterios Katsifodimos},
+      year={2024},
+      eprint={2312.06893},
+      archivePrefix={arXiv},
+      primaryClass={cs.DC}
+}
+```
+
 ## Preliminaries
 
 This project requires an environment with *python 3.12* installed. 
@@ -14,6 +30,26 @@ pip install -r coordinator/requirements.txt
 pip install -r worker/requirements.txt
 pip install pandas numpy matplotlib
 ```
+
+## Folder structure
+
+*   [`coordinator`](https://github.com/delftdata/styx/tree/main/coordinator) 
+    Styx coordinator.
+
+*   [`demo`](https://github.com/delftdata/styx/tree/main/benchmark) 
+    The YCSB-T, Deathstar, TPC-C and scalability benchmarks we used for the experiments.
+
+*   [`env`](https://github.com/delftdata/styx/tree/main/env-example)
+    env folder for the docker-compose Minio container.
+
+*   [`styx-package`](https://github.com/delftdata/styx/tree/main/styx-package)
+    The Styx framework Python package.
+
+*   [`tests`](https://github.com/delftdata/styx/tree/main/tests)
+    Tests for the worker components of Styx.
+
+*   [`worker`](https://github.com/delftdata/styx/tree/main/styx-package)
+    Styx worker.
 
 ## Running experiments
 
@@ -48,7 +84,7 @@ The options for `[WORKLOAD_NAME]` are `ycsbt` for YCSB-T, `dhr` for deathstar ho
 
 ## Alternative way of execution
 
-**Alternatively**, you can also handle the individual components of the pipeline as follows. First, you need to deploy 
+**Alternatively**, you can also handle the individual components of Styx as follows. First, you need to deploy 
 the Kafka cluster and the MinIO storage. And use any of the clients in the `/demo` folder.
 
 ### Kafka
@@ -67,31 +103,10 @@ To clear MinIO: `docker-compose -f docker-compose-minio.yml down --volumes`
 
 ---
   
-Then, you can start the stream processing engine and specify the desired scale.
+Then, you can start the Styx engine and specify the desired scale.
 
 ### Styx Engine
 
 To run the SE: `docker-compose up --build --scale worker=4`
 
 To clear the SE: `docker-compose down --volumes`
-
-
-## Folder structure
-
-*   [`coordinator`](https://github.com/delftdata/styx/tree/main/coordinator) 
-    Styx coordinator containerized python service code .
-
-*   [`demo`](https://github.com/delftdata/styx/tree/main/benchmark) 
-    The YCSB-T, Deathstar and TPC-C benchmarks we used for the experiments.
-
-*   [`env`](https://github.com/delftdata/styx/tree/main/env-example)
-    env folder for the docker-compose Minio container.
-
-*   [`styx-package`](https://github.com/delftdata/styx/tree/main/styx-package)
-    The Styx framework Python package.
-
-*   [`tests`](https://github.com/delftdata/styx/tree/main/tests)
-    Tests for the worker components of Styx.
-
-*   [`worker`](https://github.com/delftdata/styx/tree/main/styx-package)
-    Styx worker containerized python service code.
