@@ -8,7 +8,7 @@ from confluent_kafka.admin import AdminClient, NewTopic, KafkaException
 from styx.common.base_operator import BaseOperator
 from styx.common.local_state_backends import LocalStateBackend
 from styx.common.message_types import MessageType
-from styx.common.networking import NetworkingManager
+from styx.common.tcp_networking import NetworkingManager
 from styx.common.stateflow_graph import StateflowGraph
 from styx.common.stateflow_ingress import IngressTypes
 from styx.common.logging import logging
@@ -65,7 +65,7 @@ class Coordinator(object):
         return worker_id, send_recovery
 
     async def remove_workers(self, workers_to_remove: set[int]):
-        self.dead_workers |= workers_to_remove
+        self.dead_workers.update(workers_to_remove)
         await self.send_recovery_to_healthy_workers(workers_to_remove)
 
     def change_operator_partition_locations(self,
@@ -136,17 +136,16 @@ class Coordinator(object):
                 if not self.dead_workers:
                     break
                 await asyncio.sleep(0.01)
-            tasks = [
-                asyncio.ensure_future(
-                    self.networking.send_message(worker[0], worker[1],
-                                                 msg=(self.operator_partition_locations,
-                                                      self.workers,
-                                                      self.operator_state_backend,
-                                                      self.get_current_completed_snapshot_id()),
-                                                 msg_type=MessageType.RecoveryOther))
-                for worker_id, worker in self.workers.items() if worker_id not in workers_to_remove]
 
-            await asyncio.gather(*tasks)
+            async with asyncio.TaskGroup() as tg:
+                for worker_id, worker in self.workers.items():
+                    if worker_id not in workers_to_remove:
+                        tg.create_task(self.networking.send_message(worker[0], worker[1],
+                                                                    msg=(self.operator_partition_locations,
+                                                                         self.workers,
+                                                                         self.operator_state_backend,
+                                                                         self.get_current_completed_snapshot_id()),
+                                                                    msg_type=MessageType.RecoveryOther))
             logging.info('SENT RECOVER TO HEALTHY WORKERS')
 
     def create_kafka_ingress_topics(self, stateflow_graph: StateflowGraph):

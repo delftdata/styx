@@ -5,11 +5,13 @@ from matplotlib import rcParams, rc
 rcParams['figure.figsize'] = [8, 4]
 plt.rcParams.update({'font.size': 13})
 
+sys_name = "SysX"
+
 # 1.5k lat 2000 throughput for subsec 50th
 means = [19, 695, 9791.84, 43843.92]
 errors = [(0, 0, 0, 0), (34, 2280, 11325.19, 84265.19)]
 
-labels = ["Styx", "T-Statefun", "Boki", "Beldi"]
+labels = [sys_name, "T-Statefun", "Boki", "Beldi"]
 
 plt.subplot(1, 2, 1)
 

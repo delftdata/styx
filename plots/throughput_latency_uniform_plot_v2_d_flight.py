@@ -2,6 +2,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import rcParams, rc
 
+sys_name = "SysX"
+
 rcParams['figure.figsize'] = [12, 5]
 plt.rcParams.update({'font.size': 18})
 
@@ -53,9 +55,9 @@ y_boki_99_mask = np.isfinite(y_boki_99)
 line_width = 2.5
 marker_size = 8
 plt.grid(linestyle="--", linewidth=1.5)
-plt.plot(x[styx_50_mask], y_styx_50[styx_50_mask], "-o", color="#882255", label="Styx 50p",
+plt.plot(x[styx_50_mask], y_styx_50[styx_50_mask], "-o", color="#882255", label=f"{sys_name} 50p",
          linewidth=line_width, markersize=marker_size)
-plt.plot(x[styx_99_mask], y_styx_99[styx_99_mask], "--", marker="o", color="#882255", label="Styx 99p",
+plt.plot(x[styx_99_mask], y_styx_99[styx_99_mask], "--", marker="o", color="#882255", label=f"{sys_name} 99p",
          linewidth=line_width, markersize=marker_size, markerfacecolor='none')
 plt.plot(x, y_beldi_50, "-^", color="#BD7105", label="Beldi 50p",
          linewidth=line_width, markersize=marker_size)

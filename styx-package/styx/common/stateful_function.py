@@ -8,7 +8,7 @@ from typing import Awaitable, Type
 import mmh3
 
 from .logging import logging
-from .networking import NetworkingManager
+from .tcp_networking import NetworkingManager
 
 from .serialization import Serializer
 from .function import Function
@@ -45,6 +45,7 @@ class StatefulFunction(Function):
                  t_id: int,
                  request_id: bytes,
                  fallback_mode: bool,
+                 use_fallback_cache: bool,
                  protocol: BaseTransactionalProtocol):
         super().__init__(name=function_name)
         self.__operator_name = operator_name
@@ -56,33 +57,39 @@ class StatefulFunction(Function):
         self.__request_id: bytes = request_id
         self.__async_remote_calls: list[tuple[str, str, int, object, tuple, bool]] = []
         self.__fallback_enabled: bool = fallback_mode
+        self.__use_fallback_cache: bool = use_fallback_cache
         self.__key = key
         self.__protocol = protocol
 
     async def __call__(self, *args, **kwargs):
         try:
             res = await self.run(*args)
-            if self.__fallback_enabled:
-                return res, len(self.__async_remote_calls)
+            logging.info(f'Run args: {args} kwargs: {kwargs} async remote calls: {self.__async_remote_calls}')
+            if self.__fallback_enabled and self.__use_fallback_cache:
+                # if the fallback is enabled, and we are using the cached functions we can just return here
+                return res, len(self.__async_remote_calls), -1
+            partial_node_count = 0
+            n_remote_calls = 0
             if 'ack_share' in kwargs and 'ack_host' in kwargs:
                 # middle of the chain
+                partial_node_count = kwargs['partial_node_count']
                 n_remote_calls = await self.__send_async_calls(ack_host=kwargs['ack_host'],
                                                                ack_port=kwargs['ack_port'],
                                                                ack_share=kwargs['ack_share'],
-                                                               chain_participants=kwargs['chain_participants'])
+                                                               chain_participants=kwargs['chain_participants'],
+                                                               partial_node_count=partial_node_count)
             elif len(self.__async_remote_calls) > 0:
                 # start of the chain
-                n_remote_calls = await self.__send_async_calls(ack_host=None,
-                                                               ack_port=None,
+                n_remote_calls = await self.__send_async_calls(ack_host="",
+                                                               ack_port=-1,
                                                                ack_share=1,
-                                                               chain_participants=[])
-            else:
-                # No chain or end
-                n_remote_calls = 0
-            return res, n_remote_calls
+                                                               chain_participants=[],
+                                                               partial_node_count=partial_node_count,
+                                                               is_root=True)
+            return res, n_remote_calls, partial_node_count
         except Exception as e:
             logging.debug(traceback.format_exc())
-            return e, -1
+            return e, -1, -1
 
     @property
     def data(self):
@@ -114,32 +121,37 @@ class StatefulFunction(Function):
         if kv_pairs:
             self.__state.batch_insert(kv_pairs, self.__operator_name)
 
-    async def __send_async_calls(self, ack_host, ack_port, ack_share, chain_participants: list[int]):
+    async def __send_async_calls(self,
+                                 ack_host,
+                                 ack_port,
+                                 ack_share,
+                                 chain_participants: list[int],
+                                 partial_node_count: int,
+                                 is_root: bool = False):
         n_remote_calls: int = len(self.__async_remote_calls)
         if n_remote_calls == 0:
             return n_remote_calls
         # if fallback is enabled there is no need to call the functions because they are already cached
         new_share_fraction: str = str(fractions.Fraction(f'1/{n_remote_calls}') * fractions.Fraction(ack_share))
-        if ack_host is None:
+        if is_root:
             # This is the root
-            self.__networking.prepare_function_chain(self.__t_id)
-            ack_payload = (self.__networking.host_name,
-                           self.__networking.host_port,
-                           self.__t_id,
-                           new_share_fraction,
-                           chain_participants)
+            ack_host = self.__networking.host_name
+            ack_port = self.__networking.host_port
+            await self.__networking.prepare_function_chain(self.__t_id)
         else:
-            # Part of the chain needs to use the root's origin
             if not self.__networking.in_the_same_network(ack_host, ack_port):
                 chain_participants.append(self.__networking.worker_id)
-            ack_payload = (ack_host,
-                           ack_port,
-                           self.__t_id,
-                           new_share_fraction,
-                           chain_participants)
+            partial_node_count += 1
         remote_calls: list[Awaitable] = []
         for entry in self.__async_remote_calls:
             operator_name, function_name, partition, key, params, is_local = entry
+            ack_payload: tuple[str, int, int, str, list[int], int] = (ack_host,
+                                                                      ack_port,
+                                                                      self.__t_id,
+                                                                      new_share_fraction,
+                                                                      chain_participants,
+                                                                      partial_node_count)
+            # logging.warning(f'Sending F-call with ack payload: {ack_payload}')
             if is_local:
                 payload = RunFuncPayload(request_id=self.__request_id,
                                          key=key,
@@ -149,10 +161,17 @@ class StatefulFunction(Function):
                                          function_name=function_name,
                                          params=params,
                                          ack_payload=ack_payload)
-                remote_calls.append(self.__protocol.run_function(t_id=self.__t_id,
-                                                                 payload=payload,
-                                                                 internal_msg=True))
-                self.__networking.add_remote_function_call(self.__t_id, payload)
+                if self.__fallback_enabled:
+                    # and no cache
+                    remote_calls.append(self.__protocol.run_fallback_function(t_id=self.__t_id,
+                                                                              payload=payload,
+                                                                              internal=True))
+                else:
+                    remote_calls.append(self.__protocol.run_function(t_id=self.__t_id,
+                                                                     payload=payload,
+                                                                     internal=True))
+                    # add to cache
+                    await self.__networking.add_remote_function_call(self.__t_id, payload)
             else:
                 remote_calls.append(self.__call_remote_function_no_response(operator_name=operator_name,
                                                                             function_name=function_name,
@@ -160,7 +179,10 @@ class StatefulFunction(Function):
                                                                             partition=partition,
                                                                             params=params,
                                                                             ack_payload=ack_payload))
-        await asyncio.gather(*remote_calls)
+            partial_node_count = 0
+        async with asyncio.TaskGroup() as tg:
+            for remote_call in remote_calls:
+                tg.create_task(remote_call)
         return n_remote_calls
 
     def call_remote_async(self,
@@ -190,7 +212,7 @@ class StatefulFunction(Function):
                                                                                     partition,
                                                                                     params,
                                                                                     ack_payload)
-
+        logging.info(f"Call RunFunRemote: {payload}")
         await self.__networking.send_message(operator_host,
                                              operator_port,
                                              msg=payload,
@@ -230,6 +252,7 @@ class StatefulFunction(Function):
                        key,  # __KEY__
                        partition,  # __PARTITION__
                        self.__timestamp,  # __TIMESTAMP__
+                       self.__fallback_enabled,
                        params)  # __PARAMS__
             if ack_payload is not None:
                 payload += (ack_payload, )

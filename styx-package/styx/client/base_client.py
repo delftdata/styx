@@ -5,9 +5,10 @@ from types import ModuleType
 from typing import Type
 
 from cloudpickle import cloudpickle
-from styx.common.base_operator import BaseOperator
+from styx.common.base_networking import BaseNetworking
 
-from ..common.networking import NetworkingManager
+from .styx_future import StyxFuture, StyxAsyncFuture
+from ..common.base_operator import BaseOperator
 from ..common.stateful_function import make_key_hashable
 from ..common.stateflow_graph import StateflowGraph
 from ..common.message_types import MessageType
@@ -30,7 +31,6 @@ class BaseStyxClient(ABC):
                  styx_coordinator_port: int):
         self._styx_coordinator_adr: str = styx_coordinator_adr
         self._styx_coordinator_port: int = styx_coordinator_port
-        self._networking_manager: NetworkingManager = NetworkingManager(None)
         self._delivery_timestamps: dict[bytes, int] = {}
 
     @property
@@ -87,9 +87,9 @@ class BaseStyxClient(ABC):
                  partition)
         # needs to be uuid4 due to concurrent clients from the same machine
         request_id = msgpack_serialization(uuid.uuid4().int >> 64)
-        serialized_value: bytes = self._networking_manager.encode_message(msg=event,
-                                                                          msg_type=MessageType.ClientMsg,
-                                                                          serializer=serializer)
+        serialized_value: bytes = BaseNetworking.encode_message(msg=event,
+                                                                msg_type=MessageType.ClientMsg,
+                                                                serializer=serializer)
         return request_id, serialized_value, partition
 
     @abstractmethod
@@ -110,7 +110,7 @@ class BaseStyxClient(ABC):
                    key,
                    function: Type | str,
                    params: tuple = tuple(),
-                   serializer: Serializer = Serializer.MSGPACK) -> bytes:
+                   serializer: Serializer = Serializer.MSGPACK) -> StyxFuture | StyxAsyncFuture:
         raise NotImplementedError
 
     @abstractmethod

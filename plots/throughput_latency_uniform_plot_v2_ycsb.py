@@ -2,12 +2,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import rcParams
 
+sys_name = "SysX"
+
 rcParams['figure.figsize'] = [12, 5]
 plt.rcParams.update({'font.size': 18})
 x = np.array([100, 200, 300, 400, 500, 700, 1000, 1200, 1300, 1500, 1700, 2000, 3000, 6000, 8000, 10000, 12000, 15000,
-              16000, 20000, 22000, 24000, 26000, 28000, 30000, 33000, 34000, 40000, 44000, 48000, 49000, 50000, 52000, 55000])
+              16000, 20000, 22000, 24000, 26000, 28000, 30000, 33000, 34000, 40000, 44000, 48000, 49000, 50000, 52000, 55000, 60000])
 y_styx_50 = np.array([15, 15, 14, None, 18, 18, 18, None, None, 18, None, 19, 19, 22, 22,
-                      23, 24, 25, 25, 25, 26, 27, 29, 28, 32, 39, 43, 72, 119, 308, 502, 1382, 2842, 7514]).astype(np.double)
+                      23, 24, 25, 25, 25, 26, 27, 29, 28, 32, 39, 43, 72, 93, 146, 170, 187, 275, 2791, 7971]).astype(np.double)
 styx_50_mask = np.isfinite(y_styx_50)
 y_beldi_50 = [147.15, 166.03, 192.56, 6958.25, 16990.24] + [None] * (len(x) - 5)
 y_statefun_50 = np.array([224, None, 213, None, 181, 148, 158, 124, None, 149, None, 695, 14721]
@@ -17,7 +19,7 @@ y_boki_50 = np.array([32.88, None, 35.21, None, 33.38, 33.91, 38.05, 43.94, 659.
                      + [None] * (len(x) - 11)).astype(np.double)
 y_boki_50_mask = np.isfinite(y_boki_50)
 y_styx_99 = np.array([20, 20, 20, None, 29, 29, 30, None, None, 32, None, 34, 35, 42, 41, 42, 43, 51, 48, 50, 57,
-                      65, 97, 99, 108, 128, 152, 199, 280, 665, 1733, 1827, 3433, 11647]).astype(np.double)
+                      65, 97, 99, 108, 128, 152, 199, 280, 351, 1628, 2317, 2924, 3653, 12145]).astype(np.double)
 styx_99_mask = np.isfinite(y_styx_99)
 y_beldi_99 = [234.85, 2543.85, 6172.14, 15276.74, 30519.72] + [None] * (len(x) - 5)
 y_statefun_99 = np.array([348, None, 347, None, 371, 303, 358, 378, None, 428, None, 2280, 26306]
@@ -30,9 +32,9 @@ y_boki_99_mask = np.isfinite(y_boki_99)
 line_width = 2.5
 marker_size = 8
 plt.grid(linestyle="--", linewidth=1.5, which='major', axis='both')
-plt.plot(x[styx_50_mask], y_styx_50[styx_50_mask], "-o", color="#882255", label="Styx 50p",
+plt.plot(x[styx_50_mask], y_styx_50[styx_50_mask], "-o", color="#882255", label=f"{sys_name} 50p",
          linewidth=line_width, markersize=marker_size)
-plt.plot(x[styx_99_mask], y_styx_99[styx_99_mask], "--", marker="o", color="#882255", label="Styx 99p",
+plt.plot(x[styx_99_mask], y_styx_99[styx_99_mask], "--", marker="o", color="#882255", label=f"{sys_name} 99p",
          linewidth=line_width, markersize=marker_size, markerfacecolor='none')
 plt.plot(x, y_beldi_50, "-^", color="#BD7105", label="Beldi 50p",
          linewidth=line_width, markersize=marker_size)

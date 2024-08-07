@@ -1,5 +1,4 @@
 import asyncio
-import os
 import uuid
 
 from aiokafka import AIOKafkaConsumer, TopicPartition
@@ -7,23 +6,28 @@ from aiokafka.errors import UnknownTopicOrPartitionError, KafkaConnectionError
 
 from styx.common.logging import logging
 from styx.common.message_types import MessageType
-from styx.common.networking import NetworkingManager
+from styx.common.tcp_networking import NetworkingManager
 from styx.common.run_func_payload import RunFuncPayload
 
 from worker.ingress.base_ingress import BaseIngress
 from worker.sequencer.sequencer import Sequencer
 
-KAFKA_URL: str = os.getenv('KAFKA_URL', None)
-EPOCH_INTERVAL_MS: int = int(os.getenv('EPOCH_INTERVAL_MS', 1))  # 1ms
-SEQUENCE_MAX_SIZE: int = int(os.getenv('SEQUENCE_MAX_SIZE', 100))
-
 
 class StyxKafkaIngress(BaseIngress):
 
-    def __init__(self, networking: NetworkingManager, sequencer: Sequencer, worker_id: int):
+    def __init__(self,
+                 networking: NetworkingManager,
+                 sequencer: Sequencer,
+                 worker_id: int,
+                 kafka_url: str,
+                 epoch_interval_ms: int,
+                 sequence_max_size: int):
         self.worker_id = worker_id
         self.sequencer = sequencer
         self.networking = networking
+        self.kafka_url = kafka_url
+        self.epoch_interval_ms = epoch_interval_ms
+        self.sequence_max_size = sequence_max_size
 
         self.started: asyncio.Event = asyncio.Event()
 
@@ -43,6 +47,7 @@ class StyxKafkaIngress(BaseIngress):
             await self.kafka_ingress_task
         except asyncio.CancelledError:
             logging.warning("kafka ingress coroutine restarting...")
+        await self.kafka_consumer.stop()
 
     def handle_message_from_kafka(self, msg):
         logging.info(
@@ -67,7 +72,7 @@ class StyxKafkaIngress(BaseIngress):
                                    topic_partition_offsets: dict[tuple[str, int], int]):
         logging.info(f'{self.worker_id} CREATED Kafka consumer for topic partitions: {topic_partitions}')
         # enable_auto_commit=False needed for exactly once
-        self.kafka_consumer = AIOKafkaConsumer(bootstrap_servers=[KAFKA_URL],
+        self.kafka_consumer = AIOKafkaConsumer(bootstrap_servers=[self.kafka_url],
                                                enable_auto_commit=False,
                                                client_id=f"W{self.worker_id}_{uuid.uuid4()}")
         self.kafka_consumer.assign(topic_partitions)
@@ -79,7 +84,7 @@ class StyxKafkaIngress(BaseIngress):
                     self.kafka_consumer.seek(TopicPartition(operator[0], operator[1]), offset + 1)
             except (UnknownTopicOrPartitionError, KafkaConnectionError):
                 await asyncio.sleep(1)
-                logging.warning(f'Kafka at {KAFKA_URL} not ready yet, sleeping for 1 second')
+                logging.warning(f'Kafka at {self.kafka_url} not ready yet, sleeping for 1 second')
                 continue
             break
         try:
@@ -88,11 +93,14 @@ class StyxKafkaIngress(BaseIngress):
             self.started.set()
             while True:
                 async with self.sequencer.lock:
-                    result = await self.kafka_consumer.getmany(timeout_ms=EPOCH_INTERVAL_MS,
-                                                               max_records=SEQUENCE_MAX_SIZE)
+                    result = await self.kafka_consumer.getmany(timeout_ms=self.epoch_interval_ms,
+                                                               max_records=self.sequence_max_size)
                     # start_seq = timer()
                     for _, messages in result.items():
-                        [self.handle_message_from_kafka(message) for message in messages if messages]
+                        if messages:
+                            messages = sorted(messages, key=lambda msg: msg.offset)
+                            for message in messages:
+                                self.handle_message_from_kafka(message)
                     # end_seq = timer()
                     # self.sequencing_time += end_seq - start_seq
         finally:

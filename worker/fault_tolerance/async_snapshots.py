@@ -1,11 +1,11 @@
 import os
+import socket
 import time
 import io
 
-import zmq
 from minio import Minio
 from styx.common.message_types import MessageType
-from styx.common.networking import NetworkingManager
+from styx.common.tcp_networking import NetworkingManager
 
 from styx.common.serialization import Serializer, msgpack_deserialization, msgpack_serialization
 
@@ -44,10 +44,11 @@ class AsyncSnapshotsMinio(BaseSnapshotter):
         msg = NetworkingManager.encode_message(msg=(worker_id, snapshot_id, start, end),
                                                msg_type=MessageType.SnapID,
                                                serializer=Serializer.MSGPACK)
-        sync_socket_to_coordinator = zmq.Context().socket(zmq.DEALER)
-        sync_socket_to_coordinator.connect(f'tcp://{COORDINATOR_HOST}:{COORDINATOR_PORT}')
-        sync_socket_to_coordinator.send(msg)
-        sync_socket_to_coordinator.close()
+
+        s = socket.socket()
+        s.connect((COORDINATOR_HOST, COORDINATOR_PORT))
+        s.send(msg)
+        s.close()
         return True
 
     def retrieve_snapshot(self, snapshot_id):
@@ -78,7 +79,7 @@ class AsyncSnapshotsMinio(BaseSnapshotter):
             metadata = deser["metadata"]
             if data:
                 for operator_name, operator_state in loaded_data.items():
-                    data[operator_name] |= operator_state
+                    data[operator_name].update(operator_state)
             else:
                 data = loaded_data
         # The recovered snapshot will have the latest metadata and merged operator state

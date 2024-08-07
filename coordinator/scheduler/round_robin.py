@@ -1,6 +1,6 @@
 import asyncio
 
-from styx.common.networking import NetworkingManager
+from styx.common.tcp_networking import NetworkingManager
 from styx.common.operator import BaseOperator
 from styx.common.stateflow_graph import StateflowGraph
 from styx.common.stateflow_worker import StateflowWorker

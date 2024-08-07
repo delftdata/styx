@@ -221,7 +221,7 @@ def submit_graph(styx: SyncStyxClient):
                     recommendation_operator,
                     search_operator,
                     user_operator)
-    print(list(g.nodes.values())[0].n_partitions)
+    print(f"Partitions: {list(g.nodes.values())[0].n_partitions}")
     styx.submit_dataflow(g)
     print("Graph submitted")
 
@@ -309,11 +309,11 @@ def benchmark_runner(proc_num) -> dict[bytes, dict]:
             if i % (messages_per_second // sleeps_per_second) == 0:
                 time.sleep(sleep_time)
             operator, key, func_name, params = next(deathstar_generator)
-            request_id = styx.send_event(operator=operator,
-                                         key=key,
-                                         function=func_name,
-                                         params=params)
-            timestamp_futures[request_id] = {"op": f'{func_name} {key}->{params}'}
+            future = styx.send_event(operator=operator,
+                                     key=key,
+                                     function=func_name,
+                                     params=params)
+            timestamp_futures[future.request_id] = {"op": f'{func_name} {key}->{params}'}
         styx.flush()
         sec_end = timer()
         lps = sec_end - sec_start

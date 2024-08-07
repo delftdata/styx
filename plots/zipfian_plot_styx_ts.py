@@ -2,6 +2,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import rcParams
 
+sys_name = "SysX"
+
 rcParams['figure.figsize'] = [12, 5]
 plt.rcParams.update({'font.size': 18})
 
@@ -36,13 +38,13 @@ statefun_99_mask = np.isfinite(y_statefun_99)
 line_width = 2.5
 marker_size = 8
 plt.grid(linestyle="--", linewidth=1.5)
-plt.plot(x, y_styx_50, "-^", color="#B65FCF", label="Styx@2K 50p",
+plt.plot(x, y_styx_50, "-^", color="#B65FCF", label=f"{sys_name}@2K 50p",
          linewidth=line_width, markersize=marker_size)
-plt.plot(x, y_styx_99, "--", marker="^", color="#B65FCF", label="Styx@2K 99p",
+plt.plot(x, y_styx_99, "--", marker="^", color="#B65FCF", label=f"{sys_name}@2K 99p",
          linewidth=line_width, markersize=marker_size, markerfacecolor='none')
-plt.plot(x, y_styx3k_50, "-o", color="#882255", label="Styx@3K 50p",
+plt.plot(x, y_styx3k_50, "-o", color="#882255", label=f"{sys_name}@3K 50p",
          linewidth=line_width, markersize=marker_size)
-plt.plot(x, y_styx3k_99, "--", marker="o", color="#882255", label="Styx@3K 99p",
+plt.plot(x, y_styx3k_99, "--", marker="o", color="#882255", label=f"{sys_name}@3K 99p",
          linewidth=line_width, markersize=marker_size, markerfacecolor='none')
 plt.plot(x[statefun_50_mask], y_statefun_50[statefun_50_mask], "-P", color="#005F20", label="T-Statefun@700 50p",
          linewidth=line_width, markersize=marker_size)

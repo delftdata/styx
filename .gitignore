@@ -136,3 +136,5 @@ minio-volume
 *.pdf
 
 demo/demo-tpc-c/tpcc-generator/tpcc-generator
+styx.sublime-workspace
+styx.sublime-project

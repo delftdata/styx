@@ -30,6 +30,7 @@ class MessageType(IntEnum):
     SyncCleanup = 23
     RemoteWantsToProceed = 24
     ChainAbort = 25
+    AckCache = 26
     SnapMarker = 99
     AlignStart = 100
     AlignEnd = 101

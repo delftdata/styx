@@ -8,6 +8,10 @@ class BaseTransactionalProtocol(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    async def run_fallback_function(self, *args, **kwargs):
+        raise NotImplementedError
+
+    @abstractmethod
     async def function_scheduler(self, *args, **kwargs):
         raise NotImplementedError
 

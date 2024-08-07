@@ -24,3 +24,17 @@ class NotAStateflowGraph(Exception):
     When the client did not submit a correct graph
     """
     pass
+
+
+class FutureAlreadySet(Exception):
+    """
+    When the client attempts to set the same future twice
+    """
+    pass
+
+
+class FutureTimedOut(Exception):
+    """
+    When a Styx future times out
+    """
+    pass

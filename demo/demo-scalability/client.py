@@ -34,10 +34,6 @@ KAFKA_URL = 'localhost:9092'
 SAVE_DIR: str = sys.argv[6]
 
 
-# TODO EXPERIMENT SETTING
-# 1 million keys per partition | {0, 1, 5, 10, 20}% multipart | run til 50p is no longer sub-second
-
-
 def submit_graph(styx: SyncStyxClient):
     g = StateflowGraph('ycsb-benchmark', operator_state_backend=LocalStateBackend.DICT)
     ####################################################################################################################
@@ -101,11 +97,11 @@ def benchmark_runner(proc_num) -> dict[bytes, dict]:
             if i % (messages_per_second // sleeps_per_second) == 0:
                 time.sleep(sleep_time)
             operator, key, func_name, params = next(ycsb_generator)
-            request_id = styx.send_event(operator=operator,
-                                         key=key,
-                                         function=func_name,
-                                         params=params)
-            timestamp_futures[request_id] = {"op": f'{func_name} {key}->{params[0]}'}
+            future = styx.send_event(operator=operator,
+                                     key=key,
+                                     function=func_name,
+                                     params=params)
+            timestamp_futures[future.request_id] = {"op": f'{func_name} {key}->{params[0]}'}
         styx.flush()
         sec_end = timer()
         lps = sec_end - sec_start

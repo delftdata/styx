@@ -1,22 +1,24 @@
+import asyncio
 from abc import abstractmethod
+from collections import defaultdict
 
 from styx.common.base_state import BaseOperatorState
-
-from worker.operator_state.aria.conflict_detection_graph_utils import get_start_order_serialization_graph, \
-    check_conflict_on_start_order_serialization_graph, get_bc_graph, check_conflicts_on_bc_graph
 
 
 class BaseAriaState(BaseOperatorState):
     # read write sets
     # operator_name: {t_id: set(keys)}
     read_sets: dict[str, dict[int, set[any]]]
+    global_read_sets: dict[str, dict[int, set[any]]]
     # operator_name: {t_id: {key: value}}
     write_sets: dict[str, dict[int, dict[any, any]]]
+    global_write_sets: dict[str, dict[int, dict[any, any]]]
     # the reads and writes with the lowest t_id
     # operator_name: {key: t_id}
     writes: dict[str, dict[any, list[int]]]
     # operator_name: {key: t_id}
     reads: dict[str, dict[any, list[int]]]
+    global_reads: dict[str, dict[any, list[int]]]
     # Calvin snapshot things
     # tid: {operator_name: {key, value}}
     fallback_commit_buffer: dict[int, dict[str, dict[any, any]]]
@@ -45,9 +47,9 @@ class BaseAriaState(BaseOperatorState):
             self.fallback_commit_buffer[t_id] = {operator_name: {key: value}}
 
     def set_global_read_write_sets(self, global_read_reservations, global_write_set, global_read_set):
-        self.reads = global_read_reservations
-        self.write_sets = global_write_set
-        self.read_sets = global_read_set
+        self.global_reads = global_read_reservations
+        self.global_write_sets = global_write_set
+        self.global_read_sets = global_read_set
 
     @abstractmethod
     def batch_insert(self, kv_pairs: dict, operator_name: str):
@@ -131,12 +133,12 @@ class BaseAriaState(BaseOperatorState):
             the set of transaction ids to abort
         """
         aborted_transactions = set()
-        merged_reads = self.min_rw_reservations(self.reads)
+        merged_reads = self.min_rw_reservations(self.global_reads)
         minimized_writes = self.min_rw_reservations(self.writes)
         for operator_name in self.write_sets.keys():
-            write_set = self.write_sets[operator_name]
-            read_set = self.read_sets[operator_name]
-            t_ids: set[int] = set(read_set.keys()).union(set(write_set.keys()))
+            write_set = self.global_write_sets[operator_name]
+            read_set = self.global_read_sets[operator_name]
+            t_ids: set[int] = set(self.write_sets[operator_name].keys()) | set(self.read_sets[operator_name].keys())
             for t_id in t_ids:
                 ws = write_set.get(t_id, set())
                 waw = self.has_conflicts(t_id, ws, minimized_writes[operator_name])
@@ -170,57 +172,72 @@ class BaseAriaState(BaseOperatorState):
                     aborted_transactions.add(t_id)
         return aborted_transactions
 
-    def check_conflicts_serial_reorder_on_in_degree(self) -> set[int]:
-        aborted_transactions = set()
-        for operator_name in self.operator_names:
-            g = get_start_order_serialization_graph(self.read_sets[operator_name], self.write_sets[operator_name])
-            aborted_transactions |= check_conflict_on_start_order_serialization_graph(g)
-        return aborted_transactions
-
-    def check_conflicts_snapshot_isolation_reorder_on_in_degree(self) -> set[int]:
-        aborted_transactions = set()
-        for operator_name in self.operator_names:
-            g = get_bc_graph(self.read_sets[operator_name], self.write_sets[operator_name])
-            aborted_transactions |= check_conflicts_on_bc_graph(g)
-        return aborted_transactions
-
     def cleanup(self):
         self.write_sets = {operator_name: {} for operator_name in self.operator_names}
         self.writes = {operator_name: {} for operator_name in self.operator_names}
         self.reads = {operator_name: {} for operator_name in self.operator_names}
         self.read_sets = {operator_name: {} for operator_name in self.operator_names}
-        self.fallback_commit_buffer = {}
+        self.global_write_sets = {operator_name: {} for operator_name in self.operator_names}
+        self.global_reads = {operator_name: {} for operator_name in self.operator_names}
+        self.global_read_sets = {operator_name: {} for operator_name in self.operator_names}
+        self.fallback_commit_buffer = defaultdict(lambda: defaultdict(dict))
+        self.fallback_commit_buffer.clear()
 
-    def merge_rw_reservations_fallback(self, c_aborts: set[int]) -> dict[str, dict[any, list[int]]]:
-        output_dict: dict[str, dict[any, list[int]]] = {}
-        namespaces: set[str] = set(self.reads.keys()) | set(self.writes.keys())
-        for namespace in namespaces:
-            output_dict[namespace] = {}
-            keys = set(self.reads[namespace].keys()) | set(self.writes[namespace].keys())
-            for key in keys:
-                res = list(set(self.reads[namespace].get(key, [])) & c_aborts |
-                           set(self.writes[namespace].get(key, [])) & c_aborts)
-                if res:
-                    output_dict[namespace][key] = sorted(res)
-        return output_dict
+    def get_dep_transactions(self,
+                             t_ids_to_reschedule: set[int]) -> tuple[dict[int, set[int]], dict[int, asyncio.Event]]:
+        """
+        Returns a dict[int, set[int]] where key is the t_id and the value is a set of the transaction ids it depends on.
+        """
+        tid_locks = {tid: asyncio.Event() for tid in t_ids_to_reschedule}
+        t_id_dependencies: dict[int, set[int]] = defaultdict(set)
+
+        # Combine reads and writes for faster processing
+        combined_accesses = defaultdict(lambda: defaultdict(list))
+        for operator_name, reservations in self.reads.items():
+            for key, t_ids in reservations.items():
+                combined_accesses[operator_name][key].extend(t_ids)
+        for operator_name, reservations in self.writes.items():
+            for key, t_ids in reservations.items():
+                combined_accesses[operator_name][key].extend(t_ids)
+
+        # Preprocess combined accesses
+        for operator_name, access_dict in combined_accesses.items():
+            for t_ids in access_dict.values():
+                valid_t_ids_accessed_key = t_ids_to_reschedule & set(t_ids)
+                for t_id in valid_t_ids_accessed_key:
+                    # Ensure smaller t_ids do not depend on larger ones
+                    smaller_t_ids = {tid for tid in valid_t_ids_accessed_key if tid < t_id}
+                    t_id_dependencies[t_id].update(smaller_t_ids)
+
+        return t_id_dependencies, tid_locks
 
     def remove_aborted_from_rw_sets(self, global_logic_aborts: set[int]):
         """
-        Here we delete the t_ids of the aborted transactions from the rw sets and reservations as if they never existed
+        Here we delete the t_ids of the aborted transactions from the rw sets and reservations as if they never existed.
         """
         if not global_logic_aborts:
             return
-        new_reads = {}
-        new_writes = {}
-        for operator_name in self.operator_names:
-            for aborted_tid in global_logic_aborts:
-                if aborted_tid in self.read_sets[operator_name]:
-                    del self.read_sets[operator_name][aborted_tid]
-                if aborted_tid in self.write_sets[operator_name]:
-                    del self.write_sets[operator_name][aborted_tid]
-            new_reads[operator_name] = {key: [tid for tid in t_ids if tid not in global_logic_aborts]
-                                        for key, t_ids in self.reads[operator_name].items()}
-            new_writes[operator_name] = {key: [tid for tid in t_ids if tid not in global_logic_aborts]
-                                         for key, t_ids in self.writes[operator_name].items()}
-        self.reads = new_reads
-        self.writes = new_writes
+
+        # Remove aborted t_ids from read_sets and write_sets
+        self.read_sets = {
+            operator_name: {tid: value for tid, value in self.read_sets[operator_name].items()
+                            if tid not in global_logic_aborts}
+            for operator_name in self.operator_names
+        }
+        self.write_sets = {
+            operator_name: {tid: value for tid, value in self.write_sets[operator_name].items()
+                            if tid not in global_logic_aborts}
+            for operator_name in self.operator_names
+        }
+
+        # Update reads and writes dictionaries
+        self.reads = {
+            operator_name: {key: [tid for tid in t_ids if tid not in global_logic_aborts]
+                            for key, t_ids in self.reads[operator_name].items()}
+            for operator_name in self.operator_names
+        }
+        self.writes = {
+            operator_name: {key: [tid for tid in t_ids if tid not in global_logic_aborts]
+                            for key, t_ids in self.writes[operator_name].items()}
+            for operator_name in self.operator_names
+        }

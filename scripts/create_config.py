@@ -2,7 +2,7 @@ import os
 
 import pandas as pd
 
-partitions = 96
+partitions = 100
 n_keys = 10_000
 experiment_time = 60
 warmup_time = 10

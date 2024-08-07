@@ -17,9 +17,8 @@ sleep 10
 
 if [[ $workload_name == "ycsbt" ]]; then
     # YCSB-T
-    python demo/demo-ycsb/client.py $client_threads $n_keys $n_part $zipf_const $input_rate $total_time $saving_dir
-    python demo/demo-ycsb/kafka_output_consumer.py $saving_dir
-    python demo/demo-ycsb/calculate_metrics.py $saving_dir $warmup_seconds $n_keys $n_part $input_rate $zipf_const $client_threads
+    run_with_validation=true
+    python demo/demo-ycsb/client.py $client_threads $n_keys $n_part $zipf_const $input_rate $total_time $saving_dir $warmup_seconds $run_with_validation
 elif [[ $workload_name == "dhr" ]]; then
     # Deathstar Hotel Reservation
     python demo/demo-deathstar-hotel-reservation/pure_kafka_demo.py $saving_dir $client_threads $n_part $input_rate $total_time

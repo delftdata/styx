@@ -1,5 +1,7 @@
 from typing import Any
 
+from msgspec import msgpack
+
 from worker.operator_state.aria.base_aria_state import BaseAriaState
 
 
@@ -39,22 +41,20 @@ class InMemoryOperatorState(BaseAriaState):
         return self.data[operator_name]
 
     def batch_insert(self, kv_pairs: dict, operator_name: str):
-        self.data[operator_name] |= kv_pairs
-        self.delta_map[operator_name] |= kv_pairs
+        self.data[operator_name].update(kv_pairs)
+        self.delta_map[operator_name].update(kv_pairs)
 
     def get(self, key, t_id: int, operator_name: str) -> Any:
         self.deal_with_reads(key, t_id, operator_name)
         # if transaction wrote to this key, read from the write set
         if t_id in self.write_sets[operator_name] and key in self.write_sets[operator_name][t_id]:
             return self.write_sets[operator_name][t_id][key]
-        return self.data[operator_name].get(key)
+        return msgpack.decode(msgpack.encode(self.data[operator_name].get(key)))
 
     def get_immediate(self, key, t_id: int, operator_name: str):
-        if t_id in self.fallback_commit_buffer:
-            if operator_name in self.fallback_commit_buffer[t_id]:
-                if key in self.fallback_commit_buffer[t_id][operator_name]:
-                    return self.fallback_commit_buffer[t_id][operator_name][key]
-        return self.data[operator_name].get(key)
+        if key in self.fallback_commit_buffer[t_id][operator_name]:
+            return self.fallback_commit_buffer[t_id][operator_name][key]
+        return msgpack.decode(msgpack.encode(self.data[operator_name].get(key)))
 
     def delete(self, key, operator_name: str):
         # Need to find a way to implement deletes
@@ -69,8 +69,8 @@ class InMemoryOperatorState(BaseAriaState):
             updates_to_commit = {}
             for t_id, ws in self.write_sets[operator_name].items():
                 if t_id not in aborted_from_remote:
-                    updates_to_commit |= ws
+                    updates_to_commit.update(ws)
                     committed_t_ids.add(t_id)
-            self.data[operator_name] |= updates_to_commit
-            self.delta_map[operator_name] |= updates_to_commit
+            self.data[operator_name].update(updates_to_commit)
+            self.delta_map[operator_name].update(updates_to_commit)
         return committed_t_ids

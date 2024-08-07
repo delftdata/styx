@@ -1,4 +1,4 @@
-FROM python:3.12.1-slim-bookworm
+FROM python:3.12.4-slim-bookworm
 
 #RUN apt-get update && apt-get install -y git gcc
 

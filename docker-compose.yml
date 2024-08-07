@@ -13,8 +13,8 @@ services:
       - env/minio.env
     environment:
       - KAFKA_URL=kafka1:19092
-      - HEARTBEAT_LIMIT=300000
-      - HEARTBEAT_CHECK_INTERVAL=50000
+      - HEARTBEAT_LIMIT=3000
+      - HEARTBEAT_CHECK_INTERVAL=500
 
   worker:
     build:
@@ -22,16 +22,16 @@ services:
       dockerfile: worker/worker.dockerfile
     image: dev/styx:latest
     environment:
-      - WORKER_THREADS=4
+      - WORKER_THREADS=1
       - INGRESS_TYPE=KAFKA
       - KAFKA_URL=kafka1:19092
       - DISCOVERY_HOST=coordinator
       - DISCOVERY_PORT=8888
     env_file:
       - env/minio.env
-    deploy:
-      resources:
-        limits:
-          cpus: '4'
-        reservations:
-          cpus: '4'
+#    deploy:
+#      resources:
+#        limits:
+#          cpus: '2'
+#        reservations:
+#          cpus: '2'

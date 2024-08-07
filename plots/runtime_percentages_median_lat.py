@@ -3,6 +3,8 @@ import matplotlib.patches as mpatches
 import numpy as np
 from matplotlib import rcParams
 
+sys_name = "SysX"
+
 rcParams['figure.figsize'] = [12, 5]
 # plt.rcParams["figure.autolayout"] = True
 plt.rcParams.update({'font.size': 20})
@@ -12,7 +14,7 @@ boki_med_lat = 32.88
 styx_med_lat = 15
 tstatefun_med_lat = 124
 
-y = {"Styx": [2.27 / 100 * styx_med_lat,
+y = {sys_name: [2.27 / 100 * styx_med_lat,
               95.56 / 100 * styx_med_lat,
               2.17 / 100 * styx_med_lat],
      "Boki": [3.34 / 100 * boki_med_lat,
@@ -30,9 +32,9 @@ mycolors = ["#332288", "#BD7105", "#005F20"]
 
 # create data
 x = list(y.keys())
-y1 = np.array([y["Styx"][0], y["Boki"][0], y["T-Statefun"][0], y["Beldi"][0]])
-y2 = np.array([y["Styx"][1], y["Boki"][1], y["T-Statefun"][1], y["Beldi"][1]])
-y3 = np.array([y["Styx"][2], y["Boki"][2], y["T-Statefun"][2], y["Beldi"][2]])
+y1 = np.array([y[sys_name][0], y["Boki"][0], y["T-Statefun"][0], y["Beldi"][0]])
+y2 = np.array([y[sys_name][1], y["Boki"][1], y["T-Statefun"][1], y["Beldi"][1]])
+y3 = np.array([y[sys_name][2], y["Boki"][2], y["T-Statefun"][2], y["Beldi"][2]])
 
 # plot bars in stack manner
 bar_width = 0.15
