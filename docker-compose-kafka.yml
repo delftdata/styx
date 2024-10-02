@@ -1,5 +1,3 @@
-version: '3'
-
 services:
   zoo1:
     image: confluentinc/cp-zookeeper:7.5.3
@@ -47,6 +45,8 @@ services:
       KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
       KAFKA_ZOOKEEPER_CONNECT: "zoo1:2181,zoo2:2182,zoo3:2183"
       KAFKA_BROKER_ID: 1
+      KAFKA_MESSAGE_MAX_BYTES: 134217728      # 128MB
+      KAFKA_REPLICA_FETCH_MAX_BYTES: 134217728  # 128MB
     depends_on:
       - zoo1
       - zoo2
@@ -64,6 +64,8 @@ services:
       KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
       KAFKA_ZOOKEEPER_CONNECT: "zoo1:2181,zoo2:2182,zoo3:2183"
       KAFKA_BROKER_ID: 2
+      KAFKA_MESSAGE_MAX_BYTES: 134217728      # 128MB
+      KAFKA_REPLICA_FETCH_MAX_BYTES: 134217728  # 128MB
     depends_on:
       - zoo1
       - zoo2
@@ -82,6 +84,8 @@ services:
       KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
       KAFKA_ZOOKEEPER_CONNECT: "zoo1:2181,zoo2:2182,zoo3:2183"
       KAFKA_BROKER_ID: 3
+      KAFKA_MESSAGE_MAX_BYTES: 134217728      # 128MB
+      KAFKA_REPLICA_FETCH_MAX_BYTES: 134217728  # 128MB
     depends_on:
       - zoo1
       - zoo2

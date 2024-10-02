@@ -1,5 +1,3 @@
-version: "3"
-
 services:
 
   coordinator:
@@ -13,7 +11,7 @@ services:
       - env/minio.env
     environment:
       - KAFKA_URL=kafka1:19092
-      - HEARTBEAT_LIMIT=3000
+      - HEARTBEAT_LIMIT=5000
       - HEARTBEAT_CHECK_INTERVAL=500
 
   worker:

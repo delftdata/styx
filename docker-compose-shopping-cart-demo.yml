@@ -1,0 +1,15 @@
+services:
+
+  shopping-cart-demo:
+    build:
+      context: .
+      dockerfile: shopping-cart-demo/Dockerfile
+    image: dev/styx-wdm-demo-async:latest
+    command: python app.py
+    environment:
+      - STYX_HOST=coordinator
+      - STYX_PORT=8888
+      - KAFKA_URL=kafka1:19092
+      - PYTHONUNBUFFERED=TRUE
+    ports:
+      - "8000:8000"
