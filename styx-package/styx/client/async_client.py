@@ -48,11 +48,13 @@ class AsyncStyxClient(BaseStyxClient):
                                                                        group_id=str(uuid.uuid4()))
         await self._background_consumer.start()
         topics = await self._background_consumer.topics()
-        while 'styx-egress' not in topics:
+        while 'styx-metadata' not in topics:
             topics = await self._background_consumer.topics()
-            print("Awaiting egress topic to be created by the Styx coordinator")
-            await asyncio.sleep(5)
-        self._background_consumer.subscribe(['styx-egress'])
+            print("Awaiting egress topics to be created by the Styx coordinator")
+            await asyncio.sleep(1)
+        topics_to_subscribe = ['styx-metadata'] + [topic for topic in topics if topic.endswith('--OUT')]
+        print(f"Subscribed to topics: {topics_to_subscribe}")
+        self._background_consumer.subscribe(topics_to_subscribe)
         # Consume messages
         while True:
             data = await self._background_consumer.getmany(timeout_ms=10)
@@ -64,6 +66,7 @@ class AsyncStyxClient(BaseStyxClient):
 
     async def open(self):
         self._kafka_producer = AIOKafkaProducer(bootstrap_servers=[self._kafka_url],
+                                                max_request_size=134217728,
                                                 enable_idempotence=True,
                                                 acks="all",
                                                 linger_ms=0,

@@ -6,6 +6,7 @@ from typing import Type
 
 from cloudpickle import cloudpickle
 from styx.common.base_networking import BaseNetworking
+from styx.common.tcp_networking import NetworkingManager
 
 from .styx_future import StyxFuture, StyxAsyncFuture
 from ..common.base_operator import BaseOperator
@@ -31,6 +32,7 @@ class BaseStyxClient(ABC):
                  styx_coordinator_port: int):
         self._styx_coordinator_adr: str = styx_coordinator_adr
         self._styx_coordinator_port: int = styx_coordinator_port
+        self._networking_manager: NetworkingManager = NetworkingManager(None)
         self._delivery_timestamps: dict[bytes, int] = {}
 
     @property

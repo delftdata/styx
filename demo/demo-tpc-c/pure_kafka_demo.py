@@ -59,6 +59,25 @@ script_path = os.path.dirname(os.path.realpath(__file__))
 
 flush_interval = 100
 
+g = StateflowGraph('tpcc_benchmark', operator_state_backend=LocalStateBackend.DICT)
+####################################################################################################################
+customer_operator.set_n_partitions(N_PARTITIONS)
+district_operator.set_n_partitions(min(N_D, N_PARTITIONS))
+history_operator.set_n_partitions(N_PARTITIONS)
+item_operator.set_n_partitions(N_PARTITIONS)
+new_order_operator.set_n_partitions(N_PARTITIONS)
+order_operator.set_n_partitions(N_PARTITIONS)
+order_line_operator.set_n_partitions(N_PARTITIONS)
+stock_operator.set_n_partitions(N_PARTITIONS)
+warehouse_operator.set_n_partitions(min(N_W, N_PARTITIONS))
+new_order_txn_operator.set_n_partitions(N_PARTITIONS)
+customer_idx_operator.set_n_partitions(N_PARTITIONS)
+payment_txn_operator.set_n_partitions(N_PARTITIONS)
+g.add_operators(customer_operator, district_operator, history_operator, item_operator, new_order_operator,
+                order_operator, order_line_operator, stock_operator, warehouse_operator,
+                new_order_txn_operator, customer_idx_operator, payment_txn_operator)
+
+
 
 def populate_warehouse(styx: SyncStyxClient):
     with open(os.path.join(script_path, "data/warehouse.csv"), "r") as f:
@@ -393,23 +412,6 @@ def populate_stock(styx: SyncStyxClient):
 
 
 def submit_graph(styx: SyncStyxClient):
-    g = StateflowGraph('tpcc_benchmark', operator_state_backend=LocalStateBackend.DICT)
-    ####################################################################################################################
-    customer_operator.set_n_partitions(N_PARTITIONS)
-    district_operator.set_n_partitions(min(N_D, N_PARTITIONS))
-    history_operator.set_n_partitions(N_PARTITIONS)
-    item_operator.set_n_partitions(N_PARTITIONS)
-    new_order_operator.set_n_partitions(N_PARTITIONS)
-    order_operator.set_n_partitions(N_PARTITIONS)
-    order_line_operator.set_n_partitions(N_PARTITIONS)
-    stock_operator.set_n_partitions(N_PARTITIONS)
-    warehouse_operator.set_n_partitions(min(N_W, N_PARTITIONS))
-    new_order_txn_operator.set_n_partitions(N_PARTITIONS)
-    customer_idx_operator.set_n_partitions(N_PARTITIONS)
-    payment_txn_operator.set_n_partitions(N_PARTITIONS)
-    g.add_operators(customer_operator, district_operator, history_operator, item_operator, new_order_operator,
-                    order_operator, order_line_operator, stock_operator, warehouse_operator,
-                    new_order_txn_operator, customer_idx_operator, payment_txn_operator)
     print(list(g.nodes.values())[0].n_partitions)
     styx.submit_dataflow(g)
     print("Graph submitted")

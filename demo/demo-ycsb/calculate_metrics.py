@@ -155,18 +155,16 @@ def main(
 
         missing_verification_keys = []
         wrong_values = []
-        num_inconsistent_transactions = 0
         for res in true_res.items():
             key, value = res
             if key in verification_state_reads and verification_state_reads[key] != value:
-                wrong_values.append(f'For key: {key} the value should be {value}'
-                                    f' but it is {verification_state_reads[key]}')
-                num_inconsistent_transactions += abs(value - verification_state_reads[key])
+                wrong_values.append(f'For key: {key}|{key % n_partitions} the value should be {value}'
+                                    f' but it is {verification_state_reads[key]} | '
+                                    f'{verification_state_reads[key] - value}')
             elif key not in verification_state_reads:
                 missing_verification_keys.append(key)
         missing_verification_keys = len(missing_verification_keys)
         res_dict["missing_verification_keys"] = missing_verification_keys
-        res_dict["#of_inconsistent_transactions"] = num_inconsistent_transactions / 2
         res_dict["wrong_values"] = wrong_values
 
     print(f'Done. Persisted metrics in {SAVE_DIR}/{exp_name}.json')

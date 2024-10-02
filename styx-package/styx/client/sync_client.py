@@ -56,11 +56,13 @@ class SyncStyxClient(BaseStyxClient):
             }
         )
         md: ClusterMetadata = function_results_consumer.list_topics()
-        while 'styx-egress' not in md.topics:
+        while 'styx-metadata' not in md.topics:
             print(f"Awaiting egress topic to be created by the Styx coordinator | topics: {md.topics}")
-            time.sleep(5)
+            time.sleep(1)
             md: ClusterMetadata = function_results_consumer.list_topics()
-        function_results_consumer.subscribe(['styx-egress'])
+        topics_to_subscribe = ['styx-metadata'] + [topic for topic in md.topics if topic.endswith('--OUT')]
+        print(f"Subscribed to topics: {topics_to_subscribe}")
+        function_results_consumer.subscribe(topics_to_subscribe)
         while self.running_result_consumer:
             msg: Message = function_results_consumer.poll(0.01)
             if msg is None:

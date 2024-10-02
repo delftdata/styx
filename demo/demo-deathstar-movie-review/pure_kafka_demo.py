@@ -30,6 +30,27 @@ STYX_HOST: str = 'localhost'
 STYX_PORT: int = 8886
 KAFKA_URL = 'localhost:9092'
 
+g = StateflowGraph('deathstar_movie_review', operator_state_backend=LocalStateBackend.DICT)
+####################################################################################################################
+compose_review_operator.set_n_partitions(N_PARTITIONS)
+movie_id_operator.set_n_partitions(N_PARTITIONS)
+movie_info_operator.set_n_partitions(N_PARTITIONS)
+plot_operator.set_n_partitions(N_PARTITIONS)
+rating_operator.set_n_partitions(N_PARTITIONS)
+text_operator.set_n_partitions(N_PARTITIONS)
+unique_id_operator.set_n_partitions(N_PARTITIONS)
+user_operator.set_n_partitions(N_PARTITIONS)
+frontend_operator.set_n_partitions(N_PARTITIONS)
+g.add_operators(compose_review_operator,
+                movie_id_operator,
+                movie_info_operator,
+                plot_operator,
+                rating_operator,
+                text_operator,
+                unique_id_operator,
+                user_operator,
+                frontend_operator)
+
 
 def populate_user(styx_client: SyncStyxClient):
     for i in range(1000):
@@ -77,26 +98,6 @@ def populate_movie(styx_client: SyncStyxClient):
 
 
 def submit_graph(styx: SyncStyxClient):
-    g = StateflowGraph('deathstar_movie_review', operator_state_backend=LocalStateBackend.DICT)
-    ####################################################################################################################
-    compose_review_operator.set_n_partitions(N_PARTITIONS)
-    movie_id_operator.set_n_partitions(N_PARTITIONS)
-    movie_info_operator.set_n_partitions(N_PARTITIONS)
-    plot_operator.set_n_partitions(N_PARTITIONS)
-    rating_operator.set_n_partitions(N_PARTITIONS)
-    text_operator.set_n_partitions(N_PARTITIONS)
-    unique_id_operator.set_n_partitions(N_PARTITIONS)
-    user_operator.set_n_partitions(N_PARTITIONS)
-    frontend_operator.set_n_partitions(N_PARTITIONS)
-    g.add_operators(compose_review_operator,
-                    movie_id_operator,
-                    movie_info_operator,
-                    plot_operator,
-                    rating_operator,
-                    text_operator,
-                    unique_id_operator,
-                    user_operator,
-                    frontend_operator)
     print(list(g.nodes.values())[0].n_partitions)
     styx.submit_dataflow(g)
     print("Graph submitted")

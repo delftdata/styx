@@ -24,6 +24,25 @@ STYX_HOST: str = 'localhost'
 STYX_PORT: int = 8886
 KAFKA_URL = 'localhost:9092'
 
+g = StateflowGraph('deathstar_hotel_reservations', operator_state_backend=LocalStateBackend.DICT)
+####################################################################################################################
+flight_operator.set_n_partitions(N_PARTITIONS)
+geo_operator.set_n_partitions(N_PARTITIONS)
+hotel_operator.set_n_partitions(N_PARTITIONS)
+order_operator.set_n_partitions(N_PARTITIONS)
+rate_operator.set_n_partitions(N_PARTITIONS)
+recommendation_operator.set_n_partitions(N_PARTITIONS)
+search_operator.set_n_partitions(N_PARTITIONS)
+user_operator.set_n_partitions(N_PARTITIONS)
+g.add_operators(flight_operator,
+                geo_operator,
+                hotel_operator,
+                order_operator,
+                rate_operator,
+                recommendation_operator,
+                search_operator,
+                user_operator)
+
 
 def populate(styx_client: SyncStyxClient):
     # populate the geo table
@@ -203,24 +222,6 @@ def populate(styx_client: SyncStyxClient):
 
 
 def submit_graph(styx: SyncStyxClient):
-    g = StateflowGraph('deathstar_hotel_reservations', operator_state_backend=LocalStateBackend.DICT)
-    ####################################################################################################################
-    flight_operator.set_n_partitions(N_PARTITIONS)
-    geo_operator.set_n_partitions(N_PARTITIONS)
-    hotel_operator.set_n_partitions(N_PARTITIONS)
-    order_operator.set_n_partitions(N_PARTITIONS)
-    rate_operator.set_n_partitions(N_PARTITIONS)
-    recommendation_operator.set_n_partitions(N_PARTITIONS)
-    search_operator.set_n_partitions(N_PARTITIONS)
-    user_operator.set_n_partitions(N_PARTITIONS)
-    g.add_operators(flight_operator,
-                    geo_operator,
-                    hotel_operator,
-                    order_operator,
-                    rate_operator,
-                    recommendation_operator,
-                    search_operator,
-                    user_operator)
     print(f"Partitions: {list(g.nodes.values())[0].n_partitions}")
     styx.submit_dataflow(g)
     print("Graph submitted")

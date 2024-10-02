@@ -56,15 +56,17 @@ class AriaProtocol(BaseTransactionalProtocol):
                  restart_after_recovery: bool = False):
 
         if snapshot_metadata is None:
-            topic_partition_offsets = {(tp.topic, tp.partition): -1 for tp in topic_partitions}
+            topic_partition_offsets: dict[tuple[str, int], int] = {(tp.topic, tp.partition): -1
+                                                                   for tp in topic_partitions}
             epoch_counter = 0
             t_counter = 0
-            output_offset = -1
+            output_offsets: dict[str, dict[int, int]] = {tp.topic: {tp.partition: -1}
+                                                         for tp in topic_partitions}
         else:
             topic_partition_offsets = snapshot_metadata["offsets"]
             epoch_counter = snapshot_metadata["epoch"]
             t_counter = snapshot_metadata["t_counter"]
-            output_offset = snapshot_metadata["output_offset"]
+            output_offsets = snapshot_metadata["output_offsets"]
 
         self.id = worker_id
 
@@ -84,7 +86,7 @@ class AriaProtocol(BaseTransactionalProtocol):
         self.concurrency_aborts_everywhere: set[int] = set()
         self.t_ids_to_reschedule: set[int] = set()
         # t_id: (request_id, response)
-        self.response_buffer: dict[int, tuple[bytes, str]] = {}
+        self.response_buffer: dict[int, tuple[bytes, str, str, int]] = {}
 
         # ready_to_commit_events -> worker_id: Event that appears if the peer is ready to commit
         self.ready_to_reorder_events: dict[int, asyncio.Event] = {peer_id: asyncio.Event()
@@ -110,7 +112,7 @@ class AriaProtocol(BaseTransactionalProtocol):
                                                           sequence_max_size=SEQUENCE_MAX_SIZE,
                                                           epoch_interval_ms=1)
 
-        self.egress: StyxKafkaBatchEgress = StyxKafkaBatchEgress(output_offset, restart_after_recovery)
+        self.egress: StyxKafkaBatchEgress = StyxKafkaBatchEgress(output_offsets, restart_after_recovery)
         # Primary task used for processing
         self.function_scheduler_task: asyncio.Task = ...
         self.communication_task: asyncio.Task = ...
@@ -229,7 +231,7 @@ class AriaProtocol(BaseTransactionalProtocol):
         # elif response is not None and not internal_msg:
         if response is not None:
             # If fallback add it to the fallback replies else to the response buffer
-            self.response_buffer[t_id] = (payload.request_id, response)
+            self.response_buffer[t_id] = (payload.request_id, response, payload.operator_name, payload.partition)
         return success
 
     def take_snapshot(self, pool: concurrent.futures.ProcessPoolExecutor):
@@ -239,11 +241,15 @@ class AriaProtocol(BaseTransactionalProtocol):
             if InMemoryOperatorState.__name__ == self.local_state.__class__.__name__:
                 loop = asyncio.get_running_loop()
                 start = time.time() * 1000
-                data = {"data":  msgpack.decode(msgpack.encode(self.local_state.get_data_for_snapshot())),
-                        "metadata": {"offsets": msgpack.decode(msgpack.encode(self.topic_partition_offsets.copy())),
-                                     "epoch": self.sequencer.epoch_counter,
-                                     "t_counter": self.sequencer.t_counter,
-                                     "output_offset": self.egress.output_offset}}
+                data = {
+                    "data":  msgpack.decode(msgpack.encode(self.local_state.get_data_for_snapshot())),
+                    "metadata": {
+                        "offsets": msgpack.decode(msgpack.encode(self.topic_partition_offsets)),
+                        "epoch": self.sequencer.epoch_counter,
+                        "t_counter": self.sequencer.t_counter,
+                        "output_offsets": msgpack.decode(msgpack.encode(self.egress.topic_partition_output_offsets))
+                    }
+                }
                 loop.run_in_executor(pool,
                                      self.async_snapshots.store_snapshot,
                                      self.async_snapshots.snapshot_id,
@@ -552,11 +558,15 @@ class AriaProtocol(BaseTransactionalProtocol):
             if t_id in self.networking.aborted_events:
                 exception_str, request_id = self.networking.aborted_events[t_id]
                 await self.egress.send_immediate(key=request_id,
-                                                 value=msgpack_serialization(exception_str))
+                                                 value=msgpack_serialization(exception_str),
+                                                 operator_name=payload.operator_name,
+                                                 partition=payload.partition)
             elif t_id in self.response_buffer:
-                request_id, exception_str = self.response_buffer[t_id]
+                request_id, exception_str, operator_name, partition = self.response_buffer[t_id]
                 await self.egress.send_immediate(key=request_id,
-                                                 value=msgpack_serialization(exception_str))
+                                                 value=msgpack_serialization(exception_str),
+                                                 operator_name=operator_name,
+                                                 partition=partition)
 
     async def run_fallback_strategy(self):
         logging.info('Starting fallback strategy...')
@@ -616,18 +626,23 @@ class AriaProtocol(BaseTransactionalProtocol):
     async def send_responses(
             self,
             current_sequence_t_ids: list[int],
-            response_buffer: dict[int, tuple[bytes, str]],
+            response_buffer: dict[int, tuple[bytes, str, str, int]],
             aborted_events: dict[int, [str, bytes]]
     ):
         for t_id in current_sequence_t_ids:
             if t_id in aborted_events:
                 exception_str, request_id = aborted_events[t_id]
+                _, _, operator_name, partition = response_buffer[t_id]
                 await self.egress.send(key=request_id,
-                                       value=msgpack_serialization(exception_str))
+                                       value=msgpack_serialization(exception_str),
+                                       operator_name=operator_name,
+                                       partition=partition)
             elif t_id in response_buffer:
-                request_id, exception_str = response_buffer[t_id]
+                request_id, response, operator_name, partition = response_buffer[t_id]
                 await self.egress.send(key=request_id,
-                                       value=msgpack_serialization(exception_str))
+                                       value=msgpack_serialization(response),
+                                       operator_name=operator_name,
+                                       partition=partition)
         await self.egress.send_batch()
 
     async def fallback_unlock(self, t_id: int, success: bool):

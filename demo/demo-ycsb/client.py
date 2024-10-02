@@ -41,13 +41,12 @@ KAFKA_URL = 'localhost:9092'
 SAVE_DIR: str = sys.argv[7]
 warmup_seconds: int = int(sys.argv[8])
 run_with_validation = bool(sys.argv[9])
-
+####################################################################################################################
+g = StateflowGraph('ycsb-benchmark', operator_state_backend=LocalStateBackend.DICT)
+ycsb_operator.set_n_partitions(N_PARTITIONS)
+g.add_operators(ycsb_operator)
 
 def submit_graph(styx: SyncStyxClient):
-    g = StateflowGraph('ycsb-benchmark', operator_state_backend=LocalStateBackend.DICT)
-    ####################################################################################################################
-    ycsb_operator.set_n_partitions(N_PARTITIONS)
-    g.add_operators(ycsb_operator)
     print(f'Partitions: {list(g.nodes.values())[0].n_partitions}')
     styx.submit_dataflow(g)
     print("Graph submitted")

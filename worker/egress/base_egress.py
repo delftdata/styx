@@ -16,7 +16,7 @@ class BaseEgress(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def send(self, key, value):
+    async def send(self, key, value, operator_name: str, partition: int):
         raise NotImplementedError
 
     @abstractmethod

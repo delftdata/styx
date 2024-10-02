@@ -18,6 +18,9 @@ from snapshot_compactor import start_snapshot_compaction
 from scheduler.round_robin import RoundRobin
 
 
+MAX_OPERATOR_PARALLELISM = int(os.getenv('MAX_OPERATOR_PARALLELISM', 10))
+
+
 class Coordinator(object):
 
     def __init__(self, networking: NetworkingManager):
@@ -159,10 +162,16 @@ class Coordinator(object):
             except KafkaException:
                 logging.warning(f'Kafka at {kafka_url} not ready yet, sleeping for 1 second')
                 time.sleep(1)
-        topics = [NewTopic(topic=operator.name, num_partitions=operator.n_partitions, replication_factor=1)
-                  for operator in stateflow_graph.nodes.values()] + [NewTopic(topic='styx-egress',
-                                                                              num_partitions=self.worker_counter,
-                                                                              replication_factor=1)]
+        topics = (
+                [NewTopic(topic='styx-metadata', num_partitions=1, replication_factor=1)] +
+                [NewTopic(topic=operator.name,
+                          num_partitions=MAX_OPERATOR_PARALLELISM,
+                          replication_factor=1)
+                 for operator in stateflow_graph.nodes.values()] +
+                [NewTopic(topic=operator.name + "--OUT",
+                          num_partitions=MAX_OPERATOR_PARALLELISM,
+                          replication_factor=1)
+                 for operator in stateflow_graph.nodes.values()])
 
         futures = client.create_topics(topics)
         for topic, future in futures.items():

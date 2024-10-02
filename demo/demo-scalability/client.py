@@ -33,12 +33,12 @@ STYX_PORT: int = 8886
 KAFKA_URL = 'localhost:9092'
 SAVE_DIR: str = sys.argv[6]
 
+g = StateflowGraph('ycsb-benchmark', operator_state_backend=LocalStateBackend.DICT)
+####################################################################################################################
+ycsb_operator.set_n_partitions(N_PARTITIONS)
+g.add_operators(ycsb_operator)
 
 def submit_graph(styx: SyncStyxClient):
-    g = StateflowGraph('ycsb-benchmark', operator_state_backend=LocalStateBackend.DICT)
-    ####################################################################################################################
-    ycsb_operator.set_n_partitions(N_PARTITIONS)
-    g.add_operators(ycsb_operator)
     print(list(g.nodes.values())[0].n_partitions)
     styx.submit_dataflow(g)
     print("Graph submitted")
