@@ -8,6 +8,7 @@ from aiokafka import AIOKafkaConsumer, TopicPartition, AIOKafkaProducer
 from aiokafka.errors import UnknownTopicOrPartitionError, KafkaConnectionError
 
 from styx.common.logging import logging
+from styx.common.types import OperatorPartition
 
 from worker.egress.base_egress import BaseEgress
 
@@ -20,11 +21,11 @@ class StyxKafkaBatchEgress(BaseEgress):
     worker_id: int
 
     def __init__(self,
-                 topic_partition_output_offsets: dict[str, dict[int, int]],
+                 topic_partition_output_offsets: dict[OperatorPartition, int],
                  restart_after_failure: bool = False):
         self.kafka_egress_producer: AIOKafkaProducer | None = None
         # operator: partition: output offset
-        self.topic_partition_output_offsets: dict[str, dict[int, int]] = topic_partition_output_offsets
+        self.topic_partition_output_offsets: dict[OperatorPartition, int] = topic_partition_output_offsets
         # (operator, partition): replied request_ids
         self.messages_sent_before_recovery: dict[TopicPartition, set] = defaultdict(set)
         self.restart_after_failure = restart_after_failure
@@ -74,8 +75,8 @@ class StyxKafkaBatchEgress(BaseEgress):
                                                                                  key=key,
                                                                                  value=value,
                                                                                  partition=partition)
-            self.topic_partition_output_offsets[operator_name][partition] = max(
-                self.topic_partition_output_offsets[operator_name][partition],
+            self.topic_partition_output_offsets[(operator_name, partition)] = max(
+                self.topic_partition_output_offsets[operator_name, partition],
                 res.offset
             )
         else:
@@ -86,8 +87,8 @@ class StyxKafkaBatchEgress(BaseEgress):
             # send the batch and get the max offset per topic partition in that batch
             for res in await asyncio.gather(*self.batch):
                 operator_name = res.topic[:-5]
-                self.topic_partition_output_offsets[operator_name][res.partition] = max(
-                    self.topic_partition_output_offsets[operator_name][res.partition],
+                self.topic_partition_output_offsets[(operator_name, res.partition)] = max(
+                    self.topic_partition_output_offsets[(operator_name, res.partition)],
                     res.offset
                 )
             self.batch = []
@@ -96,8 +97,7 @@ class StyxKafkaBatchEgress(BaseEgress):
         kafka_output_consumer = AIOKafkaConsumer(bootstrap_servers=[KAFKA_URL],
                                                  enable_auto_commit=False)
         output_topic_partitions = [TopicPartition(operator_name + "--OUT", partition)
-                                   for operator_name, partition_offsets in self.topic_partition_output_offsets.items()
-                                   for partition in partition_offsets.keys()]
+                                   for operator_name, partition  in self.topic_partition_output_offsets.keys()]
         kafka_output_consumer.assign(output_topic_partitions)
         while True:
             # start the kafka consumer
@@ -106,7 +106,8 @@ class StyxKafkaBatchEgress(BaseEgress):
                 for topic_partition in output_topic_partitions:
                     kafka_output_consumer.seek(
                         topic_partition,
-                        self.topic_partition_output_offsets[topic_partition.topic[:-5]][topic_partition.partition] + 1)
+                        self.topic_partition_output_offsets[(topic_partition.topic[:-5],
+                                                             topic_partition.partition)] + 1)
             except (UnknownTopicOrPartitionError, KafkaConnectionError):
                 await asyncio.sleep(1)
                 logging.warning(f'Kafka at {KAFKA_URL} not ready yet, sleeping for 1 second')

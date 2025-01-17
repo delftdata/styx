@@ -30,12 +30,13 @@ class Operator(BaseOperator):
                            request_id: bytes,
                            timestamp: int,
                            function_name: str,
+                           partition: int,
                            ack_payload: tuple[str, int, int, str, list[int], int] | None,
                            fallback_mode: bool,
                            use_fallback_cache: bool,
                            params: tuple,
                            protocol: BaseTransactionalProtocol) -> tuple[any, bool]:
-        f = self.__materialize_function(function_name, key, t_id, request_id, timestamp,
+        f = self.__materialize_function(function_name, partition, key, t_id, request_id, timestamp,
                                         fallback_mode, use_fallback_cache, protocol)
         params = (f, ) + tuple(params)
         logging.info(f'ack_payload: {ack_payload} RQ_ID: {request_id} TID: {t_id} '
@@ -100,10 +101,11 @@ class Operator(BaseOperator):
                                                  msg_type=MessageType.Ack,
                                                  serializer=Serializer.MSGPACK)
 
-    def __materialize_function(self, function_name, key, t_id, request_id, timestamp,
+    def __materialize_function(self, function_name, partition, key, t_id, request_id, timestamp,
                                fallback_mode, use_fallback_cache, protocol):
         f = StatefulFunction(key,
                              function_name,
+                             partition,
                              self.name,
                              self.__state,
                              self.__networking,

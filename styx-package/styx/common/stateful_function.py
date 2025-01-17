@@ -37,6 +37,7 @@ class StatefulFunction(Function):
     def __init__(self,
                  key,
                  function_name: str,
+                 partition: int,
                  operator_name: str,
                  operator_state: State,
                  networking: NetworkingManager,
@@ -60,6 +61,7 @@ class StatefulFunction(Function):
         self.__use_fallback_cache: bool = use_fallback_cache
         self.__key = key
         self.__protocol = protocol
+        self.__partition = partition
 
     async def __call__(self, *args, **kwargs):
         try:
@@ -93,7 +95,7 @@ class StatefulFunction(Function):
 
     @property
     def data(self):
-        return self.__state.get_all(self.__t_id, self.__operator_name)
+        return self.__state.get_all(self.__t_id, self.__operator_name, self.__partition)
 
     @property
     def key(self):
@@ -104,22 +106,22 @@ class StatefulFunction(Function):
 
     def get(self):
         if self.__fallback_enabled:
-            value = self.__state.get_immediate(self.key, self.__t_id, self.__operator_name)
+            value = self.__state.get_immediate(self.key, self.__t_id, self.__operator_name, self.__partition)
         else:
-            value = self.__state.get(self.key, self.__t_id, self.__operator_name)
+            value = self.__state.get(self.key, self.__t_id, self.__operator_name, self.__partition)
         # logging.info(f'GET: {self.key}:{value} with t_id: {self.__t_id} operator: {self.__operator_name}')
         return value
 
     def put(self, value):
         # logging.info(f'PUT: {self.key}:{value} with t_id: {self.__t_id} operator: {self.__operator_name}')
         if self.__fallback_enabled:
-            self.__state.put_immediate(self.key, value, self.__t_id, self.__operator_name)
+            self.__state.put_immediate(self.key, value, self.__t_id, self.__operator_name, self.__partition)
         else:
-            self.__state.put(self.key, value, self.__t_id, self.__operator_name)
+            self.__state.put(self.key, value, self.__t_id, self.__operator_name, self.__partition)
 
     def batch_insert(self, kv_pairs: dict):
         if kv_pairs:
-            self.__state.batch_insert(kv_pairs, self.__operator_name)
+            self.__state.batch_insert(kv_pairs, self.__operator_name, self.__partition)
 
     async def __send_async_calls(self,
                                  ack_host,

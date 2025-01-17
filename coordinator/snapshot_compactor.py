@@ -1,9 +1,11 @@
 import io
+import logging
 import os
 from collections import defaultdict
 
 from minio import Minio
 from styx.common.serialization import msgpack_deserialization, msgpack_serialization
+from styx.common.types import OperatorPartition, KVPairs
 
 MINIO_URL: str = f"{os.environ['MINIO_HOST']}:{os.environ['MINIO_PORT']}"
 MINIO_ACCESS_KEY: str = os.environ['MINIO_ROOT_USER']
@@ -11,46 +13,88 @@ MINIO_SECRET_KEY: str = os.environ['MINIO_ROOT_PASSWORD']
 SNAPSHOT_BUCKET_NAME: str = os.getenv('SNAPSHOT_BUCKET_NAME', "styx-snapshots")
 
 
-def get_snapshots_per_worker(snapshot_files: list[str], max_snap_id: int) -> dict[int, list[tuple[int, str]]]:
-    snapshots_per_worker: dict[int, list[tuple[int, str]]] = defaultdict(list)
+def get_snapshots_per_worker(snapshot_files: list[str],
+                             max_snap_id: int
+                             ) -> tuple[dict[OperatorPartition, list[tuple[int, str]]], list[tuple[int, str]]]:
+    snapshots_per_operator_partition: dict[OperatorPartition, list[tuple[int, str]]] = defaultdict(list)
+    sequencer_snapshots: list[tuple[int, str]] = []
     for sn_file in snapshot_files:
-        worker_id, snapshot_id = sn_file.split("/")
-        worker_id = int(worker_id[1:])
-        snapshot_id = int(snapshot_id.split(".")[0])
-        if snapshot_id <= max_snap_id:
-            snapshots_per_worker[worker_id].append((snapshot_id, sn_file))
-    snapshots_per_worker = {worker_id: sn_info
-                            for worker_id, sn_info in sorted(snapshots_per_worker.items(),
-                                                             key=lambda item: item[1][0])
-                            if len(sn_info) > 1}
-    return snapshots_per_worker
+        sn_file_parts: list[str] = sn_file.split("/")
+        sn_type: str = sn_file_parts[0] # sequencer or data
+        if sn_type[0] == "s":
+            # sequencer
+            snapshot_id = int(sn_file_parts[1].split(".")[0])
+            if snapshot_id <= max_snap_id:
+                sequencer_snapshots.append((snapshot_id, sn_file))
+        else:
+            # data
+            operator_name, partition, snapshot_id = sn_file_parts[1], int(sn_file_parts[2]), int(sn_file_parts[3].split(".")[0])
+            if snapshot_id <= max_snap_id:
+                snapshots_per_operator_partition[(operator_name, partition)].append((snapshot_id, sn_file))
+
+    snapshots_per_operator_partition = {operator_partition: sn_info
+                                        # sort by snapshot id so that the merging order is correct
+                                        for operator_partition, sn_info in sorted(snapshots_per_operator_partition.items(),
+                                                                                  key=lambda item: item[1][0])
+                                        if len(sn_info) > 1}
+    # sort by snapshot id so that the merging order is correct
+    sequencer_snapshots = sorted(sequencer_snapshots, key=lambda item: item[0])
+    return snapshots_per_operator_partition, sequencer_snapshots
 
 
 def compact_deltas(minio_client, snapshot_files, max_snap_id):
-    snapshots_per_worker = get_snapshots_per_worker(snapshot_files, max_snap_id)
-    for worker_id, sn_info in snapshots_per_worker.items():
-        data: dict[str, dict[any, any]] = {}
-        metadata: dict[str, any] = {}
-        snapshots_to_delete: list[str] = []
+    snapshots_per_operator_partition, sequencer_snapshots = get_snapshots_per_worker(snapshot_files, max_snap_id)
+    logging.warning(f"Compacting data snapshots: {snapshots_per_operator_partition}")
+    logging.warning(f"Compacting sequencer snapshots: {sequencer_snapshots}")
+
+    # Sequencer
+    if len(sequencer_snapshots) > 1:
+        # only makes sense to compact if we have more than 1 files
+        latest_sequencer_snapshot = sequencer_snapshots.pop()
+        last_sequencer_data = minio_client.get_object(SNAPSHOT_BUCKET_NAME, latest_sequencer_snapshot[1]).data
+        # the last becomes the first
+        minio_client.put_object(SNAPSHOT_BUCKET_NAME, "sequencer/0.bin",
+                                io.BytesIO(last_sequencer_data), len(last_sequencer_data))
+    # Partition Data
+    data: dict[OperatorPartition, KVPairs] = {}
+    topic_partition_offsets: dict[OperatorPartition, int] = {}
+    topic_partition_output_offsets: dict[OperatorPartition, int] = {}
+    snapshots_to_delete: list[str] = []
+    for operator_partition, sn_info in snapshots_per_operator_partition.items():
         # The snapshots must be sorted
+        input_offset: int = -1
+        output_offset: int = -1
         for sn_id, sn_name in sn_info:
-            deser = msgpack_deserialization(minio_client.get_object(SNAPSHOT_BUCKET_NAME, sn_name).data)
-            loaded_data = deser["data"]
-            metadata = deser["metadata"]
-            if data:
+            input_offset, output_offset, partition_data = msgpack_deserialization(
+                minio_client.get_object(SNAPSHOT_BUCKET_NAME, sn_name).data
+            )
+            if operator_partition in data:
                 snapshots_to_delete.append(sn_name)
-                for operator_name, operator_state in loaded_data.items():
-                    data[operator_name] |= operator_state
+                if partition_data:
+                    data[operator_partition].update(partition_data)
             else:
-                data = loaded_data
-        # The new snapshot will have the latest metadata and merged operator state
-        bytes_file: bytes = msgpack_serialization({"data": data, "metadata": metadata})
-        snapshot_name: str = f"w{worker_id}/0.bin"
+                data[operator_partition] = partition_data
+        topic_partition_offsets[operator_partition] = input_offset
+        topic_partition_output_offsets[operator_partition] = output_offset
+
+    for operator_partition, partition_data in data.items():
+        operator_name, partition = operator_partition
+        sn_data: bytes = msgpack_serialization((topic_partition_offsets[operator_partition],
+                                                topic_partition_output_offsets[operator_partition],
+                                                partition_data))
+        snapshot_name: str = f"data/{operator_name}/{partition}/0.bin"
         # Store the primary snapshot after compaction
-        minio_client.put_object(SNAPSHOT_BUCKET_NAME, snapshot_name, io.BytesIO(bytes_file), len(bytes_file))
-        # Cleanup the compacted deltas
-        for snapshot_to_delete in snapshots_to_delete:
-            minio_client.remove_object(bucket_name=SNAPSHOT_BUCKET_NAME, object_name=snapshot_to_delete)
+        minio_client.put_object(SNAPSHOT_BUCKET_NAME, snapshot_name, io.BytesIO(sn_data), len(sn_data))
+
+    # Cleanup the compacted deltas
+    cleanup_compacted_files(minio_client, sequencer_snapshots, snapshots_to_delete)
+
+
+def cleanup_compacted_files(minio_client, sequencer_files_to_remove, data_files_to_remove):
+    for snapshot_to_delete in sequencer_files_to_remove:
+        minio_client.remove_object(bucket_name=SNAPSHOT_BUCKET_NAME, object_name=snapshot_to_delete[1])
+    for snapshot_to_delete in data_files_to_remove:
+        minio_client.remove_object(bucket_name=SNAPSHOT_BUCKET_NAME, object_name=snapshot_to_delete)
 
 
 def start_snapshot_compaction(max_snap_id: int):

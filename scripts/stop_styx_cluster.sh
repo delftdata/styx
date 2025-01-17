@@ -1,7 +1,7 @@
 #!/bin/bash
 
 docker compose logs worker > worker-logs.log
-docker compose logs coordinator > worker-logs.log
+docker compose logs coordinator > coordinator-logs.log
 
 # DELETE PREVIOUS DEPLOYMENT
 docker compose down --volumes --remove-orphans

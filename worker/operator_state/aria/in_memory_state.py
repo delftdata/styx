@@ -1,67 +1,73 @@
-from typing import Any
-
 from msgspec import msgpack
+
+from styx.common.types import OperatorPartition, KVPairs
 
 from worker.operator_state.aria.base_aria_state import BaseAriaState
 
 
 class InMemoryOperatorState(BaseAriaState):
 
-    data: dict[str, dict[Any, Any]]
+    data: dict[OperatorPartition, KVPairs]
+    delta_map: dict[OperatorPartition, KVPairs]
 
-    def __init__(self, operator_names: set[str]):
-        super().__init__(operator_names)
+    def __init__(self, operator_partitions: set[OperatorPartition]):
+        super().__init__(operator_partitions)
         self.data = {}
         self.delta_map = {}
-        for operator_name in self.operator_names:
-            self.data[operator_name] = {}
-            self.delta_map[operator_name] = {}
+        for operator_partition in self.operator_partitions:
+            self.data[operator_partition] = {}
+            self.delta_map[operator_partition] = {}
 
-    def set_data_from_snapshot(self, data: dict[str, dict[Any, Any]]):
+    def set_data_from_snapshot(self, data: dict[OperatorPartition, KVPairs]):
         if data:
             self.data = data
 
-    def get_data_for_snapshot(self):
+    def get_data_for_snapshot(self) -> dict[OperatorPartition, KVPairs]:
         return self.delta_map
 
     def clear_delta_map(self):
-        for operator_name in self.operator_names:
-            self.delta_map[operator_name] = {}
+        for operator_partition in self.operator_partitions:
+            self.delta_map[operator_partition] = {}
 
     def commit_fallback_transaction(self, t_id: int):
         if t_id in self.fallback_commit_buffer:
-            for operator_name, kv_pairs in self.fallback_commit_buffer[t_id].items():
+            for operator_partition, kv_pairs in self.fallback_commit_buffer[t_id].items():
                 for key, value in kv_pairs.items():
-                    self.data[operator_name][key] = value
-                    self.delta_map[operator_name][key] = value
+                    self.data[operator_partition][key] = value
+                    self.delta_map[operator_partition][key] = value
 
-    def get_all(self, t_id: int, operator_name: str):
-        for key in self.data[operator_name].keys():
-            self.deal_with_reads(key, t_id, operator_name)
-        return self.data[operator_name]
+    def get_all(self, t_id: int, operator_name: str, partition: int):
+        operator_partition: OperatorPartition = (operator_name, partition)
+        for key in self.data[operator_partition].keys():
+            self.deal_with_reads(key, t_id, operator_partition)
+        return self.data[operator_partition]
 
-    def batch_insert(self, kv_pairs: dict, operator_name: str):
-        self.data[operator_name].update(kv_pairs)
-        self.delta_map[operator_name].update(kv_pairs)
+    def batch_insert(self, kv_pairs: dict, operator_name: str, partition: int):
+        operator_partition: OperatorPartition = (operator_name, partition)
+        self.data[operator_partition].update(kv_pairs)
+        self.delta_map[operator_partition].update(kv_pairs)
 
-    def get(self, key, t_id: int, operator_name: str) -> Any:
-        self.deal_with_reads(key, t_id, operator_name)
+    def get(self, key, t_id: int, operator_name: str, partition: int) -> any:
+        operator_partition: OperatorPartition = (operator_name, partition)
+        self.deal_with_reads(key, t_id, operator_partition)
         # if transaction wrote to this key, read from the write set
-        if t_id in self.write_sets[operator_name] and key in self.write_sets[operator_name][t_id]:
-            return self.write_sets[operator_name][t_id][key]
-        return msgpack.decode(msgpack.encode(self.data[operator_name].get(key)))
+        if t_id in self.write_sets[operator_partition] and key in self.write_sets[operator_partition][t_id]:
+            return self.write_sets[operator_partition][t_id][key]
+        return msgpack.decode(msgpack.encode(self.data[operator_partition].get(key)))
 
-    def get_immediate(self, key, t_id: int, operator_name: str):
-        if key in self.fallback_commit_buffer[t_id][operator_name]:
-            return self.fallback_commit_buffer[t_id][operator_name][key]
-        return msgpack.decode(msgpack.encode(self.data[operator_name].get(key)))
+    def get_immediate(self, key, t_id: int, operator_name: str, partition: int):
+        operator_partition: OperatorPartition = (operator_name, partition)
+        if key in self.fallback_commit_buffer[t_id][operator_partition]:
+            return self.fallback_commit_buffer[t_id][operator_partition][key]
+        return msgpack.decode(msgpack.encode(self.data[operator_partition].get(key)))
 
-    def delete(self, key, operator_name: str):
+    def delete(self, key, operator_name: str, partition: int):
         # Need to find a way to implement deletes
         pass
 
-    def exists(self, key, operator_name: str):
-        return key in self.data[operator_name]
+    def exists(self, key, operator_name: str, partition: int):
+        operator_partition: OperatorPartition = (operator_name, partition)
+        return key in self.data[operator_partition]
 
     def commit(self, aborted_from_remote: set[int]) -> set[int]:
         committed_t_ids = set()

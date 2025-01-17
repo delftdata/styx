@@ -19,6 +19,7 @@ from styx.common.operator import Operator
 from styx.common.protocols import Protocols
 from styx.common.serialization import Serializer
 from styx.common.message_types import MessageType
+from styx.common.types import OperatorPartition
 from styx.common.util.aio_task_scheduler import AIOTaskScheduler
 
 
@@ -68,7 +69,7 @@ class Worker(object):
                                                      mode=MessagingMode.PROTOCOL_PROTOCOL)
 
         self.operator_state_backend: LocalStateBackend = ...
-        self.registered_operators: dict[tuple[str, int], Operator] = {}
+        self.registered_operators: dict[OperatorPartition, Operator] = {}
         self.dns: dict[str, dict[str, tuple[str, int, int]]] = {}
         self.topic_partitions: list[TopicPartition] = []
         # worker_id: (host, port)
@@ -128,11 +129,10 @@ class Worker(object):
                     operator, partition = tup
                     self.registered_operators[(operator.name, partition)] = deepcopy(operator)
 
-                metadata: dict | None = None
-                if self.operator_state_backend is LocalStateBackend.DICT:
-                    self.async_snapshots = AsyncSnapshotsMinio(self.id, snapshot_id=snapshot_id + 1)
-                    state, metadata = self.async_snapshots.retrieve_snapshot(snapshot_id)
-                    self.attach_state_to_operators_after_snapshot(state)
+                self.async_snapshots = AsyncSnapshotsMinio(self.id, snapshot_id=snapshot_id + 1)
+                (data, topic_partition_offsets, topic_partition_output_offsets, epoch,
+                 t_counter) = self.async_snapshots.retrieve_snapshot(snapshot_id, self.registered_operators.keys())
+                self.attach_state_to_operators_after_snapshot(data)
 
                 self.function_execution_protocol = AriaProtocol(worker_id=self.id,
                                                                 peers=self.peers,
@@ -142,7 +142,10 @@ class Worker(object):
                                                                 topic_partitions=self.topic_partitions,
                                                                 state=self.local_state,
                                                                 async_snapshots=self.async_snapshots,
-                                                                snapshot_metadata=metadata,
+                                                                topic_partition_offsets=topic_partition_offsets,
+                                                                output_offsets=topic_partition_output_offsets,
+                                                                epoch_counter=epoch,
+                                                                t_counter=t_counter,
                                                                 restart_after_recovery=True)
                 self.function_execution_protocol.start()
 
@@ -168,11 +171,10 @@ class Worker(object):
                     if INGRESS_TYPE == 'KAFKA':
                         self.topic_partitions.append(TopicPartition(operator.name, partition))
 
-                metadata: dict | None = None
-                if self.operator_state_backend is LocalStateBackend.DICT:
-                    self.async_snapshots = AsyncSnapshotsMinio(self.id, snapshot_id=snapshot_id+1)
-                    state, metadata = self.async_snapshots.retrieve_snapshot(snapshot_id)
-                    self.attach_state_to_operators_after_snapshot(state)
+                self.async_snapshots = AsyncSnapshotsMinio(self.id, snapshot_id=snapshot_id + 1)
+                (data, topic_partition_offsets, topic_partition_output_offsets, epoch,
+                 t_counter) = self.async_snapshots.retrieve_snapshot(snapshot_id, self.registered_operators.keys())
+                self.attach_state_to_operators_after_snapshot(data)
 
                 self.function_execution_protocol = AriaProtocol(worker_id=self.id,
                                                                 peers=self.peers,
@@ -182,7 +184,10 @@ class Worker(object):
                                                                 topic_partitions=self.topic_partitions,
                                                                 state=self.local_state,
                                                                 async_snapshots=self.async_snapshots,
-                                                                snapshot_metadata=metadata,
+                                                                topic_partition_offsets=topic_partition_offsets,
+                                                                output_offsets=topic_partition_output_offsets,
+                                                                epoch_counter=epoch,
+                                                                t_counter=t_counter,
                                                                 restart_after_recovery=True)
                 self.function_execution_protocol.start()
                 # send that we are ready to the coordinator
@@ -201,9 +206,9 @@ class Worker(object):
                 logging.error(f"Worker Service: Non supported command message type: {message_type}")
 
     def attach_state_to_operators_after_snapshot(self, data):
-        operator_names: set[str] = set([operator.name for operator in self.registered_operators.values()])
+        operator_partitions: set[OperatorPartition] = set(self.registered_operators.keys())
         if self.operator_state_backend is LocalStateBackend.DICT:
-            self.local_state = InMemoryOperatorState(operator_names)
+            self.local_state = InMemoryOperatorState(operator_partitions)
             self.local_state.set_data_from_snapshot(data)
         else:
             logging.error(f"Invalid operator state backend type: {self.operator_state_backend}")
@@ -212,11 +217,11 @@ class Worker(object):
             operator.attach_state_networking(self.local_state, self.protocol_networking, self.dns)
 
     def attach_state_to_operators(self):
-        operator_names: set[str] = set([operator.name for operator in self.registered_operators.values()])
+        operator_partitions: set[OperatorPartition] = set(self.registered_operators.keys())
         if self.operator_state_backend is LocalStateBackend.DICT:
             self.async_snapshots = AsyncSnapshotsMinio(self.id)
             if PROTOCOL == Protocols.Aria:
-                self.local_state = InMemoryOperatorState(operator_names)
+                self.local_state = InMemoryOperatorState(operator_partitions)
             else:
                 logging.error(f"Invalid protocol: {PROTOCOL}")
         else:

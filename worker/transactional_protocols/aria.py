@@ -11,6 +11,7 @@ from msgspec import msgpack
 
 from styx.common.logging import logging
 from styx.common.message_types import MessageType
+from styx.common.types import OperatorPartition
 from styx.common.tcp_networking import NetworkingManager
 from styx.common.operator import Operator
 from styx.common.serialization import Serializer, msgpack_serialization
@@ -48,25 +49,20 @@ class AriaProtocol(BaseTransactionalProtocol):
                  peers: dict[int, tuple[str, int, int]],
                  networking: NetworkingManager,
                  protocol_socket: socket.socket,
-                 registered_operators: dict[tuple[str, int], Operator],
+                 registered_operators: dict[OperatorPartition, Operator],
                  topic_partitions: list[TopicPartition],
                  state: InMemoryOperatorState | Stateless,
                  async_snapshots: AsyncSnapshotsMinio,
-                 snapshot_metadata: dict = None,
+                 topic_partition_offsets: dict[OperatorPartition, int] = None,
+                 output_offsets: dict[OperatorPartition, int] = None,
+                 epoch_counter: int = 0,
+                 t_counter: int = 0,
                  restart_after_recovery: bool = False):
 
-        if snapshot_metadata is None:
-            topic_partition_offsets: dict[tuple[str, int], int] = {(tp.topic, tp.partition): -1
-                                                                   for tp in topic_partitions}
-            epoch_counter = 0
-            t_counter = 0
-            output_offsets: dict[str, dict[int, int]] = {tp.topic: {tp.partition: -1}
-                                                         for tp in topic_partitions}
-        else:
-            topic_partition_offsets = snapshot_metadata["offsets"]
-            epoch_counter = snapshot_metadata["epoch"]
-            t_counter = snapshot_metadata["t_counter"]
-            output_offsets = snapshot_metadata["output_offsets"]
+        if topic_partition_offsets is None:
+            topic_partition_offsets = {(tp.topic, tp.partition): -1 for tp in topic_partitions}
+        if output_offsets is None:
+            output_offsets = {(tp.topic, tp.partition): -1 for tp in topic_partitions}
 
         self.id = worker_id
 
@@ -81,7 +77,7 @@ class AriaProtocol(BaseTransactionalProtocol):
 
         # worker_id: (host, port)
         self.peers: dict[int, tuple[str, int, int]] = peers
-        self.topic_partition_offsets: dict[tuple[str, int], int] = topic_partition_offsets
+        self.topic_partition_offsets: dict[OperatorPartition, int] = topic_partition_offsets
         # worker_id: set of aborted t_ids
         self.concurrency_aborts_everywhere: set[int] = set()
         self.t_ids_to_reschedule: set[int] = set()
@@ -99,7 +95,7 @@ class AriaProtocol(BaseTransactionalProtocol):
         # t_id: the t_ids it depends on
         self.waiting_on_transactions: dict[int, set[int]] = {}
 
-        self.registered_operators: dict[tuple[str, int], Operator] = registered_operators
+        self.registered_operators: dict[OperatorPartition, Operator] = registered_operators
 
         self.sequencer = Sequencer(SEQUENCE_MAX_SIZE, t_counter=t_counter, epoch_counter=epoch_counter)
         self.sequencer.set_worker_id(self.id)
@@ -205,6 +201,7 @@ class AriaProtocol(BaseTransactionalProtocol):
             payload.request_id,
             payload.timestamp,
             payload.function_name,
+            payload.partition,
             payload.ack_payload,
             fallback_mode,
             USE_FALLBACK_CACHE,
@@ -241,20 +238,15 @@ class AriaProtocol(BaseTransactionalProtocol):
             if InMemoryOperatorState.__name__ == self.local_state.__class__.__name__:
                 loop = asyncio.get_running_loop()
                 start = time.time() * 1000
-                data = {
-                    "data":  msgpack.decode(msgpack.encode(self.local_state.get_data_for_snapshot())),
-                    "metadata": {
-                        "offsets": msgpack.decode(msgpack.encode(self.topic_partition_offsets)),
-                        "epoch": self.sequencer.epoch_counter,
-                        "t_counter": self.sequencer.t_counter,
-                        "output_offsets": msgpack.decode(msgpack.encode(self.egress.topic_partition_output_offsets))
-                    }
-                }
                 loop.run_in_executor(pool,
                                      self.async_snapshots.store_snapshot,
                                      self.async_snapshots.snapshot_id,
                                      self.id,
-                                     data,
+                                     msgpack.decode(msgpack.encode(self.local_state.get_data_for_snapshot())),
+                                     msgpack.decode(msgpack.encode(self.topic_partition_offsets)),
+                                     self.sequencer.epoch_counter,
+                                     self.sequencer.t_counter,
+                                     msgpack.decode(msgpack.encode(self.egress.topic_partition_output_offsets)),
                                      start).add_done_callback(self.async_snapshots.snapshot_completed_callback)
                 self.local_state.clear_delta_map()
             else:
