@@ -1,6 +1,6 @@
-FROM python:3.13.0-slim-bookworm
+FROM python:3.13.1-slim-bookworm
 
-RUN apt-get update && apt-get install -y git gcc
+RUN #apt-get update && apt-get install -y git gcc
 
 RUN groupadd styx \
     && useradd -m -d /usr/local/styx -g styx styx

@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM python:3.13.1-slim-bookworm
 
 COPY shopping-cart-demo/requirements.txt /var/local/styx/
 COPY styx-package /var/local/styx-package/
