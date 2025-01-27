@@ -74,12 +74,12 @@ class Worker(object):
         self.topic_partitions: list[TopicPartition] = []
         # worker_id: (host, port)
         self.peers: dict[int, tuple[str, int, int]] = {}
-        self.local_state: InMemoryOperatorState | Stateless = ...
+        self.local_state: InMemoryOperatorState | Stateless = Stateless()
 
         # Primary tasks used for processing
         self.heartbeat_proc: multiprocessing.Process = ...
 
-        self.function_execution_protocol: AriaProtocol = ...
+        self.function_execution_protocol: AriaProtocol | None = None
 
         self.aio_task_scheduler = AIOTaskScheduler()
 
@@ -99,79 +99,46 @@ class Worker(object):
                 # This contains all the operators of a job assigned to this worker
                 message = self.networking.decode_message(data)
                 await self.handle_execution_plan(message)
-            case MessageType.RecoveryOther:
-                # RECOVERY_OTHER
+            case MessageType.InitRecovery:
                 start_time = timer()
-                logging.warning('RECOVERY_OTHER')
-                await self.function_execution_protocol.stop()
-                await self.networking.close_all_connections()
-                await self.protocol_networking.close_all_connections()
-                del (self.function_execution_protocol,
-                     self.local_state,
-                     self.networking,
-                     self.protocol_networking,
-                     self.async_snapshots,
-                     self.registered_operators)
-                gc.collect()
-
-                self.networking = NetworkingManager(self.server_port)
-                self.protocol_networking = NetworkingManager(self.protocol_port,
-                                                             mode=MessagingMode.PROTOCOL_PROTOCOL)
-                self.protocol_networking.set_worker_id(self.id)
-                self.networking.set_worker_id(self.id)
-
                 message = self.networking.decode_message(data)
-                self.dns, self.peers, self.operator_state_backend, snapshot_id = message
+                if self.function_execution_protocol is not None:
+                # RECOVERY_OTHER
+                    logging.warning('RECOVERY_OTHER')
+                    await self.function_execution_protocol.stop()
+                    await self.networking.close_all_connections()
+                    await self.protocol_networking.close_all_connections()
+                    del (self.function_execution_protocol,
+                         self.local_state,
+                         self.networking,
+                         self.protocol_networking,
+                         self.async_snapshots,
+                         self.registered_operators)
+                    gc.collect()
+                    self.dns, self.peers, self.operator_state_backend, snapshot_id = message
+                    self.networking = NetworkingManager(self.server_port)
+                    self.protocol_networking = NetworkingManager(self.protocol_port,
+                                                                 mode=MessagingMode.PROTOCOL_PROTOCOL)
+                    self.protocol_networking.set_worker_id(self.id)
+                    self.networking.set_worker_id(self.id)
+                else:
+                    logging.warning('RECOVERY_OWN')
+                    (self.id, self.worker_operators, self.dns, self.peers,
+                     self.operator_state_backend, snapshot_id) = message
+
                 del self.peers[self.id]
 
                 self.registered_operators = {}
-                for tup in self.worker_operators:
-                    operator, partition = tup
-                    self.registered_operators[(operator.name, partition)] = deepcopy(operator)
-
-                self.async_snapshots = AsyncSnapshotsMinio(self.id, snapshot_id=snapshot_id + 1)
-                (data, topic_partition_offsets, topic_partition_output_offsets, epoch,
-                 t_counter) = self.async_snapshots.retrieve_snapshot(snapshot_id, self.registered_operators.keys())
-                self.attach_state_to_operators_after_snapshot(data)
-
-                self.function_execution_protocol = AriaProtocol(worker_id=self.id,
-                                                                peers=self.peers,
-                                                                networking=self.protocol_networking,
-                                                                protocol_socket=self.protocol_socket,
-                                                                registered_operators=self.registered_operators,
-                                                                topic_partitions=self.topic_partitions,
-                                                                state=self.local_state,
-                                                                async_snapshots=self.async_snapshots,
-                                                                topic_partition_offsets=topic_partition_offsets,
-                                                                output_offsets=topic_partition_output_offsets,
-                                                                epoch_counter=epoch,
-                                                                t_counter=t_counter,
-                                                                restart_after_recovery=True)
-                self.function_execution_protocol.start()
-
-                await self.networking.send_message(DISCOVERY_HOST, DISCOVERY_PORT,
-                                                   msg=(self.id, ),
-                                                   msg_type=MessageType.ReadyAfterRecovery,
-                                                   serializer=Serializer.MSGPACK)
-                end_time = timer()
-                logging.warning(f'Worker: {self.id} | Recovered snapshot: {snapshot_id} '
-                                f'| took: {round((end_time - start_time) * 1000, 4)}ms | OTHER FAILURE')
-            case MessageType.RecoveryOwn:
-                # RECOVERY_OWN
-                start_time = timer()
-                logging.warning('RECOVERY_OWN')
-                message = self.networking.decode_message(data)
-                self.id, self.worker_operators, self.dns, self.peers, self.operator_state_backend, snapshot_id = message
-                del self.peers[self.id]
-
-                operator: Operator
+                self.topic_partitions = []
                 for tup in self.worker_operators:
                     operator, partition = tup
                     self.registered_operators[(operator.name, partition)] = deepcopy(operator)
                     if INGRESS_TYPE == 'KAFKA':
                         self.topic_partitions.append(TopicPartition(operator.name, partition))
 
-                self.async_snapshots = AsyncSnapshotsMinio(self.id, snapshot_id=snapshot_id + 1)
+                self.async_snapshots = AsyncSnapshotsMinio(self.id,
+                                                           n_assigned_partitions=len(self.topic_partitions),
+                                                           snapshot_id=snapshot_id + 1)
                 (data, topic_partition_offsets, topic_partition_output_offsets, epoch,
                  t_counter) = self.async_snapshots.retrieve_snapshot(snapshot_id, self.registered_operators.keys())
                 self.attach_state_to_operators_after_snapshot(data)
@@ -190,14 +157,14 @@ class Worker(object):
                                                                 t_counter=t_counter,
                                                                 restart_after_recovery=True)
                 self.function_execution_protocol.start()
-                # send that we are ready to the coordinator
+
                 await self.networking.send_message(DISCOVERY_HOST, DISCOVERY_PORT,
                                                    msg=(self.id, ),
                                                    msg_type=MessageType.ReadyAfterRecovery,
                                                    serializer=Serializer.MSGPACK)
                 end_time = timer()
                 logging.warning(f'Worker: {self.id} | Recovered snapshot: {snapshot_id} '
-                                f'| took: {round((end_time - start_time) * 1000, 4)}ms | OWN FAILURE')
+                                f'| took: {round((end_time - start_time) * 1000, 4)}ms')
             case MessageType.ReadyAfterRecovery:
                 # SYNC after recovery (Everyone is healthy)
                 self.function_execution_protocol.started.set()
@@ -219,7 +186,7 @@ class Worker(object):
     def attach_state_to_operators(self):
         operator_partitions: set[OperatorPartition] = set(self.registered_operators.keys())
         if self.operator_state_backend is LocalStateBackend.DICT:
-            self.async_snapshots = AsyncSnapshotsMinio(self.id)
+            self.async_snapshots = AsyncSnapshotsMinio(self.id, n_assigned_partitions=len(self.topic_partitions))
             if PROTOCOL == Protocols.Aria:
                 self.local_state = InMemoryOperatorState(operator_partitions)
             else:

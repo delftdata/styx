@@ -2,7 +2,6 @@ import asyncio
 import os
 import concurrent.futures
 import socket
-import time
 
 from timeit import default_timer as timer
 
@@ -36,7 +35,8 @@ CONFLICT_DETECTION_METHOD: AriaConflictDetectionType = AriaConflictDetectionType
 # if more than 10% aborts use fallback strategy
 FALLBACK_STRATEGY_PERCENTAGE: float = float(os.getenv('FALLBACK_STRATEGY_PERCENTAGE', -0.1))
 # snapshot each N epochs
-SNAPSHOT_FREQUENCY = int(os.getenv('SNAPSHOT_FREQUENCY_SEC', 10))
+SNAPSHOT_FREQUENCY: int = int(os.getenv('SNAPSHOT_FREQUENCY_SEC', 10))
+SNAPSHOTTING_THREADS: int = int(os.getenv('SNAPSHOTTING_THREADS', 4))
 SEQUENCE_MAX_SIZE: int = int(os.getenv('SEQUENCE_MAX_SIZE', 1_000))
 USE_FALLBACK_CACHE: bool = bool(os.getenv('USE_FALLBACK_CACHE', True))
 KAFKA_URL: str = os.environ['KAFKA_URL']
@@ -233,21 +233,28 @@ class AriaProtocol(BaseTransactionalProtocol):
 
     def take_snapshot(self, pool: concurrent.futures.ProcessPoolExecutor):
         is_snapshot_time: bool = timer() > self.snapshot_timer + SNAPSHOT_FREQUENCY
-        if is_snapshot_time:
+        if is_snapshot_time and not self.async_snapshots.snapshot_in_progress:
             self.snapshot_timer = timer()
             if InMemoryOperatorState.__name__ == self.local_state.__class__.__name__:
                 loop = asyncio.get_running_loop()
-                start = time.time() * 1000
+                self.async_snapshots.start_snapshotting()
+                data = self.local_state.get_data_for_snapshot()
+                for operator_partition in self.registered_operators.keys():
+                    operator_name, partition = operator_partition
+                    loop.run_in_executor(pool,
+                                         self.async_snapshots.store_snapshot,
+                                         self.async_snapshots.snapshot_id,
+                                         f"data/{operator_name}/{partition}/{self.async_snapshots.snapshot_id}.bin",
+                                         (self.topic_partition_offsets[operator_partition],
+                                          self.egress.topic_partition_output_offsets[operator_partition],
+                                          data[operator_partition])
+                                         ).add_done_callback(self.async_snapshots.snapshot_completed_callback)
                 loop.run_in_executor(pool,
                                      self.async_snapshots.store_snapshot,
                                      self.async_snapshots.snapshot_id,
-                                     self.id,
-                                     msgpack.decode(msgpack.encode(self.local_state.get_data_for_snapshot())),
-                                     msgpack.decode(msgpack.encode(self.topic_partition_offsets)),
-                                     self.sequencer.epoch_counter,
-                                     self.sequencer.t_counter,
-                                     msgpack.decode(msgpack.encode(self.egress.topic_partition_output_offsets)),
-                                     start).add_done_callback(self.async_snapshots.snapshot_completed_callback)
+                                     f"sequencer/{self.async_snapshots.snapshot_id}.bin",
+                                     (self.sequencer.epoch_counter, self.sequencer.t_counter)
+                                     ).add_done_callback(self.async_snapshots.snapshot_completed_callback)
                 self.local_state.clear_delta_map()
             else:
                 logging.warning("Snapshot currently supported only for in-memory and incremental operator state")
@@ -345,7 +352,7 @@ class AriaProtocol(BaseTransactionalProtocol):
 
     async def function_scheduler(self):
         logging.warning('STARTED function scheduler')
-        with (concurrent.futures.ProcessPoolExecutor(1) as pool):
+        with (concurrent.futures.ProcessPoolExecutor(SNAPSHOTTING_THREADS) as pool):
             await self.started.wait()
             while True:
                 # need to sleep to allow the kafka consumer coroutine to read data

@@ -19,7 +19,7 @@ from styx.common.protocols import Protocols
 from styx.common.serialization import Serializer
 from styx.common.util.aio_task_scheduler import AIOTaskScheduler
 
-from coordinator import Coordinator
+from coordinator_metadata import Coordinator
 from aria_sync_metadata import AriaSyncMetadata
 
 SERVER_PORT = 8888
@@ -62,11 +62,6 @@ class CoordinatorService(object):
 
         self.aria_metadata: AriaSyncMetadata = ...
 
-    def create_task(self, coroutine):
-        task = asyncio.create_task(coroutine)
-        self.background_tasks.add(task)
-        task.add_done_callback(self.background_tasks.discard)
-
     # Refactoring candidate
     async def coordinator_controller(self, writer: StreamWriter, data, pool: concurrent.futures.ProcessPoolExecutor):
         message_type: int = self.networking.get_msg_type(data)
@@ -76,8 +71,8 @@ class CoordinatorService(object):
                 # Received execution graph from a styx client
                 await self.coordinator.submit_stateflow_graph(message[0])
                 logging.info("Submitted Stateflow Graph to Workers")
-                logging.warning(f"Registering metadata with: {len(self.coordinator.workers)} workers")
-                self.aria_metadata = AriaSyncMetadata(len(self.coordinator.workers))
+                logging.warning(f"Registering metadata with: {len(self.coordinator.worker_pool.get_workers())} workers")
+                self.aria_metadata = AriaSyncMetadata(len(self.coordinator.worker_pool.get_workers()))
             case MessageType.RegisterWorker:  # REGISTER_WORKER
                 worker_ip, worker_port, protocol_port = self.networking.decode_message(data)
                 # A worker registered to the coordinator
@@ -222,7 +217,7 @@ class CoordinatorService(object):
                                    message: tuple | bytes,
                                    serializer: Serializer = Serializer.MSGPACK):
         async with asyncio.TaskGroup() as tg:
-            for worker_id, worker in self.coordinator.workers.items():
+            for worker_id, worker in self.coordinator.worker_pool.get_workers().items():
                 tg.create_task(self.protocol_networking.send_message(worker[0], worker[2],
                                                                      msg=message,
                                                                      msg_type=msg_type,
@@ -230,7 +225,7 @@ class CoordinatorService(object):
 
     async def worker_wants_to_proceed(self):
         async with asyncio.TaskGroup() as tg:
-            for worker_id, worker in self.coordinator.workers.items():
+            for worker_id, worker in self.coordinator.worker_pool.get_workers().items():
                 tg.create_task(self.protocol_networking.send_message(worker[0], worker[2],
                                                                      msg=b'',
                                                                      msg_type=MessageType.RemoteWantsToProceed,
@@ -266,7 +261,7 @@ class CoordinatorService(object):
         await self.aria_metadata.cleanup()
         # notify that everyone is ready after recovery
         async with asyncio.TaskGroup() as tg:
-            for worker_id, worker in self.coordinator.workers.items():
+            for worker_id, worker in self.coordinator.worker_pool.get_workers().items():
                 tg.create_task(self.networking.send_message(worker[0], worker[1],
                                                             msg=b'',
                                                             msg_type=MessageType.ReadyAfterRecovery,
@@ -277,7 +272,7 @@ class CoordinatorService(object):
         while True:
             await asyncio.sleep(SNAPSHOT_FREQUENCY_SEC)
             async with asyncio.TaskGroup() as tg:
-                for worker_id, worker in self.coordinator.workers.items():
+                for worker_id, worker in self.coordinator.worker_pool.get_workers().items():
                     tg.create_task(self.networking.send_message(worker[0], worker[1],
                                                                 msg=b'',
                                                                 msg_type=MessageType.SnapMarker,

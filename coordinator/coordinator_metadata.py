@@ -16,7 +16,7 @@ from styx.common.exceptions import NotAStateflowGraph
 
 from snapshot_compactor import start_snapshot_compaction
 from scheduler.round_robin import RoundRobin
-
+from worker_pool import WorkerPool
 
 MAX_OPERATOR_PARALLELISM = int(os.getenv('MAX_OPERATOR_PARALLELISM', 10))
 
@@ -25,10 +25,9 @@ class Coordinator(object):
 
     def __init__(self, networking: NetworkingManager):
         self.networking = networking
-        self.worker_counter: int = 0
-        self.workers: dict[int, tuple[str, int, int]] = {}
         self.graph_submitted: bool = False
         self.prev_completed_snapshot_id: int = 0
+        self.worker_pool = WorkerPool()
 
         self.worker_snapshot_ids: dict[int, int] = {}
         self.worker_heartbeats: dict[int, float] = {}
@@ -46,7 +45,7 @@ class Coordinator(object):
         while id_not_ready:
             if self.dead_workers:
                 dead_worker_id: int = self.dead_workers.pop()
-                self.workers[dead_worker_id] = (worker_ip, worker_port, protocol_port)
+                self.worker_pool.register_worker_with_id(dead_worker_id, worker_ip, worker_port, protocol_port)
                 logging.info(f'Assigned: {dead_worker_id} to {worker_ip}')
                 if self.graph_submitted:
                     self.change_operator_partition_locations(dead_worker_id, worker_ip, worker_port, protocol_port)
@@ -59,10 +58,8 @@ class Coordinator(object):
                     # sleep for 10ms waiting for heartbeat to detect
                     await asyncio.sleep(0.01)
                 else:
-                    self.worker_counter += 1
-                    self.workers[self.worker_counter] = (worker_ip, worker_port, protocol_port)
-                    self.worker_snapshot_ids[self.worker_counter] = -1
-                    worker_id = self.worker_counter
+                    worker_id = self.worker_pool.register_worker(worker_ip, worker_port, protocol_port)
+                    self.worker_snapshot_ids[worker_id] = -1
                     id_not_ready = False
         self.worker_heartbeats[worker_id] = 1_000_000.0
         return worker_id, send_recovery
@@ -76,7 +73,7 @@ class Coordinator(object):
                                             worker_ip: str,
                                             worker_port: int,
                                             protocol_port: int):
-        removed_ip = self.workers[dead_worker_id][0]
+        removed_ip = self.worker_pool.peek(dead_worker_id).worker_ip
         new_operator_partition_locations = {}
         for operator_name, partition_dict in self.operator_partition_locations.items():
             new_operator_partition_locations[operator_name] = {}
@@ -114,23 +111,23 @@ class Coordinator(object):
         if ingress_type == IngressTypes.KAFKA:
             self.create_kafka_ingress_topics(stateflow_graph)
         self.worker_assignments, self.operator_partition_locations, self.operator_state_backend = \
-            await scheduler.schedule(self.workers, stateflow_graph, self.networking)
+            await scheduler.schedule(self.worker_pool.get_workers(), stateflow_graph, self.networking)
         self.graph_submitted = True
 
     async def send_operators_snapshot_offsets(self, dead_worker_id: int):
         # wait for 100ms for the resurrected worker to receive its assignment
         await asyncio.sleep(0.1)
-        worker = self.workers[dead_worker_id]
-        operator_partitions = self.worker_assignments[worker]
-        await self.networking.send_message(worker[0], worker[1],
+        worker = self.worker_pool.peek(dead_worker_id)
+        operator_partitions = self.worker_assignments[(worker.worker_ip, worker.worker_port, worker.protocol_port)]
+        await self.networking.send_message(worker.worker_ip, worker.worker_port,
                                            msg=(dead_worker_id,
                                                 operator_partitions,
                                                 self.operator_partition_locations,
-                                                self.workers,
+                                                self.worker_pool.get_workers(),
                                                 self.operator_state_backend,
                                                 self.get_current_completed_snapshot_id()),
-                                           msg_type=MessageType.RecoveryOwn)
-        logging.info(f'SENT RECOVER TO DEAD WORKER: {worker[0]}:{worker[1]}')
+                                           msg_type=MessageType.InitRecovery)
+        logging.info(f'SENT RECOVER TO DEAD WORKER: {worker.worker_ip}:{worker.worker_port}')
 
     async def send_recovery_to_healthy_workers(self, workers_to_remove: set[int]):
         # wait till all the workers have been reassigned
@@ -141,14 +138,14 @@ class Coordinator(object):
                 await asyncio.sleep(0.01)
 
             async with asyncio.TaskGroup() as tg:
-                for worker_id, worker in self.workers.items():
+                for worker_id, worker in self.worker_pool.get_workers().items():
                     if worker_id not in workers_to_remove:
                         tg.create_task(self.networking.send_message(worker[0], worker[1],
                                                                     msg=(self.operator_partition_locations,
-                                                                         self.workers,
+                                                                         self.worker_pool.get_workers(),
                                                                          self.operator_state_backend,
                                                                          self.get_current_completed_snapshot_id()),
-                                                                    msg_type=MessageType.RecoveryOther))
+                                                                    msg_type=MessageType.InitRecovery))
             logging.info('SENT RECOVER TO HEALTHY WORKERS')
 
     def create_kafka_ingress_topics(self, stateflow_graph: StateflowGraph):

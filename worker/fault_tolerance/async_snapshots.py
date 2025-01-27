@@ -23,45 +23,40 @@ SNAPSHOT_BUCKET_NAME: str = os.getenv('SNAPSHOT_BUCKET_NAME', "styx-snapshots")
 
 class AsyncSnapshotsMinio(BaseSnapshotter):
 
-    def __init__(self, worker_id, snapshot_id: int = 0):
-        self.worker_id = worker_id
-        self.snapshot_id = snapshot_id
+    def __init__(self, worker_id, n_assigned_partitions: int, snapshot_id: int = 0):
+        self.worker_id: int = worker_id
+        self.snapshot_id: int = snapshot_id
+        self.n_assigned_partitions: int = n_assigned_partitions
+        self.completed_snapshots: int = 0
+        self.snapshot_in_progress: bool = False
+        self.snapshot_start: float = 0.0
 
     def snapshot_completed_callback(self, _):
-        self.snapshot_id += 1
+        self.completed_snapshots += 1
+        if self.completed_snapshots == self.n_assigned_partitions:
+            end = time.time() * 1000
+            msg = NetworkingManager.encode_message(msg=(self.worker_id, self.snapshot_id, self.snapshot_start, end),
+                                                   msg_type=MessageType.SnapID,
+                                                   serializer=Serializer.MSGPACK)
+            s = socket.socket()
+            s.connect((COORDINATOR_HOST, COORDINATOR_PORT))
+            s.send(msg)
+            s.close()
+            self.snapshot_id += 1
+            self.snapshot_in_progress = False
+            self.completed_snapshots = 0
+
+    def start_snapshotting(self):
+        self.snapshot_in_progress = True
+        self.snapshot_start = time.time() * 1000
 
     @staticmethod
     def store_snapshot(snapshot_id: int,
-                       worker_id: str,
-                       data: dict[OperatorPartition, KVPairs],
-                       input_offsets: dict[OperatorPartition, int],
-                       epoch: int,
-                       t_counter: int,
-                       output_offsets: dict[OperatorPartition, int],
-                       start):
+                       snapshot_name: str,
+                       data_to_snapshot: tuple):
         minio_client: Minio = Minio(MINIO_URL, access_key=MINIO_ACCESS_KEY, secret_key=MINIO_SECRET_KEY, secure=False)
-
-        for operator_partition, operator_data in data.items():
-            operator_name, partition = operator_partition
-            sn_data: bytes = msgpack_serialization((input_offsets[operator_partition],
-                                                    output_offsets[operator_partition],
-                                                    operator_data))
-            snapshot_name: str = f"data/{operator_name}/{partition}/{snapshot_id}.bin"
-            minio_client.put_object(SNAPSHOT_BUCKET_NAME, snapshot_name, io.BytesIO(sn_data), len(sn_data))
-
-        sn_data: bytes = msgpack_serialization((epoch, t_counter))
-        snapshot_name: str = f"sequencer/{snapshot_id}.bin"
+        sn_data: bytes = msgpack_serialization(data_to_snapshot)
         minio_client.put_object(SNAPSHOT_BUCKET_NAME, snapshot_name, io.BytesIO(sn_data), len(sn_data))
-
-        end = time.time()*1000
-        msg = NetworkingManager.encode_message(msg=(worker_id, snapshot_id, start, end),
-                                               msg_type=MessageType.SnapID,
-                                               serializer=Serializer.MSGPACK)
-
-        s = socket.socket()
-        s.connect((COORDINATOR_HOST, COORDINATOR_PORT))
-        s.send(msg)
-        s.close()
         return True
 
     def retrieve_snapshot(self, snapshot_id: int, registered_operators: Iterable[OperatorPartition]):
