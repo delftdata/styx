@@ -2,20 +2,6 @@
 
 This repository contains the codebase of Styx described in: https://arxiv.org/abs/2312.06893.
 
-
-##### Cite Styx
-
-```bibtex
-@misc{psarakis2024styx,
-      title={Styx: Transactional Stateful Functions on Streaming Dataflows}, 
-      author={Kyriakos Psarakis and George Siachamis and George Christodoulou and Marios Fragkoulis and Asterios Katsifodimos},
-      year={2024},
-      eprint={2312.06893},
-      archivePrefix={arXiv},
-      primaryClass={cs.DC}
-}
-```
-
 ## Preliminaries
 
 This project requires an environment with *python 3.12* installed. 
@@ -110,3 +96,17 @@ Then, you can start the Styx engine and specify the desired scale.
 To run the SE: `docker-compose up --build --scale worker=4`
 
 To clear the SE: `docker-compose down --volumes`
+
+##### Cite Styx
+
+```bibtex
+@inproceedings{psarakis2025styx,
+author = {Psarakis, Kyriakos and Christodoulou, George and Siachamis, George and Fragkoulis, Marios and Katsifodimos, Asterios},
+title = {Styx: Transactional Stateful Functions on Streaming Dataflows},
+year = {2025},
+publisher = {Association for Computing Machinery},
+booktitle = {Proceedings of the 2025 International Conference on Management of Data},
+series = {SIGMOD '25}
+}
+```
+
