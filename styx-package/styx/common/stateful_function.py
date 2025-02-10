@@ -42,7 +42,7 @@ class StatefulFunction(Function):
                  operator_state: State,
                  networking: NetworkingManager,
                  timestamp: int,
-                 dns: dict[str, dict[str, tuple[str, int, int]]],
+                 dns: dict[str, dict[int, tuple[str, int, int]]],
                  t_id: int,
                  request_id: bytes,
                  fallback_mode: bool,
@@ -53,7 +53,7 @@ class StatefulFunction(Function):
         self.__state: State = operator_state
         self.__networking: NetworkingManager = networking
         self.__timestamp: int = timestamp
-        self.__dns: dict[str, dict[str, tuple[str, int, int]]] = dns
+        self.__dns: dict[str, dict[int, tuple[str, int, int]]] = dns
         self.__t_id: int = t_id
         self.__request_id: bytes = request_id
         self.__async_remote_calls: list[tuple[str, str, int, object, tuple, bool]] = []
@@ -109,11 +109,19 @@ class StatefulFunction(Function):
             value = self.__state.get_immediate(self.key, self.__t_id, self.__operator_name, self.__partition)
         else:
             value = self.__state.get(self.key, self.__t_id, self.__operator_name, self.__partition)
-        # logging.info(f'GET: {self.key}:{value} with t_id: {self.__t_id} operator: {self.__operator_name}')
+        # logging.warning(f'GET: {self.key}:{value} '
+        #                 f'with t_id: {self.__t_id} '
+        #                 f'operator: {self.__operator_name} '
+        #                 f'fallback: {self.__fallback_enabled} '
+        #                 f'request_id: {self.__request_id} ')
         return value
 
     def put(self, value):
-        # logging.info(f'PUT: {self.key}:{value} with t_id: {self.__t_id} operator: {self.__operator_name}')
+        # logging.warning(f'PUT: {self.key}:{value} '
+        #                 f'with t_id: {self.__t_id} '
+        #                 f'operator: {self.__operator_name} '
+        #                 f'fallback: {self.__fallback_enabled} '
+        #                 f'request_id: {self.__request_id} ')
         if self.__fallback_enabled:
             self.__state.put_immediate(self.key, value, self.__t_id, self.__operator_name, self.__partition)
         else:
@@ -139,7 +147,7 @@ class StatefulFunction(Function):
             # This is the root
             ack_host = self.__networking.host_name
             ack_port = self.__networking.host_port
-            await self.__networking.prepare_function_chain(self.__t_id)
+            self.__networking.prepare_function_chain(self.__t_id)
         else:
             if not self.__networking.in_the_same_network(ack_host, ack_port):
                 chain_participants.append(self.__networking.worker_id)
@@ -173,7 +181,7 @@ class StatefulFunction(Function):
                                                                      payload=payload,
                                                                      internal=True))
                     # add to cache
-                    await self.__networking.add_remote_function_call(self.__t_id, payload)
+                    self.__networking.add_remote_function_call(self.__t_id, payload)
             else:
                 remote_calls.append(self.__call_remote_function_no_response(operator_name=operator_name,
                                                                             function_name=function_name,
@@ -195,8 +203,8 @@ class StatefulFunction(Function):
         if isinstance(function_name, type):
             function_name = function_name.__name__
         partition: int = make_key_hashable(key) % len(self.__dns[operator_name].keys())
-        is_local: bool = self.__networking.in_the_same_network(self.__dns[operator_name][str(partition)][0],
-                                                               self.__dns[operator_name][str(partition)][2])
+        is_local: bool = self.__networking.in_the_same_network(self.__dns[operator_name][partition][0],
+                                                               self.__dns[operator_name][partition][2])
         self.__async_remote_calls.append((operator_name, function_name, partition, key, params, is_local))
 
     async def __call_remote_function_no_response(self,
@@ -258,8 +266,8 @@ class StatefulFunction(Function):
                        params)  # __PARAMS__
             if ack_payload is not None:
                 payload += (ack_payload, )
-            operator_host = self.__dns[operator_name][str(partition)][0]
-            operator_port = self.__dns[operator_name][str(partition)][2]
+            operator_host = self.__dns[operator_name][partition][0]
+            operator_port = self.__dns[operator_name][partition][2]
         except KeyError:
             logging.error(f"Couldn't find operator: {operator_name} in {self.__dns}")
         else:

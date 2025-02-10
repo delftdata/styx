@@ -17,7 +17,7 @@ class Operator(BaseOperator):
         self.__state = ...
         self.__networking: NetworkingManager = ...
         # where the other functions exist
-        self.__dns: dict[str, dict[str, tuple[str, int, int]]] = {}
+        self.__dns: dict[str, dict[int, tuple[str, int, int]]] = {}
         self.__functions: dict[str, type] = {}
 
     @property
@@ -76,7 +76,7 @@ class Operator(BaseOperator):
     async def __send_cache_ack(self, ack_host, ack_port, ack_id) -> None:
         if self.__networking.in_the_same_network(ack_host, ack_port):
             # case when the ack host is the same worker
-            await self.__networking.add_ack_cnt(ack_id)
+            self.__networking.add_ack_cnt(ack_id)
         else:
             await self.__networking.send_message(ack_host, ack_port,
                                                  msg=(ack_id, ),
@@ -92,7 +92,7 @@ class Operator(BaseOperator):
                          partial_node_count) -> None:
         if self.__networking.in_the_same_network(ack_host, ack_port):
             # case when the ack host is the same worker
-            await self.__networking.add_ack_fraction_str(ack_id, fraction_str, chain_participants, partial_node_count)
+            self.__networking.add_ack_fraction_str(ack_id, fraction_str, chain_participants, partial_node_count)
         else:
             if self.__networking.worker_id not in chain_participants:
                 chain_participants.append(self.__networking.worker_id)

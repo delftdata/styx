@@ -30,6 +30,7 @@ class StyxKafkaBatchEgress(BaseEgress):
         self.messages_sent_before_recovery: dict[TopicPartition, set] = defaultdict(set)
         self.restart_after_failure = restart_after_failure
         self.batch: list = []
+        self.started: asyncio.Event = asyncio.Event()
 
     def clear_messages_sent_before_recovery(self):
         self.messages_sent_before_recovery: dict[TopicPartition, set] = defaultdict(set)
@@ -43,7 +44,7 @@ class StyxKafkaBatchEgress(BaseEgress):
         self.kafka_egress_producer = AIOKafkaProducer(
             bootstrap_servers=[KAFKA_URL],
             client_id=f"W{worker_id}_{uuid.uuid4()}",
-            enable_idempotence=True
+            acks=1,
         )
         while True:
             try:
@@ -53,12 +54,15 @@ class StyxKafkaBatchEgress(BaseEgress):
                 logging.info("Waiting for Kafka")
                 continue
             break
+        self.started.set()
 
     async def stop(self):
         await self.send_batch()
         await self.kafka_egress_producer.stop()
 
     async def send(self, key, value, operator_name: str, partition: int):
+        if not self.started.is_set():
+            await self.started.wait()
         tp = TopicPartition(operator_name + "--OUT", partition)
         if key not in self.messages_sent_before_recovery[tp]:
             self.batch.append(await self.kafka_egress_producer.send(operator_name + "--OUT",
@@ -67,6 +71,14 @@ class StyxKafkaBatchEgress(BaseEgress):
                                                                     partition=partition))
         else:
             self.messages_sent_before_recovery[tp].remove(key)
+
+    async def send_message_to_topic(self, key, message, topic: str) -> RecordMetadata:
+        if not self.started.is_set():
+            await self.started.wait()
+        res: RecordMetadata = await self.kafka_egress_producer.send_and_wait(topic,
+                                                                             key=key,
+                                                                             value=message)
+        return res
 
     async def send_immediate(self, key, value, operator_name: str, partition: int):
         tp = TopicPartition(operator_name + "--OUT", partition)

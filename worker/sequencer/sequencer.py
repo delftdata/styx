@@ -10,23 +10,50 @@ class Sequencer(object):
         self.distributed_log: list[SequencedItem] = []
         self.current_epoch: list[SequencedItem] = []
         self.t_counter: int = t_counter
-        self.worker_id: int = -1
+        self.sequencer_id: int = -1
         self.n_workers: int = -1
         self.epoch_counter: int = epoch_counter
         self.max_size: int = max_size
         self.lock: asyncio.Lock = asyncio.Lock()
+        # wal values
+        self.request_id_to_t_id_map: dict[bytes, int] = {}
+        self.t_ids_in_wal: set[int] = set()
 
-    def set_worker_id(self, worker_id: int):
-        self.worker_id = worker_id
-
-    def set_n_workers(self, n_workers: int):
-        self.n_workers = n_workers
+    def set_sequencer_id(self, peer_ids: list[int], worker_id: int):
+        sorted_w_ids = sorted(peer_ids + [worker_id])
+        s_id_assignment: int = -1
+        available_s_ids = set(range(1, len(sorted_w_ids) + 1))
+        for w_id in sorted_w_ids:
+            if w_id in available_s_ids:
+                s_id_assignment = w_id
+            else:
+                # Find the smallest next available ID. Needed for determinism across workers since the set is unordered
+                s_id_assignment = min(available_s_ids)
+            available_s_ids.remove(s_id_assignment)
+            if w_id == worker_id:
+                break
+        self.sequencer_id = s_id_assignment
+        self.n_workers = len(sorted_w_ids)
 
     def sequence(self, message: RunFuncPayload):
-        t_id = self.worker_id + self.t_counter * self.n_workers
-        self.t_counter += 1
+        if message.request_id in self.request_id_to_t_id_map:
+            t_id = self.request_id_to_t_id_map[message.request_id]
+        else:
+            t_id = self.get_t_id()
+            while t_id in self.t_ids_in_wal:
+                t_id = self.get_t_id()
         logging.info(f'Sequencing message: {message.key} with t_id: {t_id}')
         self.distributed_log.append(SequencedItem(t_id, message))
+
+    def get_t_id(self) -> int:
+        t_id = self.sequencer_id + self.t_counter * self.n_workers
+        self.t_counter += 1
+        return t_id
+
+    def set_wal_values_after_recovery(self, request_id_to_t_id_map: dict[bytes, int]):
+        if request_id_to_t_id_map is not None:
+            self.request_id_to_t_id_map = request_id_to_t_id_map
+            self.t_ids_in_wal: set[int] = set(request_id_to_t_id_map.values())
 
     def get_epoch(self) -> list[SequencedItem]:
         if len(self.distributed_log) > 0:

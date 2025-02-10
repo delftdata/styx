@@ -20,18 +20,10 @@ class AIOTaskScheduler(object):
 
     async def close(self):
         self.closed = True
-        while self.background_tasks:
-            task = self.background_tasks.pop()
+        for task in self.background_tasks:
             task.cancel()
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
-            else:
-                logging.error(f"Could not cancel task: {task}")
-        self.background_tasks = set()
+        await asyncio.gather(*self.background_tasks, return_exceptions=True)
+        self.background_tasks.clear()
 
     async def wait_all(self):
-        while self.background_tasks:
-            await self.background_tasks.pop()
-        self.background_tasks = set()
+        await asyncio.gather(*self.background_tasks)

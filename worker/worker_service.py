@@ -2,6 +2,7 @@ import asyncio
 import gc
 import multiprocessing
 import os
+import struct
 import time
 from asyncio import StreamReader, StreamWriter
 from copy import deepcopy
@@ -10,14 +11,15 @@ from struct import unpack
 from timeit import default_timer as timer
 
 import uvloop
-from aiokafka import TopicPartition
+from aiokafka import TopicPartition, AIOKafkaConsumer
+from aiokafka.errors import UnknownTopicOrPartitionError, KafkaConnectionError
 
 from styx.common.local_state_backends import LocalStateBackend
 from styx.common.logging import logging
 from styx.common.tcp_networking import NetworkingManager, MessagingMode
 from styx.common.operator import Operator
 from styx.common.protocols import Protocols
-from styx.common.serialization import Serializer
+from styx.common.serialization import Serializer, msgpack_deserialization
 from styx.common.message_types import MessageType
 from styx.common.types import OperatorPartition
 from styx.common.util.aio_task_scheduler import AIOTaskScheduler
@@ -37,15 +39,14 @@ INGRESS_TYPE = os.getenv('INGRESS_TYPE', None)
 MINIO_URL: str = f"{os.environ['MINIO_HOST']}:{os.environ['MINIO_PORT']}"
 MINIO_ACCESS_KEY: str = os.environ['MINIO_ROOT_USER']
 MINIO_SECRET_KEY: str = os.environ['MINIO_ROOT_PASSWORD']
-
+KAFKA_URL: str = os.environ['KAFKA_URL']
 HEARTBEAT_INTERVAL: int = int(os.getenv('HEARTBEAT_INTERVAL', 500))  # 500ms
 
 PROTOCOL = Protocols.Aria
 
 # TODO Check dynamic r/w sets
-# TODO garbage collect the snapshots
-# TODO delta map could write deltas after the first snapshot
-
+# TODO networking can take a lot of optimization (i.e., batching, backpreasure e.t.c.)
+# TODO when compactions happen recovery should hold and vice versa
 
 class Worker(object):
 
@@ -56,10 +57,14 @@ class Worker(object):
         self.protocol_port = PROTOCOL_PORT + thread_idx
 
         self.worker_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.worker_socket.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER,
+                                 struct.pack('ii', 1, 0))  # Enable LINGER, timeout 0
         self.worker_socket.bind(('0.0.0.0', self.server_port))
         self.worker_socket.setblocking(False)
 
         self.protocol_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.protocol_socket.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER,
+                                 struct.pack('ii', 1, 0))  # Enable LINGER, timeout 0
         self.protocol_socket.bind(('0.0.0.0', self.protocol_port))
         self.protocol_socket.setblocking(False)
 
@@ -87,9 +92,8 @@ class Worker(object):
         self.protocol_task: asyncio.Task = ...
         self.protocol_task_scheduler = AIOTaskScheduler()
 
-        self.worker_operators = None
+        self.worker_operators: dict[OperatorPartition, Operator] | None = None
 
-    # Refactoring candidate
     async def worker_controller(self, data: bytes):
         message_type: int = self.networking.get_msg_type(data)
         match message_type:
@@ -102,51 +106,41 @@ class Worker(object):
             case MessageType.InitRecovery:
                 start_time = timer()
                 message = self.networking.decode_message(data)
+                (self.id, self.worker_operators, self.dns, self.peers,
+                 self.operator_state_backend, snapshot_id) = message
                 if self.function_execution_protocol is not None:
-                # RECOVERY_OTHER
-                    logging.warning('RECOVERY_OTHER')
+                    # This worker did not fail and needs to clean up
                     await self.function_execution_protocol.stop()
-                    await self.networking.close_all_connections()
                     await self.protocol_networking.close_all_connections()
                     del (self.function_execution_protocol,
                          self.local_state,
-                         self.networking,
-                         self.protocol_networking,
-                         self.async_snapshots,
-                         self.registered_operators)
+                         self.protocol_networking)
                     gc.collect()
-                    self.dns, self.peers, self.operator_state_backend, snapshot_id = message
-                    self.networking = NetworkingManager(self.server_port)
                     self.protocol_networking = NetworkingManager(self.protocol_port,
                                                                  mode=MessagingMode.PROTOCOL_PROTOCOL)
                     self.protocol_networking.set_worker_id(self.id)
-                    self.networking.set_worker_id(self.id)
-                else:
-                    logging.warning('RECOVERY_OWN')
-                    (self.id, self.worker_operators, self.dns, self.peers,
-                     self.operator_state_backend, snapshot_id) = message
 
                 del self.peers[self.id]
 
                 self.registered_operators = {}
                 self.topic_partitions = []
-                for tup in self.worker_operators:
-                    operator, partition = tup
-                    self.registered_operators[(operator.name, partition)] = deepcopy(operator)
+                for operator_partition, operator in self.worker_operators.items():
+                    operator_name, partition = operator_partition
+                    self.registered_operators[(operator_name, partition)] = deepcopy(operator)
                     if INGRESS_TYPE == 'KAFKA':
-                        self.topic_partitions.append(TopicPartition(operator.name, partition))
+                        self.topic_partitions.append(TopicPartition(operator_name, partition))
 
                 self.async_snapshots = AsyncSnapshotsMinio(self.id,
-                                                           n_assigned_partitions=len(self.topic_partitions),
-                                                           snapshot_id=snapshot_id + 1)
+                                                           n_assigned_partitions=len(self.registered_operators))
                 (data, topic_partition_offsets, topic_partition_output_offsets, epoch,
                  t_counter) = self.async_snapshots.retrieve_snapshot(snapshot_id, self.registered_operators.keys())
                 self.attach_state_to_operators_after_snapshot(data)
 
+                request_id_to_t_id_map = await self.get_sequencer_assignments_before_failure(epoch)
+
                 self.function_execution_protocol = AriaProtocol(worker_id=self.id,
                                                                 peers=self.peers,
                                                                 networking=self.protocol_networking,
-                                                                protocol_socket=self.protocol_socket,
                                                                 registered_operators=self.registered_operators,
                                                                 topic_partitions=self.topic_partitions,
                                                                 state=self.local_state,
@@ -155,11 +149,12 @@ class Worker(object):
                                                                 output_offsets=topic_partition_output_offsets,
                                                                 epoch_counter=epoch,
                                                                 t_counter=t_counter,
+                                                                request_id_to_t_id_map=request_id_to_t_id_map,
                                                                 restart_after_recovery=True)
                 self.function_execution_protocol.start()
 
                 await self.networking.send_message(DISCOVERY_HOST, DISCOVERY_PORT,
-                                                   msg=(self.id, ),
+                                                   msg=(self.id,),
                                                    msg_type=MessageType.ReadyAfterRecovery,
                                                    serializer=Serializer.MSGPACK)
                 end_time = timer()
@@ -168,9 +163,44 @@ class Worker(object):
             case MessageType.ReadyAfterRecovery:
                 # SYNC after recovery (Everyone is healthy)
                 self.function_execution_protocol.started.set()
-                logging.warning(f'Worker recovered and ready at : {time.time()*1000}')
+                logging.warning(f'Worker: {self.id} recovered and ready at : {time.time() * 1000}')
             case _:
                 logging.error(f"Worker Service: Non supported command message type: {message_type}")
+
+    @staticmethod
+    async def get_sequencer_assignments_before_failure(epoch_at_snapshot: int) -> dict[bytes, int]:
+        consumer = AIOKafkaConsumer(bootstrap_servers=[KAFKA_URL],
+                                    enable_auto_commit=False,
+                                    auto_offset_reset="earliest")
+        tp = [TopicPartition('sequencer-wal', 0)]
+        consumer.assign(tp)
+        request_id_to_t_id_map: dict[bytes, int] = {}
+        while True:
+            try:
+                await consumer.start()
+            except (UnknownTopicOrPartitionError, KafkaConnectionError):
+                await asyncio.sleep(1)
+                logging.warning(f'Kafka at {KAFKA_URL} not ready yet, sleeping for 1 second')
+                continue
+            break
+        try:
+            current_offsets: dict[TopicPartition, int] = await consumer.end_offsets(tp)
+            running = True
+            while running:
+                batch = await consumer.getmany(timeout_ms=1)
+                for records in batch.values():
+                    for record in records:
+                        logged_sequence: dict[bytes, int] = msgpack_deserialization(record.value)
+                        epoch: int = msgpack_deserialization(record.key)
+                        if epoch >= epoch_at_snapshot:
+                            request_id_to_t_id_map.update(logged_sequence)
+                        if record.offset >= current_offsets[tp[0]] - 1:
+                            running = False
+        except Exception as e:
+            logging.warning(f"Error: {e}")
+        finally:
+            await consumer.stop()
+        return request_id_to_t_id_map
 
     def attach_state_to_operators_after_snapshot(self, data):
         operator_partitions: set[OperatorPartition] = set(self.registered_operators.keys())
@@ -186,7 +216,7 @@ class Worker(object):
     def attach_state_to_operators(self):
         operator_partitions: set[OperatorPartition] = set(self.registered_operators.keys())
         if self.operator_state_backend is LocalStateBackend.DICT:
-            self.async_snapshots = AsyncSnapshotsMinio(self.id, n_assigned_partitions=len(self.topic_partitions))
+            self.async_snapshots = AsyncSnapshotsMinio(self.id, n_assigned_partitions=len(operator_partitions))
             if PROTOCOL == Protocols.Aria:
                 self.local_state = InMemoryOperatorState(operator_partitions)
             else:
@@ -201,17 +231,16 @@ class Worker(object):
         self.worker_operators, self.dns, self.peers, self.operator_state_backend = message
         del self.peers[self.id]
         operator: Operator
-        for tup in self.worker_operators:
-            operator, partition = tup
-            self.registered_operators[(operator.name, partition)] = deepcopy(operator)
+        for operator_partition, operator in self.worker_operators.items():
+            operator_name, partition = operator_partition
+            self.registered_operators[(operator_name, partition)] = deepcopy(operator)
             if INGRESS_TYPE == 'KAFKA':
-                self.topic_partitions.append(TopicPartition(operator.name, partition))
+                self.topic_partitions.append(TopicPartition(operator_name, partition))
         self.attach_state_to_operators()
         if PROTOCOL == Protocols.Aria:
             self.function_execution_protocol = AriaProtocol(worker_id=self.id,
                                                             peers=self.peers,
                                                             networking=self.protocol_networking,
-                                                            protocol_socket=self.protocol_socket,
                                                             registered_operators=self.registered_operators,
                                                             topic_partitions=self.topic_partitions,
                                                             state=self.local_state,
@@ -238,11 +267,11 @@ class Worker(object):
                     message = await reader.readexactly(size)
                     self.aio_task_scheduler.create_task(self.worker_controller(message))
             except asyncio.IncompleteReadError as e:
-                logging.warning(f"Client disconnected unexpectedly: {e}")
+                logging.info(f"Client disconnected unexpectedly: {e}")
             except asyncio.CancelledError:
                 pass
             finally:
-                logging.warning("Closing the connection")
+                logging.info("Closing the connection")
                 writer.close()
                 await writer.wait_closed()
 
@@ -262,11 +291,11 @@ class Worker(object):
                         self.function_execution_protocol.protocol_tcp_controller(message)
                     )
             except asyncio.IncompleteReadError as e:
-                logging.warning(f"Client disconnected unexpectedly: {e}")
+                logging.info(f"Client disconnected unexpectedly: {e}")
             except asyncio.CancelledError:
                 pass
             finally:
-                logging.warning("Closing the connection")
+                logging.info("Closing the connection")
                 writer.close()
                 await writer.wait_closed()
 
@@ -292,7 +321,7 @@ class Worker(object):
 
     @staticmethod
     async def heartbeat_coroutine(worker_id: int):
-        networking = NetworkingManager(None)
+        networking = NetworkingManager(None, size=1, mode=MessagingMode.HEARTBEAT)
         sleep_in_seconds = HEARTBEAT_INTERVAL / 1000
         while True:
             await asyncio.sleep(sleep_in_seconds)
@@ -309,7 +338,6 @@ class Worker(object):
     async def main(self):
         try:
             await self.register_to_coordinator()
-            # Instead: create_task(heartbeat_coroutine)
             self.heartbeat_proc = multiprocessing.Process(target=self.start_heartbeat_process, args=(self.id,))
             self.heartbeat_proc.start()
             self.start_networking_tasks()

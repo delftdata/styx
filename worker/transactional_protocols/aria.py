@@ -1,7 +1,6 @@
 import asyncio
 import os
 import concurrent.futures
-import socket
 
 from timeit import default_timer as timer
 
@@ -48,7 +47,6 @@ class AriaProtocol(BaseTransactionalProtocol):
                  worker_id,
                  peers: dict[int, tuple[str, int, int]],
                  networking: NetworkingManager,
-                 protocol_socket: socket.socket,
                  registered_operators: dict[OperatorPartition, Operator],
                  topic_partitions: list[TopicPartition],
                  state: InMemoryOperatorState | Stateless,
@@ -57,6 +55,7 @@ class AriaProtocol(BaseTransactionalProtocol):
                  output_offsets: dict[OperatorPartition, int] = None,
                  epoch_counter: int = 0,
                  t_counter: int = 0,
+                 request_id_to_t_id_map: dict[bytes, int] = None,
                  restart_after_recovery: bool = False):
 
         if topic_partition_offsets is None:
@@ -68,7 +67,6 @@ class AriaProtocol(BaseTransactionalProtocol):
 
         self.topic_partitions = topic_partitions
         self.networking = networking
-        self.protocol_socket = protocol_socket
 
         self.local_state: InMemoryOperatorState | Stateless = state
         self.aio_task_scheduler: AIOTaskScheduler = AIOTaskScheduler()
@@ -98,8 +96,8 @@ class AriaProtocol(BaseTransactionalProtocol):
         self.registered_operators: dict[OperatorPartition, Operator] = registered_operators
 
         self.sequencer = Sequencer(SEQUENCE_MAX_SIZE, t_counter=t_counter, epoch_counter=epoch_counter)
-        self.sequencer.set_worker_id(self.id)
-        self.sequencer.set_n_workers(len(self.peers) + 1)
+        self.sequencer.set_sequencer_id(list(self.peers.keys()), self.id)
+        self.sequencer.set_wal_values_after_recovery(request_id_to_t_id_map)
 
         self.ingress: StyxKafkaIngress = StyxKafkaIngress(networking=self.networking,
                                                           sequencer=self.sequencer,
@@ -160,13 +158,9 @@ class AriaProtocol(BaseTransactionalProtocol):
         # self.fallback_time = 0
 
     async def stop(self):
-        logging.warning("0")
         await self.ingress.stop()
-        logging.warning("1")
         await self.egress.stop()
-        logging.warning("2")
         await self.aio_task_scheduler.close()
-        logging.warning("3")
         self.function_scheduler_task.cancel()
         self.communication_task.cancel()
         try:
@@ -174,7 +168,7 @@ class AriaProtocol(BaseTransactionalProtocol):
             await self.communication_task
         except asyncio.CancelledError:
             logging.warning("Protocol coroutines stopped")
-        logging.warning(f"Active tasks: {asyncio.all_tasks()}")
+        logging.info(f"Active tasks: {asyncio.all_tasks()}")
         logging.warning("Aria protocol stopped")
 
     def start(self):
@@ -234,6 +228,7 @@ class AriaProtocol(BaseTransactionalProtocol):
     def take_snapshot(self, pool: concurrent.futures.ProcessPoolExecutor):
         is_snapshot_time: bool = timer() > self.snapshot_timer + SNAPSHOT_FREQUENCY
         if is_snapshot_time and not self.async_snapshots.snapshot_in_progress:
+            logging.warning(f"Taking snapshot at epoch: {self.sequencer.epoch_counter}")
             self.snapshot_timer = timer()
             if InMemoryOperatorState.__name__ == self.local_state.__class__.__name__:
                 loop = asyncio.get_running_loop()
@@ -245,15 +240,15 @@ class AriaProtocol(BaseTransactionalProtocol):
                                          self.async_snapshots.store_snapshot,
                                          self.async_snapshots.snapshot_id,
                                          f"data/{operator_name}/{partition}/{self.async_snapshots.snapshot_id}.bin",
-                                         (self.topic_partition_offsets[operator_partition],
-                                          self.egress.topic_partition_output_offsets[operator_partition],
-                                          data[operator_partition])
+                                         (msgpack.decode(msgpack.encode(self.topic_partition_offsets[operator_partition])),
+                                          msgpack.decode(msgpack.encode(self.egress.topic_partition_output_offsets[operator_partition])),
+                                          msgpack.decode(msgpack.encode(data[operator_partition])))
                                          ).add_done_callback(self.async_snapshots.snapshot_completed_callback)
                 loop.run_in_executor(pool,
                                      self.async_snapshots.store_snapshot,
                                      self.async_snapshots.snapshot_id,
                                      f"sequencer/{self.async_snapshots.snapshot_id}.bin",
-                                     (self.sequencer.epoch_counter, self.sequencer.t_counter)
+                                     msgpack.decode(msgpack.encode((self.sequencer.epoch_counter, self.sequencer.t_counter)))
                                      ).add_done_callback(self.async_snapshots.snapshot_completed_callback)
                 self.local_state.clear_delta_map()
             else:
@@ -291,7 +286,7 @@ class AriaProtocol(BaseTransactionalProtocol):
                     else:
                         if USE_FALLBACK_CACHE:
                             # If fallback caching is enabled add the function call to the cache for a potential fallback
-                            await self.networking.add_remote_function_call(t_id, payload)
+                            self.networking.add_remote_function_call(t_id, payload)
                         self.background_functions.create_task(
                             self.run_function(
                                 t_id,
@@ -317,12 +312,12 @@ class AriaProtocol(BaseTransactionalProtocol):
                 async with self.networking_locks[message_type]:
                     (ack_id, fraction_str,
                      chain_participants, partial_node_count) = self.networking.decode_message(data)
-                    await self.networking.add_ack_fraction_str(ack_id, fraction_str,
-                                                               chain_participants, partial_node_count)
+                    self.networking.add_ack_fraction_str(ack_id, fraction_str,
+                                                         chain_participants, partial_node_count)
             case MessageType.AckCache:
                 async with self.networking_locks[message_type]:
                     (ack_id, ) = self.networking.decode_message(data)
-                    await self.networking.add_ack_cnt(ack_id)
+                    self.networking.add_ack_cnt(ack_id)
             case MessageType.ChainAbort:
                 async with self.networking_locks[message_type]:
                     (ack_id, exception_str, request_id) = self.networking.decode_message(data)
@@ -369,6 +364,14 @@ class AriaProtocol(BaseTransactionalProtocol):
                         logging.info(f'{self.id} ||| Running {len(sequence)} functions...')
                         # async with self.snapshot_state_lock:
                         if sequence:
+                            start_wal = timer()
+                            sequence_to_log = msgpack_serialization({seq_item.payload.request_id: seq_item.t_id
+                                                                     for seq_item in sequence})
+                            await self.egress.send_message_to_topic(key=msgpack_serialization(self.sequencer.epoch_counter),
+                                                                    message=sequence_to_log,
+                                                                    topic='sequencer-wal')
+                            end_wal = timer()
+                            logging.info(f"Write to WAL successful at epoch: {self.sequencer.epoch_counter} | took: {round((end_wal - start_wal) * 1000, 4)}ms")
                             async with asyncio.TaskGroup() as tg:
                                 for sequenced_item in sequence:
                                     tg.create_task(self.run_function(sequenced_item.t_id, sequenced_item.payload))
@@ -518,13 +521,13 @@ class AriaProtocol(BaseTransactionalProtocol):
                         # self.snapshot_time += end_sn - start_sn
 
     def cleanup_after_epoch(self):
-        self.concurrency_aborts_everywhere = set()
-        self.t_ids_to_reschedule = set()
+        self.concurrency_aborts_everywhere.clear()
+        self.t_ids_to_reschedule.clear()
         self.networking.cleanup_after_epoch()
         self.local_state.cleanup()
-        self.response_buffer = {}
-        self.waiting_on_transactions = {}
-        self.fallback_locking_event_map = {}
+        self.response_buffer.clear()
+        self.waiting_on_transactions.clear()
+        self.fallback_locking_event_map.clear()
         self.remote_wants_to_proceed = False
         self.currently_processing = False
 
@@ -536,9 +539,12 @@ class AriaProtocol(BaseTransactionalProtocol):
     ):
         # Wait for all transactions that this transaction depends on to finish
         if t_id in self.waiting_on_transactions:
-            async with asyncio.TaskGroup() as tg:
-                for dependency_t_id in self.waiting_on_transactions[t_id]:
-                    tg.create_task(self.fallback_locking_event_map[dependency_t_id].wait())
+            if self.waiting_on_transactions[t_id]:
+                tasks = [self.fallback_locking_event_map[dependency_t_id].wait()
+                         for dependency_t_id in self.waiting_on_transactions[t_id]
+                         if dependency_t_id in self.fallback_locking_event_map]
+                await asyncio.gather(*tasks)
+
         # Run transaction
         success = await self.run_function(t_id, payload, internal=internal, fallback_mode=True)
         if not internal:
@@ -579,9 +585,9 @@ class AriaProtocol(BaseTransactionalProtocol):
         for sequenced_item in aborted_sequence:
             # current worker is the root of the chain
             if USE_FALLBACK_CACHE:
-                await self.networking.reset_ack_for_fallback_cache(sequenced_item.t_id)
+                self.networking.reset_ack_for_fallback_cache(sequenced_item.t_id)
             else:
-                await self.networking.reset_ack_for_fallback(sequenced_item.t_id)
+                self.networking.reset_ack_for_fallback(sequenced_item.t_id)
             fallback_tasks.append(
                 self.run_fallback_function(
                     sequenced_item.t_id,
@@ -621,6 +627,8 @@ class AriaProtocol(BaseTransactionalProtocol):
         if t_id_to_unlock in self.fallback_locking_event_map:
             async with self.fallback_locking_event_map_lock:
                 self.fallback_locking_event_map[t_id_to_unlock].set()
+        else:
+            logging.error(f"Unlock tid {t_id_to_unlock} not found. But should exist!")
 
     async def send_responses(
             self,

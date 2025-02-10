@@ -17,7 +17,7 @@ def msgpack_serialization(serializable_object: object) -> bytes:
     return msgspec.msgpack.encode(serializable_object)
 
 
-def msgpack_deserialization(serialized_object: bytes) -> dict:
+def msgpack_deserialization(serialized_object: bytes):
     return msgspec.msgpack.decode(serialized_object)
 
 
@@ -25,7 +25,7 @@ def compressed_msgpack_serialization(serializable_object: object) -> bytes:
     return gzip.compress(msgpack_serialization(serializable_object))
 
 
-def compressed_msgpack_deserialization(serialized_object: bytes) -> dict:
+def compressed_msgpack_deserialization(serialized_object: bytes):
     return msgpack_deserialization(gzip.decompress(serialized_object))
 
 
@@ -33,7 +33,7 @@ def cloudpickle_serialization(serializable_object: object) -> bytes:
     return cloudpickle.dumps(serializable_object)
 
 
-def cloudpickle_deserialization(serialized_object: bytes) -> dict:
+def cloudpickle_deserialization(serialized_object: bytes):
     return cloudpickle.loads(serialized_object)
 
 
@@ -41,7 +41,7 @@ def compressed_cloudpickle_serialization(serializable_object: object) -> bytes:
     return gzip.compress(cloudpickle.dumps(serializable_object))
 
 
-def compressed_cloudpickle_deserialization(serialized_object: bytes) -> dict:
+def compressed_cloudpickle_deserialization(serialized_object: bytes):
     return cloudpickle.loads(gzip.decompress(serialized_object))
 
 
@@ -49,7 +49,7 @@ def pickle_serialization(serializable_object: object) -> bytes:
     return pickle.dumps(serializable_object)
 
 
-def pickle_deserialization(serialized_object: bytes) -> dict:
+def pickle_deserialization(serialized_object: bytes):
     return pickle.loads(serialized_object)
 
 
@@ -57,5 +57,5 @@ def compressed_pickle_serialization(serializable_object: object) -> bytes:
     return gzip.compress(pickle.dumps(serializable_object))
 
 
-def compressed_pickle_deserialization(serialized_object: bytes) -> dict:
+def compressed_pickle_deserialization(serialized_object: bytes):
     return pickle.loads(gzip.decompress(serialized_object))

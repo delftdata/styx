@@ -27,7 +27,7 @@ class InMemoryOperatorState(BaseAriaState):
 
     def clear_delta_map(self):
         for operator_partition in self.operator_partitions:
-            self.delta_map[operator_partition] = {}
+            self.delta_map[operator_partition].clear()
 
     def commit_fallback_transaction(self, t_id: int):
         if t_id in self.fallback_commit_buffer:

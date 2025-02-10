@@ -166,8 +166,7 @@ class NetworkingManager(BaseNetworking):
         self.pools = {}
 
     async def close_worker_connections(self, host, port):
-        for socket_con in self.pools[(host, port)]:
-            await socket_con.close()
+        await self.pools[(host, port)].close()
         del self.pools[(host, port)]
 
     def start_networking_tasks(self):

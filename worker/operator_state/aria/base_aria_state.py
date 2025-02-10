@@ -25,7 +25,14 @@ class BaseAriaState(BaseOperatorState):
 
     def __init__(self, operator_partitions: set[OperatorPartition]):
         super().__init__(operator_partitions)
-        self.cleanup()
+        self.write_sets = {operator_partition: {} for operator_partition in self.operator_partitions}
+        self.writes = {operator_partition: {} for operator_partition in self.operator_partitions}
+        self.reads = {operator_partition: {} for operator_partition in self.operator_partitions}
+        self.read_sets = {operator_partition: {} for operator_partition in self.operator_partitions}
+        self.global_write_sets = {operator_partition: {} for operator_partition in self.operator_partitions}
+        self.global_reads = {operator_partition: {} for operator_partition in self.operator_partitions}
+        self.global_read_sets = {operator_partition: {} for operator_partition in self.operator_partitions}
+        self.fallback_commit_buffer = defaultdict(lambda: defaultdict(dict))
 
     def put(self, key, value, t_id: int, operator_name: str, partition: int):
         operator_partition: OperatorPartition = (operator_name, partition)
@@ -175,14 +182,14 @@ class BaseAriaState(BaseOperatorState):
         return aborted_transactions
 
     def cleanup(self):
-        self.write_sets = {operator_partition: {} for operator_partition in self.operator_partitions}
-        self.writes = {operator_partition: {} for operator_partition in self.operator_partitions}
-        self.reads = {operator_partition: {} for operator_partition in self.operator_partitions}
-        self.read_sets = {operator_partition: {} for operator_partition in self.operator_partitions}
-        self.global_write_sets = {operator_partition: {} for operator_partition in self.operator_partitions}
-        self.global_reads = {operator_partition: {} for operator_partition in self.operator_partitions}
-        self.global_read_sets = {operator_partition: {} for operator_partition in self.operator_partitions}
-        self.fallback_commit_buffer = defaultdict(lambda: defaultdict(dict))
+        for operator_partition in self.operator_partitions:
+            self.write_sets[operator_partition].clear()
+            self.writes[operator_partition].clear()
+            self.reads[operator_partition].clear()
+            self.read_sets[operator_partition].clear()
+            self.global_write_sets[operator_partition].clear()
+            self.global_reads[operator_partition].clear()
+            self.global_read_sets[operator_partition].clear()
         self.fallback_commit_buffer.clear()
 
     def get_dep_transactions(self,

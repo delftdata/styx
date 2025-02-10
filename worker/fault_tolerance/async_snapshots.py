@@ -23,11 +23,11 @@ SNAPSHOT_BUCKET_NAME: str = os.getenv('SNAPSHOT_BUCKET_NAME', "styx-snapshots")
 
 class AsyncSnapshotsMinio(BaseSnapshotter):
 
-    def __init__(self, worker_id, n_assigned_partitions: int, snapshot_id: int = 0):
+    def __init__(self, worker_id: int, n_assigned_partitions: int):
         self.worker_id: int = worker_id
-        self.snapshot_id: int = snapshot_id
+        self.snapshot_id: int = 0
         self.n_assigned_partitions: int = n_assigned_partitions
-        self.completed_snapshots: int = 0
+        self.completed_snapshots: int = -1
         self.snapshot_in_progress: bool = False
         self.snapshot_start: float = 0.0
 
@@ -44,7 +44,7 @@ class AsyncSnapshotsMinio(BaseSnapshotter):
             s.close()
             self.snapshot_id += 1
             self.snapshot_in_progress = False
-            self.completed_snapshots = 0
+            self.completed_snapshots = -1
 
     def start_snapshotting(self):
         self.snapshot_in_progress = True
