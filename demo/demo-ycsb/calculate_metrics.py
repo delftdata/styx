@@ -167,6 +167,8 @@ def main(
         res_dict["missing_verification_keys"] = missing_verification_keys
         res_dict["wrong_values"] = wrong_values
 
+        if not are_we_consistent:
+            print(f"{'\033[91m'}NOT CONSISTENT: {verification_total} != {n_keys * starting_money}{'\033[0m'}")
     print(f'Done. Persisted metrics in {SAVE_DIR}/{exp_name}.json')
 
     with open(f'{SAVE_DIR}/{exp_name}.json', 'w', encoding='utf-8') as f:

@@ -149,7 +149,7 @@ def main():
 
     if run_with_validation:
         # wait for system to stabilize
-        time.sleep(60)
+        time.sleep(30)
 
         styx_client = SyncStyxClient(STYX_HOST, STYX_PORT, kafka_url=KAFKA_URL, start_futures_consumer=False)
 
