@@ -3,7 +3,7 @@
 uvloop==0.21.0
 msgspec==0.19.0
 cloudpickle==3.1.1
-mmh3==5.0.1
+mmh3==5.1.0
 # monitoring service
 # psutil==5.9.2
 # Kafka
