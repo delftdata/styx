@@ -1,3 +1,4 @@
+import multiprocessing
 import random
 import sys
 import time
@@ -17,6 +18,9 @@ from tqdm import tqdm
 
 from ycsb import ycsb_operator
 
+import kafka_output_consumer
+import calculate_metrics
+
 
 threads = int(sys.argv[1])
 PERC_MULT = float(sys.argv[2])
@@ -32,6 +36,7 @@ STYX_HOST: str = 'localhost'
 STYX_PORT: int = 8886
 KAFKA_URL = 'localhost:9092'
 SAVE_DIR: str = sys.argv[6]
+warmup_seconds: int = int(sys.argv[7])
 
 g = StateflowGraph('ycsb-benchmark', operator_state_backend=LocalStateBackend.DICT)
 ####################################################################################################################
@@ -145,4 +150,18 @@ def main():
 
 
 if __name__ == "__main__":
+    multiprocessing.set_start_method('fork')
     main()
+
+    print()
+    kafka_output_consumer.main(SAVE_DIR)
+
+    print()
+    calculate_metrics.main(
+        SAVE_DIR,
+        warmup_seconds,
+        PERC_MULT,
+        N_PARTITIONS,
+        messages_per_second,
+        threads
+    )

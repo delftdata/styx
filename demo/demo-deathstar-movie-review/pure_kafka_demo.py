@@ -1,4 +1,5 @@
 import hashlib
+import multiprocessing
 import random
 import uuid
 from movie_data import movie_data
@@ -19,6 +20,9 @@ from graph import (user_operator, movie_info_operator, plot_operator, movie_id_o
 
 from workload_data import movie_titles, charset
 
+import kafka_output_consumer
+import calculate_metrics
+
 SAVE_DIR: str = sys.argv[1]
 threads = int(sys.argv[2])
 N_PARTITIONS = int(sys.argv[3])
@@ -26,6 +30,7 @@ messages_per_second = int(sys.argv[4])
 sleeps_per_second = 100
 sleep_time = 0.0085
 seconds = int(sys.argv[5])
+warmup_seconds = int(sys.argv[6])
 STYX_HOST: str = 'localhost'
 STYX_PORT: int = 8886
 KAFKA_URL = 'localhost:9092'
@@ -188,4 +193,16 @@ def main():
 
 
 if __name__ == "__main__":
+    multiprocessing.set_start_method('fork')
     main()
+
+    print()
+    kafka_output_consumer.main(SAVE_DIR)
+
+    print()
+    calculate_metrics.main(
+        SAVE_DIR,
+        messages_per_second,
+        warmup_seconds,
+        threads
+    )
