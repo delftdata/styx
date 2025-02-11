@@ -9,8 +9,6 @@ from styx.common.serialization import msgpack_deserialization
 
 from pure_kafka_demo import g
 
-SAVE_DIR: str = sys.argv[1]
-
 
 def all_egress_topics_created(topics: set[str], egress_topic_names: list[str]):
     for topic in egress_topic_names:
@@ -19,7 +17,7 @@ def all_egress_topics_created(topics: set[str], egress_topic_names: list[str]):
     return True
 
 
-async def consume():
+async def consume(save_dir):
 
     egress_topic_names: list[str] = g.get_egress_topic_names()
 
@@ -55,7 +53,17 @@ async def consume():
         # Will leave consumer group; perform autocommit if enabled.
         await consumer.stop()
         pd.DataFrame.from_records(records,
-                                  columns=['request_id', 'response', 'timestamp']).to_csv(f'{SAVE_DIR}/output.csv',
+                                  columns=['request_id', 'response', 'timestamp']).to_csv(f'{save_dir}/output.csv',
                                                                                           index=False)
 
-uvloop.run(consume())
+
+def main(save_dir=None):
+    if save_dir is None:
+        print("Save directory for the results not provided.")
+        exit(1)
+
+    uvloop.run(consume(save_dir))
+
+
+if __name__ == "__main__":
+    main(sys.argv[1])

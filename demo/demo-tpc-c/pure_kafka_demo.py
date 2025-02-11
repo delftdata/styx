@@ -1,4 +1,5 @@
 import csv
+import multiprocessing
 import os
 import sys
 import random
@@ -23,6 +24,9 @@ from graph import (customer_operator, district_operator, history_operator, item_
 
 import rand
 
+import kafka_output_consumer
+import calculate_metrics
+
 SAVE_DIR: str = sys.argv[1]
 threads = int(sys.argv[2])
 N_PARTITIONS = int(sys.argv[3])
@@ -33,8 +37,8 @@ seconds = int(sys.argv[5])
 STYX_HOST: str = 'localhost'
 STYX_PORT: int = 8886
 KAFKA_URL = 'localhost:9092'
-
-N_W = int(sys.argv[6])
+warmup_seconds = int(sys.argv[6])
+N_W = int(sys.argv[7])
 C_Per_District = 3000
 D_Per_Warehouse = 10
 N_D = N_W * D_Per_Warehouse
@@ -599,4 +603,17 @@ def main():
 
 
 if __name__ == "__main__":
+    multiprocessing.set_start_method('fork')
     main()
+
+    print()
+    kafka_output_consumer.main(SAVE_DIR)
+
+    print()
+    calculate_metrics.main(
+        SAVE_DIR,
+        messages_per_second,
+        warmup_seconds,
+        threads,
+        N_W
+    )
