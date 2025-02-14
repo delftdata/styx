@@ -52,32 +52,22 @@ def main(
         f'due to an initial warmup period of {warmup_seconds} seconds.'
     )
 
-    joined = pd.merge(input_msgs, output_run_messages, on='request_id', how='outer')
+    # Perform a left join to include all rows from client_df
+    joined = input_msgs.merge(output_run_messages, on='request_id', how='left', suffixes=('_client', '_output'))
+
     print(
         f'Joined {len(joined)} messages from {len(input_msgs)} input messages '
         f'and {len(output_run_messages)} output messages.'
     )
 
-    missed = len(joined[joined['response'].isna()])
+    missed = len(joined[joined['timestamp_output'].isna()])
     print(
         f'Missed {missed} messages after the join for which no response '
          'was found.'
     )
 
     joined = joined.dropna()
-    runtime = joined['timestamp_y'] - joined['timestamp_x']
-
-    '''
-    print(origin_input_msgs['timestamp'] -
-                                        origin_input_msgs['timestamp'][0])
-    print(warmup_seconds * 1000)
-    print(origin_input_msgs['timestamp'][0])
-    print(origin_input_msgs)
-    print(input_msgs)
-    print(joined)
-    print(runtime)
-    '''
-
+    runtime = joined['timestamp_output'] - joined['timestamp_client']
 
     start_time = -math.inf
     throughput = {}

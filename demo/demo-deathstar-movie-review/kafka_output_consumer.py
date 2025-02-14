@@ -23,7 +23,6 @@ async def consume(save_dir):
 
     records = []
     consumer = AIOKafkaConsumer(
-        'styx-egress',
         auto_offset_reset='earliest',
         value_deserializer=msgpack_deserialization,
         bootstrap_servers='localhost:9092')

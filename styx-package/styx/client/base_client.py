@@ -99,7 +99,7 @@ class BaseStyxClient(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def open(self):
+    def open(self, consume: bool = True):
         raise NotImplementedError
 
     @abstractmethod

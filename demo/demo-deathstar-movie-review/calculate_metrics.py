@@ -34,11 +34,13 @@ def main(
     input_msgs = origin_input_msgs.loc[(origin_input_msgs['timestamp'] -
                                         origin_input_msgs['timestamp'][0] >= warmup_seconds * 1000)]
 
-    joined = pd.merge(input_msgs, output_run_messages, on='request_id', how='outer')
-    missed = len(joined[joined['response'].isna()])
+    # Perform a left join to include all rows from client_df
+    joined = input_msgs.merge(output_run_messages, on='request_id', how='left', suffixes=('_client', '_output'))
+
+    missed = len(joined[joined['timestamp_output'].isna()])
 
     joined = joined.dropna()
-    runtime = joined['timestamp_y'] - joined['timestamp_x']
+    runtime = joined['timestamp_output'] - joined['timestamp_client']
 
 
     start_time = -math.inf

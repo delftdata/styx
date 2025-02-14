@@ -57,7 +57,9 @@ class InMemoryOperatorState(BaseAriaState):
 
     def get_immediate(self, key, t_id: int, operator_name: str, partition: int):
         operator_partition: OperatorPartition = (operator_name, partition)
-        if key in self.fallback_commit_buffer[t_id][operator_partition]:
+        if (t_id in self.fallback_commit_buffer and
+                operator_partition in self.fallback_commit_buffer[t_id] and
+                key in self.fallback_commit_buffer[t_id][operator_partition]):
             return self.fallback_commit_buffer[t_id][operator_partition][key]
         return msgpack.decode(msgpack.encode(self.data[operator_partition].get(key)))
 

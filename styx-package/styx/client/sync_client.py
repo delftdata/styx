@@ -25,15 +25,12 @@ class SyncStyxClient(BaseStyxClient):
     def __init__(self,
                  styx_coordinator_adr: str,
                  styx_coordinator_port: int,
-                 kafka_url: str,
-                 start_futures_consumer: bool = True):
+                 kafka_url: str):
         super().__init__(styx_coordinator_adr, styx_coordinator_port)
         self._kafka_url = kafka_url
         self._futures: dict[bytes, StyxFuture] = {}
         self.running_result_consumer = False
         self.result_consumer_process: threading.Thread = ...
-        if start_futures_consumer:
-            self.start_futures_consumer_thread()
 
     def start_futures_consumer_thread(self):
         self.result_consumer_process = threading.Thread(target=self.start_consuming_results)
@@ -74,7 +71,7 @@ class SyncStyxClient(BaseStyxClient):
                                              out_timestamp=msg.timestamp()[1])
         function_results_consumer.close()
 
-    def open(self):
+    def open(self, consume: bool = True):
         conf = {"bootstrap.servers": self._kafka_url,
                 "acks": "all",
                 "linger.ms": 0,
@@ -89,6 +86,8 @@ class SyncStyxClient(BaseStyxClient):
             except KafkaException as e:
                 warnings.warn(f'Kafka at {self._kafka_url} not ready yet due to {e}, sleeping for 1 second')
                 time.sleep(1)
+        if consume:
+            self.start_futures_consumer_thread()
 
     def flush(self):
         queue_size = self._kafka_producer.flush()

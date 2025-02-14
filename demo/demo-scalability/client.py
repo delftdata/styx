@@ -92,7 +92,7 @@ def transactional_ycsb_generator(operator: Operator) -> [Operator, int, str, tup
 def benchmark_runner(proc_num) -> dict[bytes, dict]:
     print(f'Generator: {proc_num} starting')
     styx = SyncStyxClient(STYX_HOST, STYX_PORT, kafka_url=KAFKA_URL)
-    styx.open()
+    styx.open(consume=False)
     ycsb_generator = transactional_ycsb_generator(ycsb_operator)
     timestamp_futures: dict[bytes, dict] = {}
     start = timer()
@@ -129,7 +129,7 @@ def main():
 
     styx_client = SyncStyxClient(STYX_HOST, STYX_PORT, kafka_url=KAFKA_URL)
 
-    styx_client.open()
+    styx_client.open(consume=False)
 
     ycsb_init(styx_client, ycsb_operator)
 

@@ -91,8 +91,8 @@ def read_only_ycsb_generator(keys, operator: Operator, n: int, zipf_const: float
 
 def benchmark_runner(proc_num) -> dict[bytes, dict]:
     print(f'Generator: {proc_num} starting')
-    styx = SyncStyxClient(STYX_HOST, STYX_PORT, kafka_url=KAFKA_URL, start_futures_consumer=False)
-    styx.open()
+    styx = SyncStyxClient(STYX_HOST, STYX_PORT, kafka_url=KAFKA_URL)
+    styx.open(consume=False)
     ycsb_generator = transactional_ycsb_generator(key_list, ycsb_operator, N_ENTITIES, zipf_const=ZIPF_CONST)
     timestamp_futures: dict[bytes, dict] = {}
     start = timer()
@@ -131,9 +131,9 @@ def main():
         print("Impossible to run this benchmark with one key")
         return
 
-    styx_client = SyncStyxClient(STYX_HOST, STYX_PORT, kafka_url=KAFKA_URL, start_futures_consumer=False)
+    styx_client = SyncStyxClient(STYX_HOST, STYX_PORT, kafka_url=KAFKA_URL)
 
-    styx_client.open()
+    styx_client.open(consume=False)
 
     ycsb_init(styx_client, ycsb_operator, key_list)
 
@@ -151,9 +151,9 @@ def main():
         # wait for system to stabilize
         time.sleep(30)
 
-        styx_client = SyncStyxClient(STYX_HOST, STYX_PORT, kafka_url=KAFKA_URL, start_futures_consumer=False)
+        styx_client = SyncStyxClient(STYX_HOST, STYX_PORT, kafka_url=KAFKA_URL)
 
-        styx_client.open()
+        styx_client.open(consume=False)
 
         print('Starting Consistency measurement')
 
