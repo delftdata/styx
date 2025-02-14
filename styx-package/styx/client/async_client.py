@@ -64,7 +64,7 @@ class AsyncStyxClient(BaseStyxClient):
                         self._futures[msg.key].set(response_val=msg.value,
                                                    out_timestamp=msg.timestamp)
 
-    async def open(self):
+    async def open(self, consume: bool = True):
         self._kafka_producer = AIOKafkaProducer(bootstrap_servers=[self._kafka_url],
                                                 max_request_size=134217728,
                                                 enable_idempotence=True,
@@ -79,7 +79,8 @@ class AsyncStyxClient(BaseStyxClient):
                 time.sleep(1)
                 continue
             break
-        self._background_consumer_task = asyncio.create_task(self.start_consumer_task())
+        if consume:
+            self._background_consumer_task = asyncio.create_task(self.start_consumer_task())
 
     async def flush(self):
         await self._kafka_producer.flush()
