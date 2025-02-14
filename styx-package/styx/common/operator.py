@@ -35,12 +35,13 @@ class Operator(BaseOperator):
                            fallback_mode: bool,
                            use_fallback_cache: bool,
                            params: tuple,
-                           protocol: BaseTransactionalProtocol) -> tuple[any, bool]:
+                           protocol: BaseTransactionalProtocol) -> bool:
         f = self.__materialize_function(function_name, partition, key, t_id, request_id, timestamp,
                                         fallback_mode, use_fallback_cache, protocol)
         params = (f, ) + tuple(params)
         logging.info(f'ack_payload: {ack_payload} RQ_ID: {request_id} TID: {t_id} '
                      f'function: {self.name}:{function_name} fallback mode: {fallback_mode}')
+        success: bool = True
         if ack_payload is not None:
             # part of a chain (not root)
             ack_host, ack_port, ack_id, fraction_str, chain_participants, partial_node_count = ack_payload
@@ -51,35 +52,42 @@ class Operator(BaseOperator):
                                                                chain_participants=chain_participants,
                                                                partial_node_count=partial_node_count)
             if isinstance(resp, Exception):
-                await self._send_chain_abort(resp, ack_host, ack_port, ack_id, request_id)
+                await self._send_chain_abort(str(resp), ack_host, ack_port, ack_id)
+                success = False
             elif fallback_mode and use_fallback_cache:
-                await self.__send_cache_ack(ack_host, ack_port, ack_id)
+                await self.__send_cache_ack(ack_host, ack_port, ack_id, resp)
             elif n_remote_calls == 0:
                 # we need to count the last node as part of the chain
                 partial_node_count += 1
-                await self.__send_ack(ack_host, ack_port, ack_id, fraction_str, chain_participants, partial_node_count)
+                await self.__send_ack(ack_host, ack_port, ack_id, fraction_str,
+                                      chain_participants, partial_node_count, resp)
         else:
             # root of a chain, or single call
             resp, _, _ = await f(*params)
+            if isinstance(resp, Exception):
+                self.__networking.abort_chain(t_id, str(resp))
+                success = False
+            else:
+                self.__networking.add_response(t_id, resp)
         del f
-        return resp
+        return success
 
-    async def _send_chain_abort(self, resp, ack_host, ack_port, ack_id, request_id) -> None:
+    async def _send_chain_abort(self, resp, ack_host, ack_port, ack_id) -> None:
         if self.__networking.in_the_same_network(ack_host, ack_port):
-            self.__networking.abort_chain(ack_id, str(resp), request_id)
+            self.__networking.abort_chain(ack_id, resp)
         else:
             await self.__networking.send_message(ack_host, ack_port,
-                                                 msg=(ack_id, str(resp), request_id),
+                                                 msg=(ack_id, resp),
                                                  msg_type=MessageType.ChainAbort,
                                                  serializer=Serializer.MSGPACK)
 
-    async def __send_cache_ack(self, ack_host, ack_port, ack_id) -> None:
+    async def __send_cache_ack(self, ack_host, ack_port, ack_id, resp) -> None:
         if self.__networking.in_the_same_network(ack_host, ack_port):
             # case when the ack host is the same worker
-            self.__networking.add_ack_cnt(ack_id)
+            self.__networking.add_ack_cnt(ack_id, resp)
         else:
             await self.__networking.send_message(ack_host, ack_port,
-                                                 msg=(ack_id, ),
+                                                 msg=(ack_id, resp),
                                                  msg_type=MessageType.AckCache,
                                                  serializer=Serializer.MSGPACK)
 
@@ -89,15 +97,16 @@ class Operator(BaseOperator):
                          ack_id,
                          fraction_str,
                          chain_participants,
-                         partial_node_count) -> None:
+                         partial_node_count,
+                         resp) -> None:
         if self.__networking.in_the_same_network(ack_host, ack_port):
             # case when the ack host is the same worker
-            self.__networking.add_ack_fraction_str(ack_id, fraction_str, chain_participants, partial_node_count)
+            self.__networking.add_ack_fraction_str(ack_id, fraction_str, chain_participants, partial_node_count, resp)
         else:
             if self.__networking.worker_id not in chain_participants:
                 chain_participants.append(self.__networking.worker_id)
             await self.__networking.send_message(ack_host, ack_port,
-                                                 msg=(ack_id, fraction_str, chain_participants, partial_node_count),
+                                                 msg=(ack_id, fraction_str, chain_participants, partial_node_count, resp),
                                                  msg_type=MessageType.Ack,
                                                  serializer=Serializer.MSGPACK)
 

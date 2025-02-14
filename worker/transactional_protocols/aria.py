@@ -79,8 +79,6 @@ class AriaProtocol(BaseTransactionalProtocol):
         # worker_id: set of aborted t_ids
         self.concurrency_aborts_everywhere: set[int] = set()
         self.t_ids_to_reschedule: set[int] = set()
-        # t_id: (request_id, response)
-        self.response_buffer: dict[int, tuple[bytes, str, str, int]] = {}
 
         # ready_to_commit_events -> worker_id: Event that appears if the peer is ready to commit
         self.ready_to_reorder_events: dict[int, asyncio.Event] = {peer_id: asyncio.Event()
@@ -174,7 +172,7 @@ class AriaProtocol(BaseTransactionalProtocol):
     def start(self):
         self.function_scheduler_task = asyncio.create_task(self.function_scheduler())
         self.communication_task = asyncio.create_task(self.communication_protocol())
-        logging.warning("Aria protocol started")
+        logging.warning(f"Aria protocol started with operator partitions: {list(self.registered_operators.keys())}")
         self.snapshot_timer = timer()
 
     async def run_function(
@@ -186,10 +184,10 @@ class AriaProtocol(BaseTransactionalProtocol):
     ) -> bool:
         logging.info(f"Running function: {payload.function_name} with T_ID {t_id} with params {payload.params}"
                      f" and ack payload {payload.ack_payload}")
-        success: bool = True
+
         operator_partition = self.registered_operators[(payload.operator_name, payload.partition)]
 
-        response = await operator_partition.run_function(
+        success: bool = await operator_partition.run_function(
             payload.key,
             t_id,
             payload.request_id,
@@ -202,27 +200,6 @@ class AriaProtocol(BaseTransactionalProtocol):
             payload.params,
             self
         )
-        # If exception we need to add it to the application logic aborts
-        if isinstance(response, Exception):
-            success = False
-            response = str(response)
-
-            if not internal:
-                self.networking.transaction_failed(t_id)
-        # If request response send the response
-        # if payload.response_socket is not None:
-        #     self.router.write(
-        #         (payload.response_socket, self.networking.encode_message(
-        #             msg=response,
-        #             msg_type=MessageType.RunFunRqRsRemote,
-        #             serializer=Serializer.MSGPACK
-        #         ))
-        #     )
-        # If we have a response, and it's not part of the chain send it to kafka
-        # elif response is not None and not internal_msg:
-        if response is not None:
-            # If fallback add it to the fallback replies else to the response buffer
-            self.response_buffer[t_id] = (payload.request_id, response, payload.operator_name, payload.partition)
         return success
 
     def take_snapshot(self, pool: concurrent.futures.ProcessPoolExecutor):
@@ -311,17 +288,17 @@ class AriaProtocol(BaseTransactionalProtocol):
             case MessageType.Ack:
                 async with self.networking_locks[message_type]:
                     (ack_id, fraction_str,
-                     chain_participants, partial_node_count) = self.networking.decode_message(data)
+                     chain_participants, partial_node_count, resp) = self.networking.decode_message(data)
                     self.networking.add_ack_fraction_str(ack_id, fraction_str,
-                                                         chain_participants, partial_node_count)
+                                                         chain_participants, partial_node_count, resp)
             case MessageType.AckCache:
                 async with self.networking_locks[message_type]:
-                    (ack_id, ) = self.networking.decode_message(data)
-                    self.networking.add_ack_cnt(ack_id)
+                    (ack_id, resp) = self.networking.decode_message(data)
+                    self.networking.add_ack_cnt(ack_id, resp)
             case MessageType.ChainAbort:
                 async with self.networking_locks[message_type]:
-                    (ack_id, exception_str, request_id) = self.networking.decode_message(data)
-                    self.networking.abort_chain(ack_id, exception_str, request_id)
+                    (ack_id, exception_str) = self.networking.decode_message(data)
+                    self.networking.abort_chain(ack_id, exception_str)
             case MessageType.Unlock:
                 async with self.networking_locks[message_type]:
                     # fallback phase
@@ -440,14 +417,14 @@ class AriaProtocol(BaseTransactionalProtocol):
                         self.t_ids_to_reschedule = (self.concurrency_aborts_everywhere -
                                                     self.networking.logic_aborts_everywhere)
 
-                        current_completed_t_ids: list[int] = [seq_i.t_id for seq_i in sequence
-                                                              if seq_i.t_id not in self.concurrency_aborts_everywhere]
+                        current_completed_t_ids: list[SequencedItem] = [seq_i for seq_i in sequence
+                                                                        if seq_i.t_id not in self.concurrency_aborts_everywhere]
                         self.aio_task_scheduler.create_task(self.send_responses(
                             current_completed_t_ids,
-                            msgpack.decode(msgpack.encode(self.response_buffer)),
+                            msgpack.decode(msgpack.encode(self.networking.client_responses)),
                             msgpack.decode(msgpack.encode(self.networking.aborted_events))
                         ))
-                        self.response_buffer = {}
+
                         # total_processed_functions: int = sum(self.processed_seq_size.values()) + len(sequence)
                         abort_rate: float = len(self.concurrency_aborts_everywhere) / self.total_processed_seq_size
 
@@ -525,7 +502,6 @@ class AriaProtocol(BaseTransactionalProtocol):
         self.t_ids_to_reschedule.clear()
         self.networking.cleanup_after_epoch()
         self.local_state.cleanup()
-        self.response_buffer.clear()
         self.waiting_on_transactions.clear()
         self.fallback_locking_event_map.clear()
         self.remote_wants_to_proceed = False
@@ -535,7 +511,8 @@ class AriaProtocol(BaseTransactionalProtocol):
             self,
             t_id: int,
             payload: RunFuncPayload,
-            internal: bool = False
+            internal: bool = False,
+            collocated_same_t_id_functions: list[RunFuncPayload] = None # important when fallback cache is true
     ):
         # Wait for all transactions that this transaction depends on to finish
         if t_id in self.waiting_on_transactions:
@@ -549,6 +526,14 @@ class AriaProtocol(BaseTransactionalProtocol):
         success = await self.run_function(t_id, payload, internal=internal, fallback_mode=True)
         if not internal:
             # if root of chain
+            if collocated_same_t_id_functions is not None:
+                await asyncio.gather(*[self.run_function(t_id,
+                                                         c_payload,
+                                                         internal=True,
+                                                         fallback_mode=True)
+                                       for c_payload in collocated_same_t_id_functions])
+
+
             if t_id in self.networking.waited_ack_events:
                 # wait on ack of parts
                 await self.networking.waited_ack_events[t_id].wait()
@@ -559,19 +544,16 @@ class AriaProtocol(BaseTransactionalProtocol):
 
             await self.fallback_unlock(t_id, success=not transaction_failed)
 
-            # if network failed send the buffered exception else the response buffer no need for this complexity
             if t_id in self.networking.aborted_events:
-                exception_str, request_id = self.networking.aborted_events[t_id]
-                await self.egress.send_immediate(key=request_id,
-                                                 value=msgpack_serialization(exception_str),
+                await self.egress.send_immediate(key=payload.request_id,
+                                                 value=msgpack_serialization(self.networking.aborted_events[t_id]),
                                                  operator_name=payload.operator_name,
                                                  partition=payload.partition)
-            elif t_id in self.response_buffer:
-                request_id, exception_str, operator_name, partition = self.response_buffer[t_id]
-                await self.egress.send_immediate(key=request_id,
-                                                 value=msgpack_serialization(exception_str),
-                                                 operator_name=operator_name,
-                                                 partition=partition)
+            elif t_id in self.networking.client_responses:
+                await self.egress.send_immediate(key=payload.request_id,
+                                                 value=msgpack_serialization(self.networking.client_responses[t_id]),
+                                                 operator_name=payload.operator_name,
+                                                 partition=payload.partition)
 
     async def run_fallback_strategy(self):
         logging.info('Starting fallback strategy...')
@@ -584,14 +566,19 @@ class AriaProtocol(BaseTransactionalProtocol):
         self.networking.clear_aborted_events_for_fallback()
         for sequenced_item in aborted_sequence:
             # current worker is the root of the chain
+            collocated_t_id_functions = None
             if USE_FALLBACK_CACHE:
                 self.networking.reset_ack_for_fallback_cache(sequenced_item.t_id)
+                if sequenced_item.t_id in self.networking.remote_function_calls:
+                    collocated_t_id_functions = self.networking.remote_function_calls[sequenced_item.t_id]
+                    del self.networking.remote_function_calls[sequenced_item.t_id]
             else:
                 self.networking.reset_ack_for_fallback(sequenced_item.t_id)
             fallback_tasks.append(
                 self.run_fallback_function(
                     sequenced_item.t_id,
-                    sequenced_item.payload
+                    sequenced_item.payload,
+                    collocated_same_t_id_functions=collocated_t_id_functions
                 )
             )
 
@@ -612,9 +599,8 @@ class AriaProtocol(BaseTransactionalProtocol):
                                 message=b'',
                                 serializer=Serializer.NONE)
         if fallback_tasks:
-            async with asyncio.TaskGroup() as tg:
-                for fallback_task in fallback_tasks:
-                    tg.create_task(fallback_task)
+            await asyncio.gather(*fallback_tasks)
+
         logging.info(
             f'Epoch: {self.sequencer.epoch_counter} '
             f'Fallback strategy done waiting for peers'
@@ -632,22 +618,23 @@ class AriaProtocol(BaseTransactionalProtocol):
 
     async def send_responses(
             self,
-            current_sequence_t_ids: list[int],
-            response_buffer: dict[int, tuple[bytes, str, str, int]],
-            aborted_events: dict[int, [str, bytes]]
+            current_sequence_t_ids: list[SequencedItem],
+            client_responses: dict[int, str],
+            aborted_events: dict[int, str]
     ):
-        for t_id in current_sequence_t_ids:
+        for sequenced_item in current_sequence_t_ids:
+            t_id = sequenced_item.t_id
+            request_id = sequenced_item.payload.request_id
+            operator_name = sequenced_item.payload.operator_name
+            partition = sequenced_item.payload.partition
             if t_id in aborted_events:
-                exception_str, request_id = aborted_events[t_id]
-                _, _, operator_name, partition = response_buffer[t_id]
                 await self.egress.send(key=request_id,
-                                       value=msgpack_serialization(exception_str),
+                                       value=msgpack_serialization(aborted_events[t_id]),
                                        operator_name=operator_name,
                                        partition=partition)
-            elif t_id in response_buffer:
-                request_id, response, operator_name, partition = response_buffer[t_id]
+            elif t_id in client_responses:
                 await self.egress.send(key=request_id,
-                                       value=msgpack_serialization(response),
+                                       value=msgpack_serialization(client_responses[t_id]),
                                        operator_name=operator_name,
                                        partition=partition)
         await self.egress.send_batch()

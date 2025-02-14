@@ -190,9 +190,7 @@ class StatefulFunction(Function):
                                                                             params=params,
                                                                             ack_payload=ack_payload))
             partial_node_count = 0
-        async with asyncio.TaskGroup() as tg:
-            for remote_call in remote_calls:
-                tg.create_task(remote_call)
+        await asyncio.gather(*remote_calls)
         return n_remote_calls
 
     def call_remote_async(self,
@@ -228,28 +226,6 @@ class StatefulFunction(Function):
                                              msg=payload,
                                              msg_type=MessageType.RunFunRemote,
                                              serializer=Serializer.MSGPACK)
-
-    # @deprecated(reason="Request response is no longer supported")
-    # async def __call_remote_function_request_response(self,
-    #                                                   operator_name: str,
-    #                                                   function_name:  Type | str,
-    #                                                   partition: int,
-    #                                                   key,
-    #                                                   params: tuple = tuple()):
-    #     if isinstance(function_name, type):
-    #         function_name = function_name.__name__
-    #     payload, operator_host, operator_port = self.__prepare_message_transmission(operator_name,
-    #                                                                                 key,
-    #                                                                                 function_name,
-    #                                                                                 partition,
-    #                                                                                 params)
-    #     logging.info(f'(SF)  Start {operator_host}:{operator_port} of {operator_name}:{partition}')
-    #     resp = await self.__networking.send_message_request_response(operator_host,
-    #                                                                  operator_port,
-    #                                                                  msg=payload,
-    #                                                                  msg_type=MessageType.RunFunRqRsRemote,
-    #                                                                  serializer=Serializer.MSGPACK)
-    #     return resp
 
     def __prepare_message_transmission(self, operator_name: str, key,
                                        function_name: str, partition: int, params: tuple, ack_payload=None):

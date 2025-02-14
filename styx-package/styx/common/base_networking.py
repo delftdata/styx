@@ -35,7 +35,8 @@ class BaseNetworking(ABC):
         self.ack_cnts: dict[int, tuple[int, int]] = {}
         # t_id: list of workers
         self.chain_participants: dict[int, list[int]] = defaultdict(list)
-        self.aborted_events: dict[int, tuple[str, bytes]] = {}
+        self.aborted_events: dict[int, str] = {}
+        self.client_responses: dict[int, str] = {}
         # t_id: functions that it runs
         self.remote_function_calls: dict[int, list[RunFuncPayload]] = defaultdict(list)
         # set of t_ids that aborted because of an exception
@@ -82,6 +83,7 @@ class BaseNetworking(ABC):
         self.remote_function_calls.clear()
         self.logic_aborts_everywhere.clear()
         self.chain_participants.clear()
+        self.client_responses.clear()
 
     def add_remote_function_call(self, t_id: int, payload: RunFuncPayload):
         self.remote_function_calls[t_id].append(payload)
@@ -92,13 +94,16 @@ class BaseNetworking(ABC):
                 self.chain_participants[t_id].append(participant)
 
     def add_ack_fraction_str(self,
-                                   ack_id: int,
-                                   fraction_str: str,
-                                   chain_participants: list[int],
-                                   partial_node_count: int):
+                             ack_id: int,
+                             fraction_str: str,
+                             chain_participants: list[int],
+                             partial_node_count: int,
+                             remote_response: str):
         if ack_id in self.aborted_events:
             # if the transaction was aborted we can instantly return
             return
+        if remote_response is not None:
+            self.client_responses[ack_id] = remote_response
         try:
             self.add_chain_participants(ack_id, chain_participants)
             self.ack_cnts[ack_id] = (self.ack_cnts[ack_id][0],
@@ -115,11 +120,15 @@ class BaseNetworking(ABC):
             logging.error(f'TID: {ack_id} not in ack list!')
 
     def add_ack_cnt(self,
-                          ack_id: int,
-                          cnt: int = 1):
+                    ack_id: int,
+                    remote_response: str,
+                    cnt: int = 1,
+                    ):
         if ack_id in self.aborted_events:
             # if the transaction was aborted we can instantly return
             return
+        if remote_response is not None:
+            self.client_responses[ack_id] = remote_response
         try:
             self.ack_cnts[ack_id] = (self.ack_cnts[ack_id][0] + cnt,
                                      self.ack_cnts[ack_id][1])
@@ -155,14 +164,15 @@ class BaseNetworking(ABC):
     def clear_aborted_events_for_fallback(self):
         self.aborted_events.clear()
         self.logic_aborts_everywhere.clear()
+        self.client_responses.clear()
 
-    def abort_chain(self, aborted_t_id: int, exception_str: str, request_id: bytes):
-        self.aborted_events[aborted_t_id] = (exception_str, request_id)
-        self.transaction_failed(aborted_t_id)
+    def abort_chain(self, aborted_t_id: int, exception_str: str):
+        self.aborted_events[aborted_t_id] = exception_str
+        self.logic_aborts_everywhere.add(aborted_t_id)
         self.waited_ack_events[aborted_t_id].set()
 
-    def transaction_failed(self, aborted_t_id):
-        self.logic_aborts_everywhere.add(aborted_t_id)
+    def add_response(self, t_id: int, response: str):
+        self.client_responses[t_id] = response
 
     def merge_remote_logic_aborts(self, remote_logic_aborts: set[int]):
         self.logic_aborts_everywhere = self.logic_aborts_everywhere.union(remote_logic_aborts)
