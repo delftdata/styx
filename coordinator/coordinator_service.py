@@ -4,7 +4,6 @@ import socket
 import concurrent.futures
 import struct
 from asyncio import StreamReader, StreamWriter
-from struct import unpack
 
 from timeit import default_timer as timer
 
@@ -53,19 +52,25 @@ class CoordinatorService(object):
         self.coor_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.coor_socket.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER,
                                  struct.pack('ii', 1, 0))  # Enable LINGER, timeout 0
+        self.coor_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        self.coor_socket.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 1024 * 1024)
+        self.coor_socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1024 * 1024)
         self.coor_socket.bind(('0.0.0.0', SERVER_PORT))
         self.coor_socket.setblocking(False)
 
         self.protocol_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.protocol_socket.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER,
                                  struct.pack('ii', 1, 0))  # Enable LINGER, timeout 0
+        self.protocol_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        self.protocol_socket.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 1024 * 1024)
+        self.protocol_socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1024 * 1024)
         self.protocol_socket.bind(('0.0.0.0', SERVER_PORT + 1))
         self.protocol_socket.setblocking(False)
 
         self.aria_metadata: AriaSyncMetadata = ...
 
     # Refactoring candidate
-    async def coordinator_controller(self, writer: StreamWriter, data, pool: concurrent.futures.ProcessPoolExecutor):
+    async def coordinator_controller(self, transport, data, pool: concurrent.futures.ProcessPoolExecutor):
         message_type: int = self.networking.get_msg_type(data)
         match message_type:
             case MessageType.SendExecutionGraph:
@@ -78,10 +83,10 @@ class CoordinatorService(object):
                 worker_ip, worker_port, protocol_port = self.networking.decode_message(data)
                 # A worker registered to the coordinator
                 worker_id = self.coordinator.register_worker(worker_ip, worker_port, protocol_port)
-                writer.write(self.networking.encode_message(msg=worker_id,
+                transport.write(self.networking.encode_message(msg=worker_id,
                                                             msg_type=MessageType.RegisterWorker,
                                                             serializer=Serializer.MSGPACK))
-                await writer.drain()
+                # await writer.drain()
                 logging.warning(f"Worker registered {worker_ip}:{worker_port} with id {worker_id}")
             case MessageType.SnapID:
                 # Get snap id from worker
@@ -160,12 +165,13 @@ class CoordinatorService(object):
                                                     Serializer.PICKLE)
                     await self.aria_metadata.cleanup()
 
+
     async def start_puller(self):
         async def request_handler(reader: StreamReader, writer: StreamWriter):
             try:
                 while True:
                     data = await reader.readexactly(8)
-                    (size,) = unpack('>Q', data)
+                    (size,) = struct.unpack('>Q', data)
                     self.aio_task_scheduler.create_task(self.protocol_controller(await reader.readexactly(size)))
             except asyncio.IncompleteReadError as e:
                 logging.info(f"Client disconnected unexpectedly: {e}")
@@ -181,14 +187,14 @@ class CoordinatorService(object):
             await server.serve_forever()
 
     async def tcp_service(self):
-        self.puller_task = self.aio_task_scheduler.create_task(self.start_puller())
+        self.puller_task = asyncio.create_task(self.start_puller())
         logging.info(f"Coordinator Server listening at 0.0.0.0:{SERVER_PORT}")
         with concurrent.futures.ProcessPoolExecutor(1) as pool:
             async def request_handler(reader: StreamReader, writer: StreamWriter):
                 try:
                     while True:
                         data = await reader.readexactly(8)
-                        (size,) = unpack('>Q', data)
+                        (size,) = struct.unpack('>Q', data)
                         message = await reader.readexactly(size)
                         self.aio_task_scheduler.create_task(self.coordinator_controller(writer, message, pool))
                 except asyncio.IncompleteReadError as e:

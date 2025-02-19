@@ -7,7 +7,6 @@ import time
 from asyncio import StreamReader, StreamWriter
 from copy import deepcopy
 import socket
-from struct import unpack
 from timeit import default_timer as timer
 
 import uvloop
@@ -59,12 +58,18 @@ class Worker(object):
         self.worker_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.worker_socket.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER,
                                  struct.pack('ii', 1, 0))  # Enable LINGER, timeout 0
+        self.worker_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        self.worker_socket.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 1024 * 1024)
+        self.worker_socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1024 * 1024)
         self.worker_socket.bind(('0.0.0.0', self.server_port))
         self.worker_socket.setblocking(False)
 
         self.protocol_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.protocol_socket.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER,
                                  struct.pack('ii', 1, 0))  # Enable LINGER, timeout 0
+        self.protocol_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        self.protocol_socket.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 1024 * 1024)
+        self.protocol_socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1024 * 1024)
         self.protocol_socket.bind(('0.0.0.0', self.protocol_port))
         self.protocol_socket.setblocking(False)
 
@@ -263,7 +268,7 @@ class Worker(object):
             try:
                 while True:
                     data = await reader.readexactly(8)
-                    (size,) = unpack('>Q', data)
+                    (size,) = struct.unpack('>Q', data)
                     message = await reader.readexactly(size)
                     self.aio_task_scheduler.create_task(self.worker_controller(message))
             except asyncio.IncompleteReadError as e:
@@ -285,7 +290,7 @@ class Worker(object):
             try:
                 while True:
                     data = await reader.readexactly(8)
-                    (size,) = unpack('>Q', data)
+                    (size,) = struct.unpack('>Q', data)
                     message = await reader.readexactly(size)
                     self.protocol_task_scheduler.create_task(
                         self.function_execution_protocol.protocol_tcp_controller(message)
@@ -302,7 +307,6 @@ class Worker(object):
         server = await asyncio.start_server(request_handler, sock=self.protocol_socket, limit=2 ** 32)
         async with server:
             await server.serve_forever()
-        await server.wait_closed()
 
     def start_networking_tasks(self):
         self.networking.start_networking_tasks()

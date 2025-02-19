@@ -1,11 +1,8 @@
 import asyncio
 import fractions
 import traceback
-import uuid
 
 from typing import Awaitable, Type
-
-import mmh3
 
 from .logging import logging
 from .tcp_networking import NetworkingManager
@@ -14,22 +11,9 @@ from .serialization import Serializer
 from .function import Function
 from .base_state import BaseOperatorState as State
 from .base_protocol import BaseTransactionalProtocol
-from .exceptions import NonSupportedKeyType
 from .message_types import MessageType
 from .run_func_payload import RunFuncPayload
-
-
-def make_key_hashable(key) -> int:
-    if isinstance(key, int):
-        return key
-    elif isinstance(key, str):
-        try:
-            # uuid type given by the user
-            return uuid.UUID(key).int
-        except ValueError:
-            return mmh3.hash(key, seed=0, signed=False)
-    # if not int, str or uuid throw exception
-    raise NonSupportedKeyType()
+from .partitioning.base_partitioner import BasePartitioner
 
 
 class StatefulFunction(Function):
@@ -47,6 +31,7 @@ class StatefulFunction(Function):
                  request_id: bytes,
                  fallback_mode: bool,
                  use_fallback_cache: bool,
+                 partitioner: BasePartitioner,
                  protocol: BaseTransactionalProtocol):
         super().__init__(name=function_name)
         self.__operator_name = operator_name
@@ -62,6 +47,7 @@ class StatefulFunction(Function):
         self.__key = key
         self.__protocol = protocol
         self.__partition = partition
+        self.__partitioner = partitioner
 
     async def __call__(self, *args, **kwargs):
         try:
@@ -90,7 +76,7 @@ class StatefulFunction(Function):
                                                                is_root=True)
             return res, n_remote_calls, partial_node_count
         except Exception as e:
-            logging.debug(traceback.format_exc())
+            logging.warning(traceback.format_exc())
             return e, -1, -1
 
     @property
@@ -200,7 +186,7 @@ class StatefulFunction(Function):
                           params: tuple = tuple()):
         if isinstance(function_name, type):
             function_name = function_name.__name__
-        partition: int = make_key_hashable(key) % len(self.__dns[operator_name].keys())
+        partition: int = self.__partitioner.get_partition(key)
         is_local: bool = self.__networking.in_the_same_network(self.__dns[operator_name][partition][0],
                                                                self.__dns[operator_name][partition][2])
         self.__async_remote_calls.append((operator_name, function_name, partition, key, params, is_local))

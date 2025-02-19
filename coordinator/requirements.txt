@@ -2,7 +2,7 @@
 uvloop==0.21.0
 msgspec==0.19.0
 cloudpickle==3.1.1
-mmh3==5.1.0
+cityhash==0.4.7
 # monitoring service
 # psutil==5.9.1
 # kafka

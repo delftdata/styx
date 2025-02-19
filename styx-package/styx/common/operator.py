@@ -6,6 +6,7 @@ from .base_protocol import BaseTransactionalProtocol
 from .stateful_function import StatefulFunction
 from .exceptions import OperatorDoesNotContainFunction
 from .logging import logging
+from .partitioning.hash_partitioner import HashPartitioner
 
 
 class Operator(BaseOperator):
@@ -19,6 +20,10 @@ class Operator(BaseOperator):
         # where the other functions exist
         self.__dns: dict[str, dict[int, tuple[str, int, int]]] = {}
         self.__functions: dict[str, type] = {}
+        self.__partitioner: HashPartitioner = HashPartitioner(n_partitions)
+
+    def which_partition(self, key):
+        return self.__partitioner.get_partition(key)
 
     @property
     def functions(self):
@@ -124,6 +129,7 @@ class Operator(BaseOperator):
                              request_id,
                              fallback_mode,
                              use_fallback_cache,
+                             self.__partitioner,
                              protocol)
         try:
             f.run = self.__functions[function_name]
@@ -141,3 +147,4 @@ class Operator(BaseOperator):
 
     def set_n_partitions(self, n_partitions: int):
         self.n_partitions = n_partitions
+        self.__partitioner.update_partitions(n_partitions)
