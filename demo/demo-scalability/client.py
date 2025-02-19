@@ -12,7 +12,6 @@ from styx.client.sync_client import SyncStyxClient
 from styx.common.local_state_backends import LocalStateBackend
 from styx.common.operator import Operator
 from styx.common.stateflow_graph import StateflowGraph
-from styx.common.stateful_function import make_key_hashable
 
 from tqdm import tqdm
 
@@ -55,7 +54,7 @@ def ycsb_init(styx: SyncStyxClient, operator: Operator):
     # INSERT
     partitions: dict[int, dict] = {p: {} for p in range(N_PARTITIONS)}
     for i in tqdm(range(N_ENTITIES)):
-        partition: int = make_key_hashable(i) % operator.n_partitions
+        partition: int = styx.get_operator_partition(i, operator)
         partitions[partition] |= {i: STARTING_MONEY}
         if i % 100_000 == 0 or i == N_ENTITIES - 1:
             for partition, kv_pairs in partitions.items():

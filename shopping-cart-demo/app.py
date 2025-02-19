@@ -10,7 +10,6 @@ from styx.common.local_state_backends import LocalStateBackend
 from styx.common.stateflow_graph import StateflowGraph
 
 from styx.client import AsyncStyxClient
-from styx.common.stateful_function import make_key_hashable
 
 from functions.order import order_operator
 from functions.payment import payment_operator
@@ -24,7 +23,7 @@ KAFKA_URL: str = os.environ['KAFKA_URL']
 
 styx_client = AsyncStyxClient(STYX_HOST, STYX_PORT, KAFKA_URL)
 
-app.add_task(styx_client.open())
+app.add_task(styx_client.open(consume=True))
 
 
 @app.post('/hello')
@@ -49,7 +48,7 @@ async def submit_dataflow_graph(_, n_partitions: int):
 @app.post('/payment/create_user')
 async def create_user(_):
     start = timer()
-    user_key: str = str(uuid.uuid4())
+    user_key: int = uuid.uuid4().int
     future = await styx_client.send_event(operator=payment_operator,
                                           key=user_key,
                                           function="create_user")
@@ -70,7 +69,7 @@ async def batch_init_users(_, n: int, starting_money: int):
     starting_money = int(starting_money)
     partitions: dict[int, dict] = {p: {} for p in range(payment_operator.n_partitions)}
     for i in range(n):
-        partition: int = make_key_hashable(i) % payment_operator.n_partitions
+        partition: int = await styx_client.get_operator_partition(i, payment_operator)
         partitions[partition] |= {i: {"credit": starting_money}}
         if i % 10_000 == 0 or i == n - 1:
             for partition, kv_pairs in partitions.items():
@@ -82,9 +81,9 @@ async def batch_init_users(_, n: int, starting_money: int):
 
 
 @app.post('/payment/add_funds/<user_key>/<amount>')
-async def add_credit(_, user_key: str, amount: int):
+async def add_credit(_, user_key: int, amount: int):
     future = await styx_client.send_event(operator=payment_operator,
-                                          key=user_key,
+                                          key=int(user_key),
                                           function="add_credit",
                                           params=(int(amount), ))
     result: StyxResponse = await future.get()
@@ -92,9 +91,9 @@ async def add_credit(_, user_key: str, amount: int):
 
 
 @app.get('/payment/find_user/<user_key>')
-async def find_user(_, user_key: str):
+async def find_user(_, user_key: int):
     future = await styx_client.send_event(operator=payment_operator,
-                                          key=user_key,
+                                          key=int(user_key),
                                           function="find")
     result: StyxResponse = await future.get()
     return json(result.response)
@@ -102,7 +101,7 @@ async def find_user(_, user_key: str):
 
 @app.post('/stock/item/create/<price>')
 async def create_item(_, price: int):
-    item_key: str = str(uuid.uuid4())
+    item_key: int = uuid.uuid4().int
     future = await styx_client.send_event(operator=stock_operator,
                                           key=item_key,
                                           function="create_item",
@@ -118,7 +117,7 @@ async def batch_init_items(_, n: int, starting_stock: int, item_price: int):
     item_price = int(item_price)
     partitions: dict[int, dict] = {p: {} for p in range(stock_operator.n_partitions)}
     for i in range(n):
-        partition: int = make_key_hashable(i) % stock_operator.n_partitions
+        partition: int = await styx_client.get_operator_partition(i, stock_operator)
         partitions[partition] |= {i:    {"stock": starting_stock,
                                          "price": item_price
                                          }
@@ -133,9 +132,9 @@ async def batch_init_items(_, n: int, starting_stock: int, item_price: int):
 
 
 @app.post('/stock/add/<item_key>/<amount>')
-async def add_stock(_, item_key: str, amount: int):
+async def add_stock(_, item_key: int, amount: int):
     future = await styx_client.send_event(operator=stock_operator,
-                                          key=item_key,
+                                          key=int(item_key),
                                           function="add_stock",
                                           params=(int(amount), ))
     result: StyxResponse = await future.get()
@@ -143,21 +142,21 @@ async def add_stock(_, item_key: str, amount: int):
 
 
 @app.get('/stock/find/<item_key>')
-async def find_item(_, item_key: str):
+async def find_item(_, item_key: int):
     future = await styx_client.send_event(operator=stock_operator,
-                                          key=item_key,
+                                          key=int(item_key),
                                           function="find")
     result: StyxResponse = await future.get()
     return json(result.response)
 
 
 @app.post('/orders/create/<user_key>')
-async def create_order(_, user_key: str):
-    order_key: str = str(uuid.uuid4())
+async def create_order(_, user_key: int):
+    order_key: int = uuid.uuid4().int
     future = await styx_client.send_event(operator=order_operator,
                                           key=order_key,
                                           function="create_order",
-                                          params=(user_key, ))
+                                          params=(int(user_key), ))
     result: StyxResponse = await future.get()
     return json({'order_id': result.response})
 
@@ -170,7 +169,7 @@ async def batch_init_orders(_, n: int, n_items: int, n_users: int, item_price: i
     item_price = int(item_price)
     partitions: dict[int, dict] = {p: {} for p in range(order_operator.n_partitions)}
     for i in range(n):
-        partition: int = make_key_hashable(i) % order_operator.n_partitions
+        partition: int = await styx_client.get_operator_partition(i, order_operator)
         user_id = random.randint(0, n_users - 1)
         item1_id = random.randint(0, n_items - 1)
         item2_id = random.randint(0, n_items - 1)
@@ -192,30 +191,30 @@ async def batch_init_orders(_, n: int, n_items: int, n_users: int, item_price: i
 
 
 @app.get('/orders/find/<order_key>')
-async def find_order(_, order_key: str):
+async def find_order(_, order_key: int):
     future = await styx_client.send_event(operator=order_operator,
-                                          key=order_key,
+                                          key=int(order_key),
                                           function="find")
     result: StyxResponse = await future.get()
     return json(result.response)
 
 
 @app.post('/orders/addItem/<order_key>/<item_key>/<quantity>')
-async def add_item(_, order_key: str, item_key: str, quantity: int):
+async def add_item(_, order_key: int, item_key: int, quantity: int):
     future = await styx_client.send_event(operator=order_operator,
-                                          key=order_key,
+                                          key=int(order_key),
                                           function="add_item",
-                                          params=(item_key, int(quantity)))
+                                          params=(int(item_key), int(quantity)))
     result: StyxResponse = await future.get()
     return text(f"Item: {item_key} added to: {order_key} price updated to: {result.response}",
                 status=200)
 
 
 @app.post('/orders/checkout/<order_key>')
-async def checkout_order(_, order_key: str):
+async def checkout_order(_, order_key: int):
     # start = timer()
     future = await styx_client.send_event(operator=order_operator,
-                                          key=order_key,
+                                          key=int(order_key),
                                           function="checkout")
     result: StyxResponse = await future.get()
     # end = timer()

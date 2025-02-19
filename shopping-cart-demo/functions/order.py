@@ -82,4 +82,4 @@ async def checkout(ctx: StatefulFunction):
     )
     value["paid"] = True
     ctx.put(value)
-    return ctx.key
+    return "Payment successful"
