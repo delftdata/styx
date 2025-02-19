@@ -38,3 +38,6 @@ class FutureTimedOut(Exception):
     When a Styx future times out
     """
     pass
+
+class InvalidRangePartitioning(Exception):
+    pass

@@ -349,17 +349,16 @@ class AriaProtocol(BaseTransactionalProtocol):
                                                                     topic='sequencer-wal')
                             end_wal = timer()
                             logging.info(f"Write to WAL successful at epoch: {self.sequencer.epoch_counter} | took: {round((end_wal - start_wal) * 1000, 4)}ms")
-                            async with asyncio.TaskGroup() as tg:
-                                for sequenced_item in sequence:
-                                    tg.create_task(self.run_function(sequenced_item.t_id, sequenced_item.payload))
+                            await asyncio.gather(*[self.run_function(sequenced_item.t_id, sequenced_item.payload)
+                                                   for sequenced_item in sequence])
                             # function_running_done = timer()
                             # self.function_running_time += function_running_done - epoch_start
                             # Wait for chains to finish
                             logging.info(f'{self.id} ||| '
                                          f'Waiting on chained {len(self.networking.waited_ack_events)} functions...')
-                            async with asyncio.TaskGroup() as tg:
-                                for ack in self.networking.waited_ack_events.values():
-                                    tg.create_task(ack.wait())
+                            await asyncio.gather(*[ack.wait()
+                                                   for ack in self.networking.waited_ack_events.values()])
+
                         # function_chains_done = timer()
                         # self.chain_completion_time += function_chains_done - function_running_done
                         # wait for all peers to be done processing (needed to know the aborts)

@@ -3,10 +3,12 @@ import concurrent.futures
 import os
 import time
 
+from aiokafka import AIOKafkaProducer
+from aiokafka.errors import KafkaConnectionError
 from confluent_kafka.admin import AdminClient, NewTopic, KafkaException
 
 from styx.common.message_types import MessageType
-from styx.common.serialization import Serializer
+from styx.common.serialization import Serializer, msgpack_serialization, cloudpickle_serialization
 from styx.common.tcp_networking import NetworkingManager
 from styx.common.stateflow_graph import StateflowGraph
 from styx.common.stateflow_ingress import IngressTypes
@@ -18,6 +20,7 @@ from worker_pool import WorkerPool, Worker
 
 MAX_OPERATOR_PARALLELISM = int(os.getenv('MAX_OPERATOR_PARALLELISM', 10))
 KAFKA_REPLICATION_FACTOR = int(os.getenv('KAFKA_REPLICATION_FACTOR', 3))
+KAFKA_URL: str = os.getenv('KAFKA_URL', None)
 
 
 class Coordinator(object):
@@ -31,6 +34,23 @@ class Coordinator(object):
 
         self.worker_snapshot_ids: dict[int, int] = {}
         self.worker_is_healthy: dict[int, asyncio.Event] = {}
+
+        self.kafka_metadata_producer: AIOKafkaProducer | None = None
+
+    async def start_kafka_metadata_producer(self):
+        self.kafka_metadata_producer = AIOKafkaProducer(
+            bootstrap_servers=[KAFKA_URL],
+            client_id="Coordinator",
+            enable_idempotence=True
+        )
+        while True:
+            try:
+                await self.kafka_metadata_producer.start()
+            except KafkaConnectionError:
+                await asyncio.sleep(1)
+                logging.info("Waiting for Kafka")
+                continue
+            break
 
     def register_worker(self, worker_ip: str, worker_port: int, protocol_port: int) -> int:
         worker_id = self.worker_pool.register_worker(worker_ip, worker_port, protocol_port)
@@ -130,7 +150,7 @@ class Coordinator(object):
         if not isinstance(stateflow_graph, StateflowGraph):
             raise NotAStateflowGraph
         if ingress_type == IngressTypes.KAFKA:
-            self.create_kafka_ingress_topics(stateflow_graph)
+            await self.create_kafka_ingress_topics(stateflow_graph)
         for operator_name, operator in iter(stateflow_graph):
             for partition in range(operator.n_partitions):
                 self.worker_pool.schedule_operator_partition((operator_name, partition), operator)
@@ -147,17 +167,21 @@ class Coordinator(object):
         await asyncio.gather(*tasks)
         self.graph_submitted = True
         self.submitted_graph = stateflow_graph
+        metadata_key = msgpack_serialization(self.submitted_graph.name)
+        serialized_graph = cloudpickle_serialization(stateflow_graph)
+        await self.kafka_metadata_producer.send_and_wait('styx-metadata',
+                                                         key=metadata_key,
+                                                         value=serialized_graph)
 
-    def create_kafka_ingress_topics(self, stateflow_graph: StateflowGraph):
-        kafka_url: str = os.getenv('KAFKA_URL', None)
-        if kafka_url is None:
+    async def create_kafka_ingress_topics(self, stateflow_graph: StateflowGraph):
+        if KAFKA_URL is None:
             logging.error('Kafka URL not given')
         while True:
             try:
-                client = AdminClient({'bootstrap.servers': kafka_url})
+                client = AdminClient({'bootstrap.servers': KAFKA_URL})
                 break
             except KafkaException:
-                logging.warning(f'Kafka at {kafka_url} not ready yet, sleeping for 1 second')
+                logging.warning(f'Kafka at {KAFKA_URL} not ready yet, sleeping for 1 second')
                 time.sleep(1)
         topics = (
                 [NewTopic(topic='styx-metadata', num_partitions=1, replication_factor=KAFKA_REPLICATION_FACTOR)] +
@@ -178,3 +202,5 @@ class Coordinator(object):
                 logging.warning(f"Topic {topic} created")
             except KafkaException as e:
                 logging.warning(f"Failed to create topic {topic}: {e}")
+        if self.kafka_metadata_producer is None:
+            await self.start_kafka_metadata_producer()

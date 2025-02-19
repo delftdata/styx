@@ -15,6 +15,9 @@ class StateflowGraph(object):
     def get_egress_topic_names(self) -> list[str]:
         return [node.name + "--OUT" for node in self.nodes.values()]
 
+    def get_operator(self, operator: BaseOperator) -> BaseOperator:
+        return self.nodes[operator.name]
+
     def add_operators(self, *operators):
         [self.add_operator(operator) for operator in operators if issubclass(type(operator), BaseOperator)]
 
