@@ -1,15 +1,19 @@
 import asyncio
 import concurrent.futures
+import io
 import os
 import time
+from copy import deepcopy
 
 from aiokafka import AIOKafkaProducer
 from aiokafka.errors import KafkaConnectionError
 from confluent_kafka.admin import AdminClient, NewTopic, KafkaException
+from minio import Minio
 
 from styx.common.message_types import MessageType
 from styx.common.serialization import Serializer, msgpack_serialization, cloudpickle_serialization
 from styx.common.tcp_networking import NetworkingManager
+from styx.common.types import OperatorPartition
 from styx.common.stateflow_graph import StateflowGraph
 from styx.common.stateflow_ingress import IngressTypes
 from styx.common.logging import logging
@@ -20,15 +24,21 @@ from worker_pool import WorkerPool, Worker
 
 MAX_OPERATOR_PARALLELISM = int(os.getenv('MAX_OPERATOR_PARALLELISM', 10))
 KAFKA_REPLICATION_FACTOR = int(os.getenv('KAFKA_REPLICATION_FACTOR', 3))
+SNAPSHOT_BUCKET_NAME: str = os.getenv('SNAPSHOT_BUCKET_NAME', "styx-snapshots")
 KAFKA_URL: str = os.getenv('KAFKA_URL', None)
 
 
 class Coordinator(object):
 
-    def __init__(self, networking: NetworkingManager):
+    def __init__(self, networking: NetworkingManager, minio_client: Minio):
         self.networking = networking
+        self.minio_client = minio_client
         self.graph_submitted: bool = False
         self.prev_completed_snapshot_id: int = -1
+        self.completed_input_offsets: dict[OperatorPartition, int] = {}
+        self.completed_out_offsets: dict[OperatorPartition, int] = {}
+        self.completed_epoch_counter: int = 0
+        self.completed_t_counter: int = 0
         self.worker_pool = WorkerPool()
         self.submitted_graph: StateflowGraph | None = None
 
@@ -127,12 +137,37 @@ class Coordinator(object):
             return set()
         return self.worker_pool.check_heartbeats(heartbeat_check_time)
 
-    def register_snapshot(self, worker_id: int, snapshot_id: int, pool: concurrent.futures.ProcessPoolExecutor):
+    def register_snapshot(self,
+                          worker_id: int,
+                          snapshot_id: int,
+                          partial_input_offsets: dict[OperatorPartition, int],
+                          partial_output_offsets: dict[OperatorPartition, int],
+                          epoch_counter: int,
+                          t_counter: int,
+                          pool: concurrent.futures.ProcessPoolExecutor):
         self.worker_snapshot_ids[worker_id] = snapshot_id
+        for operator_partition, pio in partial_input_offsets.items():
+            self.completed_input_offsets[operator_partition] = max(pio,
+                                                                   self.completed_input_offsets.get(operator_partition,
+                                                                                                    pio))
+        for operator_partition, poo in partial_output_offsets.items():
+            self.completed_out_offsets[operator_partition] = max(poo,
+                                                                 self.completed_out_offsets.get(operator_partition,
+                                                                                                poo))
+        self.completed_epoch_counter = epoch_counter
+        self.completed_t_counter = t_counter
         current_completed_snapshot: int = self.get_current_completed_snapshot_id()
         if current_completed_snapshot != self.prev_completed_snapshot_id:
             logging.warning(f"Cluster completed snapshot: {current_completed_snapshot}")
             # if we reached a complete snapshot we could compact its deltas with the previous one
+            sn_data: bytes = msgpack_serialization((self.completed_input_offsets,
+                                                    self.completed_out_offsets,
+                                                    self.completed_epoch_counter,
+                                                    self.completed_t_counter))
+            self.minio_client.put_object(SNAPSHOT_BUCKET_NAME,
+                                         f"sequencer/{current_completed_snapshot}.bin",
+                                         io.BytesIO(sn_data),
+                                         len(sn_data))
             self.prev_completed_snapshot_id = current_completed_snapshot
             loop = asyncio.get_running_loop()
             loop.run_in_executor(pool,
@@ -153,7 +188,16 @@ class Coordinator(object):
             await self.create_kafka_ingress_topics(stateflow_graph)
         for operator_name, operator in iter(stateflow_graph):
             for partition in range(operator.n_partitions):
-                self.worker_pool.schedule_operator_partition((operator_name, partition), operator)
+                operator_copy = deepcopy(operator)
+                self.worker_pool.schedule_operator_partition((operator_name, partition),
+                                                             operator_copy)
+        # Also add the shadow partitions n_partitions - max parallelism
+        for operator_name, operator in iter(stateflow_graph):
+            for shadow_partition in range(operator.n_partitions, MAX_OPERATOR_PARALLELISM):
+                operator_copy = deepcopy(operator)
+                operator_copy.make_shadow()
+                self.worker_pool.schedule_operator_partition((operator_name, shadow_partition),
+                                                             operator_copy)
         worker_assignments = self.worker_pool.get_worker_assignments()
         tasks = [self.networking.send_message(worker.worker_ip, worker.worker_port,
                                               msg=(worker_assignments[(worker.worker_ip,

@@ -69,6 +69,8 @@ class InMemoryOperatorState(BaseAriaState):
 
     def exists(self, key, operator_name: str, partition: int):
         operator_partition: OperatorPartition = (operator_name, partition)
+        if operator_partition not in self.data:
+            return False
         return key in self.data[operator_partition]
 
     def commit(self, aborted_from_remote: set[int]) -> set[int]:
