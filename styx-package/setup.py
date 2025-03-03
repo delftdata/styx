@@ -11,7 +11,7 @@ setuptools.setup(
         'msgspec>=0.19.0,<1.0.0',
         # kafka clients (async, sync)
         'aiokafka>=0.12.0,<1.0',
-        'confluent-kafka>=2.8.0,<3.0',
+        'confluent-kafka>=2.8.0,<2.8.1',
         # async logging
         'aiologger>=0.7.0,<1.0',
         # hashing strings

@@ -13,7 +13,9 @@ class HashPartitioner(BasePartitioner):
     def update_partitions(self, partitions: int):
         self._partitions = partitions
 
-    def get_partition(self, key) -> int:
+    def get_partition(self, key) -> int | None:
+        if key is None:
+            return None
         return self.make_key_hashable(key) % self._partitions
 
     @staticmethod

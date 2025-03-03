@@ -27,15 +27,22 @@ class AsyncSnapshotsMinio(BaseSnapshotter):
         self.worker_id: int = worker_id
         self.snapshot_id: int = 0
         self.n_assigned_partitions: int = n_assigned_partitions
-        self.completed_snapshots: int = -1
+        self.completed_snapshots: int = 0
         self.snapshot_in_progress: bool = False
         self.snapshot_start: float = 0.0
+        self.current_input_offsets = None
+        self.current_output_offsets = None
+        self.current_epoch_counter = -1
+        self.current_t_counter = -1
 
-    def snapshot_completed_callback(self, _):
+    def snapshot_completed_callback(self, _, ):
         self.completed_snapshots += 1
         if self.completed_snapshots == self.n_assigned_partitions:
-            end = time.time() * 1000
-            msg = NetworkingManager.encode_message(msg=(self.worker_id, self.snapshot_id, self.snapshot_start, end),
+            snapshot_end = time.time() * 1000
+            msg = NetworkingManager.encode_message(msg=(self.worker_id, self.snapshot_id,
+                                                        self.snapshot_start, snapshot_end,
+                                                        self.current_input_offsets, self.current_output_offsets,
+                                                        self.current_epoch_counter, self.current_t_counter),
                                                    msg_type=MessageType.SnapID,
                                                    serializer=Serializer.MSGPACK)
             s = socket.socket()
@@ -44,11 +51,19 @@ class AsyncSnapshotsMinio(BaseSnapshotter):
             s.close()
             self.snapshot_id += 1
             self.snapshot_in_progress = False
-            self.completed_snapshots = -1
+            self.completed_snapshots = 0
 
-    def start_snapshotting(self):
+    def start_snapshotting(self,
+                           current_input_offsets: dict[OperatorPartition, int],
+                           current_output_offsets: dict[OperatorPartition, int],
+                           current_epoch_counter: int,
+                           current_t_counter: int):
         self.snapshot_in_progress = True
         self.snapshot_start = time.time() * 1000
+        self.current_input_offsets = current_input_offsets
+        self.current_output_offsets = current_output_offsets
+        self.current_epoch_counter = current_epoch_counter
+        self.current_t_counter = current_t_counter
 
     @staticmethod
     def store_snapshot(snapshot_id: int,
@@ -67,8 +82,6 @@ class AsyncSnapshotsMinio(BaseSnapshotter):
         minio_client: Minio = Minio(MINIO_URL, access_key=MINIO_ACCESS_KEY, secret_key=MINIO_SECRET_KEY, secure=False)
 
         data: dict[OperatorPartition, KVPairs] = {}
-        topic_partition_offsets: dict[OperatorPartition, int] = {}
-        topic_partition_output_offsets: dict[OperatorPartition, int] = {}
 
         for operator_partition in registered_operators:
             operator_name, partition = operator_partition
@@ -82,21 +95,15 @@ class AsyncSnapshotsMinio(BaseSnapshotter):
                                                                    snapshot_file)
                                                                   for snapshot_file in snapshot_files],
                                                                  key=lambda item: item[0])
-            input_offset: int = -1
-            output_offset: int = -1
             for sn_id, sn_name in snapshot_merge_order:
                 if sn_id > snapshot_id:
                     # recover only from a stable snapshot
                     continue
-                input_offset, output_offset, partition_data = msgpack_deserialization(
-                    minio_client.get_object(SNAPSHOT_BUCKET_NAME, sn_name).data
-                )
+                partition_data = msgpack_deserialization(minio_client.get_object(SNAPSHOT_BUCKET_NAME, sn_name).data)
                 if operator_partition in data and partition_data:
                     data[operator_partition].update(partition_data)
                 else:
                     data[operator_partition] = partition_data
-            topic_partition_offsets[operator_partition] = input_offset
-            topic_partition_output_offsets[operator_partition] = output_offset
         # Sequencer
         snapshot_files: list[str] = [sn_file.object_name
                                      for sn_file in minio_client.list_objects(bucket_name=SNAPSHOT_BUCKET_NAME,
@@ -107,12 +114,15 @@ class AsyncSnapshotsMinio(BaseSnapshotter):
                                                                snapshot_file)
                                                               for snapshot_file in snapshot_files],
                                                              key=lambda item: item[0])
+        topic_partition_offsets: dict[OperatorPartition, int] = {}
+        topic_partition_output_offsets: dict[OperatorPartition, int] = {}
         epoch: int = 0
         t_counter: int = 0
         for sn_id, sn_name in snapshot_merge_order:
             if sn_id > snapshot_id:
                 # recover only from a stable snapshot
                 continue
-            epoch, t_counter = msgpack_deserialization(minio_client.get_object(SNAPSHOT_BUCKET_NAME, sn_name).data)
+            (topic_partition_offsets, topic_partition_output_offsets,
+             epoch, t_counter) = msgpack_deserialization(minio_client.get_object(SNAPSHOT_BUCKET_NAME, sn_name).data)
         # The recovered snapshot will have the latest metadata and merged operator state
         return data, topic_partition_offsets, topic_partition_output_offsets, epoch, t_counter

@@ -1,4 +1,5 @@
 import asyncio
+import typing
 import uuid
 
 from aiokafka import AIOKafkaConsumer, TopicPartition
@@ -7,7 +8,11 @@ from aiokafka.errors import UnknownTopicOrPartitionError, KafkaConnectionError
 from styx.common.logging import logging
 from styx.common.message_types import MessageType
 from styx.common.tcp_networking import NetworkingManager
+from styx.common.types import OperatorPartition
+from styx.common.base_state import BaseOperatorState
 from styx.common.run_func_payload import RunFuncPayload
+from styx.common.operator import Operator
+from styx.common.serialization import Serializer
 
 from worker.ingress.base_ingress import BaseIngress
 from worker.sequencer.sequencer import Sequencer
@@ -18,16 +23,21 @@ class StyxKafkaIngress(BaseIngress):
     def __init__(self,
                  networking: NetworkingManager,
                  sequencer: Sequencer,
+                 state: BaseOperatorState,
+                 registered_operators: dict[OperatorPartition, Operator],
                  worker_id: int,
                  kafka_url: str,
                  epoch_interval_ms: int,
                  sequence_max_size: int):
         self.worker_id = worker_id
         self.sequencer = sequencer
+        self.state = state
+        self.registered_operators = registered_operators
         self.networking = networking
         self.kafka_url = kafka_url
         self.epoch_interval_ms = epoch_interval_ms
         self.sequence_max_size = sequence_max_size
+        self.send_message_tasks: list[typing.Coroutine] = []
 
         self.started: asyncio.Event = asyncio.Event()
 
@@ -58,12 +68,38 @@ class StyxKafkaIngress(BaseIngress):
         if message_type == MessageType.ClientMsg:
             message = self.networking.decode_message(msg.value)
             operator_name, key, fun_name, params, partition = message
-            run_func_payload: RunFuncPayload = RunFuncPayload(request_id=msg.key, key=key, timestamp=msg.timestamp,
+            run_func_payload: RunFuncPayload = RunFuncPayload(request_id=msg.key, key=key,
                                                               operator_name=operator_name, partition=partition,
                                                               function_name=fun_name, kafka_offset=msg.offset,
-                                                              params=params)
-            logging.info(f'SEQ FROM KAFKA: {run_func_payload.function_name} {run_func_payload.key}')
-            self.sequencer.sequence(run_func_payload)
+                                                              params=params, kafka_ingress_partition=msg.partition)
+            if key is None or self.state.exists(key, operator_name, partition):
+                # Message received in the correct partition (Normal operation)
+                logging.debug("Message received in the correct partition (Normal operation)")
+                self.sequencer.sequence(run_func_payload)
+            elif ((true_partition := self.registered_operators[(operator_name, msg.partition)].which_partition(key))
+                  == partition):
+                logging.debug("Message received in the correct partition, but it was an insert operation")
+                # Message received in the correct partition, but it was an insert operation (didn't exist in the state)
+                self.sequencer.sequence(run_func_payload)
+            else:
+                # In flight message during migration, currently the state belongs to another partition
+                dns = self.registered_operators[(operator_name, msg.partition)].dns
+                operator_host = dns[operator_name][true_partition][0]
+                operator_port = dns[operator_name][true_partition][2]
+                if self.networking.in_the_same_network(operator_host, operator_port):
+                    run_func_payload = RunFuncPayload(request_id=msg.key, key=key,
+                                                      operator_name=operator_name, partition=true_partition,
+                                                      function_name=fun_name, params=params,
+                                                      kafka_ingress_partition=partition)
+                    self.sequencer.sequence(run_func_payload)
+                else:
+                    payload = (msg.key, operator_name, fun_name,
+                               key, true_partition, msg.partition, msg.timestamp, msg.offset, partition, params)
+                    self.send_message_tasks.append(self.networking.send_message(operator_host,
+                                                                                operator_port,
+                                                                                msg=payload,
+                                                                                msg_type=MessageType.WrongPartitionRequest,
+                                                                                serializer=Serializer.MSGPACK))
         else:
             logging.error(f"Invalid message type: {message_type} passed to KAFKA")
 
@@ -101,6 +137,9 @@ class StyxKafkaIngress(BaseIngress):
                             messages = sorted(messages, key=lambda msg: msg.offset)
                             for message in messages:
                                 self.handle_message_from_kafka(message)
+                    if self.send_message_tasks:
+                        await asyncio.gather(*self.send_message_tasks)
+                        self.send_message_tasks = []
                     # end_seq = timer()
                     # self.sequencing_time += end_seq - start_seq
         finally:

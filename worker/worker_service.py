@@ -139,6 +139,10 @@ class Worker(object):
                                                            n_assigned_partitions=len(self.registered_operators))
                 (data, topic_partition_offsets, topic_partition_output_offsets, epoch,
                  t_counter) = self.async_snapshots.retrieve_snapshot(snapshot_id, self.registered_operators.keys())
+                topic_partition_offsets = {k: v for k, v in topic_partition_offsets.items()
+                                           if k in self.registered_operators}
+                topic_partition_output_offsets = {k: v for k, v in topic_partition_output_offsets.items()
+                                           if k in self.registered_operators}
                 self.attach_state_to_operators_after_snapshot(data)
 
                 request_id_to_t_id_map = await self.get_sequencer_assignments_before_failure(epoch)
@@ -173,7 +177,7 @@ class Worker(object):
                 logging.error(f"Worker Service: Non supported command message type: {message_type}")
 
     @staticmethod
-    async def get_sequencer_assignments_before_failure(epoch_at_snapshot: int) -> dict[bytes, int]:
+    async def get_sequencer_assignments_before_failure(epoch_at_snapshot: int) -> dict[bytes, int] | None:
         consumer = AIOKafkaConsumer(bootstrap_servers=[KAFKA_URL],
                                     enable_auto_commit=False,
                                     auto_offset_reset="earliest")

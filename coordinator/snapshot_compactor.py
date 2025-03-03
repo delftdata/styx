@@ -48,6 +48,7 @@ def compact_deltas(minio_client, snapshot_files, max_snap_id):
     logging.warning(f"Compacting sequencer snapshots: {sequencer_snapshots}")
 
     # Sequencer
+    sequencer_snapshots_to_delete: list[str] = []
     if len(sequencer_snapshots) > 1:
         # only makes sense to compact if we have more than 1 files
         latest_sequencer_snapshot = sequencer_snapshots.pop()
@@ -55,17 +56,14 @@ def compact_deltas(minio_client, snapshot_files, max_snap_id):
         # the last becomes the first
         minio_client.put_object(SNAPSHOT_BUCKET_NAME, "sequencer/0.bin",
                                 io.BytesIO(last_sequencer_data), len(last_sequencer_data))
+        sequencer_snapshots_to_delete = [s_sn for _, s_sn in sequencer_snapshots if s_sn != "sequencer/0.bin"]
     # Partition Data
     data: dict[OperatorPartition, KVPairs] = {}
-    topic_partition_offsets: dict[OperatorPartition, int] = {}
-    topic_partition_output_offsets: dict[OperatorPartition, int] = {}
     snapshots_to_delete: list[str] = []
     for operator_partition, sn_info in snapshots_per_operator_partition.items():
         # The snapshots must be sorted
-        input_offset: int = -1
-        output_offset: int = -1
         for sn_id, sn_name in sn_info:
-            input_offset, output_offset, partition_data = msgpack_deserialization(
+            partition_data = msgpack_deserialization(
                 minio_client.get_object(SNAPSHOT_BUCKET_NAME, sn_name).data
             )
             if operator_partition in data:
@@ -74,25 +72,23 @@ def compact_deltas(minio_client, snapshot_files, max_snap_id):
                     data[operator_partition].update(partition_data)
             else:
                 data[operator_partition] = partition_data
-        topic_partition_offsets[operator_partition] = input_offset
-        topic_partition_output_offsets[operator_partition] = output_offset
 
     for operator_partition, partition_data in data.items():
         operator_name, partition = operator_partition
-        sn_data: bytes = msgpack_serialization((topic_partition_offsets[operator_partition],
-                                                topic_partition_output_offsets[operator_partition],
-                                                partition_data))
+        sn_data: bytes = msgpack_serialization(partition_data)
         snapshot_name: str = f"data/{operator_name}/{partition}/0.bin"
         # Store the primary snapshot after compaction
         minio_client.put_object(SNAPSHOT_BUCKET_NAME, snapshot_name, io.BytesIO(sn_data), len(sn_data))
 
     # Cleanup the compacted deltas
-    cleanup_compacted_files(minio_client, sequencer_snapshots, snapshots_to_delete)
+    logging.warning(f"Deleting data snapshots: {snapshots_to_delete}")
+    logging.warning(f"Deleting sequencer snapshots: {sequencer_snapshots_to_delete}")
+    cleanup_compacted_files(minio_client, sequencer_snapshots_to_delete, snapshots_to_delete)
 
 
 def cleanup_compacted_files(minio_client, sequencer_files_to_remove, data_files_to_remove):
     for snapshot_to_delete in sequencer_files_to_remove:
-        minio_client.remove_object(bucket_name=SNAPSHOT_BUCKET_NAME, object_name=snapshot_to_delete[1])
+        minio_client.remove_object(bucket_name=SNAPSHOT_BUCKET_NAME, object_name=snapshot_to_delete)
     for snapshot_to_delete in data_files_to_remove:
         minio_client.remove_object(bucket_name=SNAPSHOT_BUCKET_NAME, object_name=snapshot_to_delete)
 

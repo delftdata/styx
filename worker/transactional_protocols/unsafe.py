@@ -139,7 +139,7 @@ class UnsafeProtocol(BaseTransactionalProtocol):
                 logging.info('CALLED RUN FUN FROM PEER')
                 message = self.networking.decode_message(data)
                 t_id, request_id, operator_name, function_name, key, partition, timestamp, params, ack = message
-                payload = RunFuncPayload(request_id=request_id, key=key, timestamp=timestamp,
+                payload = RunFuncPayload(request_id=request_id, key=key,
                                          operator_name=operator_name, partition=partition,
                                          function_name=function_name, params=params, ack_payload=ack)
                 self.function_task_scheduler.create_task(
@@ -152,9 +152,9 @@ class UnsafeProtocol(BaseTransactionalProtocol):
                 logging.info('CALLED RUN FUN RQ RS FROM PEER')
                 message = self.networking.decode_message(data)
                 t_id, request_id, operator_name, function_name, key, partition, timestamp, params = message
-                payload = RunFuncPayload(request_id=request_id, key=key, timestamp=timestamp,
+                payload = RunFuncPayload(request_id=request_id, key=key,
                                          operator_name=operator_name, partition=partition,
-                                         function_name=function_name, params=params, response_socket=resp_adr)
+                                         function_name=function_name, params=params)
                 self.function_task_scheduler.create_task(
                     self.run_function(
                         t_id,

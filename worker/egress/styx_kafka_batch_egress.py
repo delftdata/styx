@@ -133,6 +133,10 @@ class StyxKafkaBatchEgress(BaseEgress):
             logging.warning(f'Reading from output from: {self.topic_partition_output_offsets} + 1 to {current_offsets}')
             all_partitions_done: dict[TopicPartition, bool] = {topic_partition: False
                                                                for topic_partition in output_topic_partitions}
+            for topic_partition, current_offset in current_offsets.items():
+                if (current_offset == self.topic_partition_output_offsets[(topic_partition.topic[:-5],
+                                                                           topic_partition.partition)] + 1):
+                    all_partitions_done[topic_partition] = True
             while not all(partition_is_done for partition_is_done in all_partitions_done.values()):
                 result = await kafka_output_consumer.getmany(timeout_ms=EPOCH_INTERVAL_MS)
                 for _, messages in result.items():

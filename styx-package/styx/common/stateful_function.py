@@ -25,7 +25,6 @@ class StatefulFunction(Function):
                  operator_name: str,
                  operator_state: State,
                  networking: NetworkingManager,
-                 timestamp: int,
                  dns: dict[str, dict[int, tuple[str, int, int]]],
                  t_id: int,
                  request_id: bytes,
@@ -37,7 +36,6 @@ class StatefulFunction(Function):
         self.__operator_name = operator_name
         self.__state: State = operator_state
         self.__networking: NetworkingManager = networking
-        self.__timestamp: int = timestamp
         self.__dns: dict[str, dict[int, tuple[str, int, int]]] = dns
         self.__t_id: int = t_id
         self.__request_id: bytes = request_id
@@ -151,7 +149,6 @@ class StatefulFunction(Function):
             if is_local:
                 payload = RunFuncPayload(request_id=self.__request_id,
                                          key=key,
-                                         timestamp=self.__timestamp,
                                          operator_name=operator_name,
                                          partition=partition,
                                          function_name=function_name,
@@ -223,7 +220,6 @@ class StatefulFunction(Function):
                        function_name,  # __FUN_NAME__
                        key,  # __KEY__
                        partition,  # __PARTITION__
-                       self.__timestamp,  # __TIMESTAMP__
                        self.__fallback_enabled,
                        params)  # __PARAMS__
             if ack_payload is not None:

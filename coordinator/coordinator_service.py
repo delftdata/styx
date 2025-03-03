@@ -44,7 +44,11 @@ class CoordinatorService(object):
     def __init__(self):
         self.networking = NetworkingManager(SERVER_PORT)
         self.protocol_networking = NetworkingManager(PROTOCOL_PORT, size=4, mode=MessagingMode.PROTOCOL_PROTOCOL)
-        self.coordinator = Coordinator(self.networking)
+        self.minio_client: Minio = Minio(
+            MINIO_URL, access_key=MINIO_ACCESS_KEY,
+            secret_key=MINIO_SECRET_KEY, secure=False
+        )
+        self.coordinator = Coordinator(self.networking,self.minio_client)
         self.aio_task_scheduler = AIOTaskScheduler()
 
         self.puller_task: asyncio.Task = ...
@@ -90,13 +94,18 @@ class CoordinatorService(object):
                 logging.warning(f"Worker registered {worker_ip}:{worker_port} with id {worker_id}")
             case MessageType.SnapID:
                 # Get snap id from worker
-                worker_id, snapshot_id, start, end = self.networking.decode_message(data)
-                self.coordinator.register_snapshot(worker_id, snapshot_id, pool)
+                (worker_id, snapshot_id, start, end,
+                 partial_input_offsets, partial_output_offsets,
+                 epoch_counter, t_counter) = self.networking.decode_message(data)
                 logging.warning(f'Worker: {worker_id} | '
                                 f'Completed snapshot: {snapshot_id} | '
                                 f'started at: {start} | '
                                 f'ended at: {end} | '
                                 f'took: {end - start}ms')
+                self.coordinator.register_snapshot(worker_id, snapshot_id,
+                                                   partial_input_offsets, partial_output_offsets,
+                                                   epoch_counter, t_counter,
+                                                   pool)
             case MessageType.Heartbeat:
                 # HEARTBEATS
                 (worker_id,) = self.networking.decode_message(data)
@@ -270,15 +279,10 @@ class CoordinatorService(object):
                                                                 serializer=Serializer.NONE))
             logging.warning('Snapshot marker sent')
 
-    @staticmethod
-    def init_snapshot_minio_bucket():
-        minio_client: Minio = Minio(
-            MINIO_URL, access_key=MINIO_ACCESS_KEY,
-            secret_key=MINIO_SECRET_KEY, secure=False
-        )
+    def init_snapshot_minio_bucket(self):
         try:
-            if not minio_client.bucket_exists(SNAPSHOT_BUCKET_NAME):
-                minio_client.make_bucket(SNAPSHOT_BUCKET_NAME)
+            if not self.minio_client.bucket_exists(SNAPSHOT_BUCKET_NAME):
+                self.minio_client.make_bucket(SNAPSHOT_BUCKET_NAME)
         except minio.error.S3Error:
             # BUCKET ALREADY EXISTS
             pass

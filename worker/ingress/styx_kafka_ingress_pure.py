@@ -56,7 +56,7 @@ class StyxKafkaIngressPure(BaseIngress):
         if message_type == MessageType.ClientMsg:
             message = self.networking.decode_message(msg.value)
             operator_name, key, fun_name, params, partition = message
-            run_func_payload: RunFuncPayload = RunFuncPayload(request_id=msg.key, key=key, timestamp=msg.timestamp,
+            run_func_payload: RunFuncPayload = RunFuncPayload(request_id=msg.key, key=key,
                                                               operator_name=operator_name, partition=partition,
                                                               function_name=fun_name, kafka_offset=msg.offset,
                                                               params=params)

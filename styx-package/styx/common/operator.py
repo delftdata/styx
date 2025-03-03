@@ -21,9 +21,21 @@ class Operator(BaseOperator):
         self.__dns: dict[str, dict[int, tuple[str, int, int]]] = {}
         self.__functions: dict[str, type] = {}
         self.__partitioner: HashPartitioner = HashPartitioner(n_partitions)
+        self.__is_shadow: bool = False
 
     def which_partition(self, key):
         return self.__partitioner.get_partition(key)
+
+    def make_shadow(self):
+        self.__is_shadow = True
+
+    @property
+    def is_shadow(self):
+        return self.__is_shadow
+
+    @property
+    def dns(self):
+        return self.__dns
 
     @property
     def functions(self):
@@ -33,7 +45,6 @@ class Operator(BaseOperator):
                            key,
                            t_id: int,
                            request_id: bytes,
-                           timestamp: int,
                            function_name: str,
                            partition: int,
                            ack_payload: tuple[str, int, int, str, list[int], int] | None,
@@ -41,7 +52,7 @@ class Operator(BaseOperator):
                            use_fallback_cache: bool,
                            params: tuple,
                            protocol: BaseTransactionalProtocol) -> bool:
-        f = self.__materialize_function(function_name, partition, key, t_id, request_id, timestamp,
+        f = self.__materialize_function(function_name, partition, key, t_id, request_id,
                                         fallback_mode, use_fallback_cache, protocol)
         params = (f, ) + tuple(params)
         logging.info(f'ack_payload: {ack_payload} RQ_ID: {request_id} TID: {t_id} '
@@ -115,7 +126,7 @@ class Operator(BaseOperator):
                                                  msg_type=MessageType.Ack,
                                                  serializer=Serializer.MSGPACK)
 
-    def __materialize_function(self, function_name, partition, key, t_id, request_id, timestamp,
+    def __materialize_function(self, function_name, partition, key, t_id, request_id,
                                fallback_mode, use_fallback_cache, protocol):
         f = StatefulFunction(key,
                              function_name,
@@ -123,7 +134,6 @@ class Operator(BaseOperator):
                              self.name,
                              self.__state,
                              self.__networking,
-                             timestamp,
                              self.__dns,
                              t_id,
                              request_id,

@@ -99,6 +99,8 @@ class AriaProtocol(BaseTransactionalProtocol):
 
         self.ingress: StyxKafkaIngress = StyxKafkaIngress(networking=self.networking,
                                                           sequencer=self.sequencer,
+                                                          state=self.local_state,
+                                                          registered_operators=self.registered_operators,
                                                           worker_id=self.id,
                                                           kafka_url=KAFKA_URL,
                                                           sequence_max_size=SEQUENCE_MAX_SIZE,
@@ -134,7 +136,8 @@ class AriaProtocol(BaseTransactionalProtocol):
             MessageType.AckCache: asyncio.Lock(),
             MessageType.ChainAbort: asyncio.Lock(),
             MessageType.Unlock: asyncio.Lock(),
-            MessageType.DeterministicReordering: asyncio.Lock()
+            MessageType.DeterministicReordering: asyncio.Lock(),
+            MessageType.WrongPartitionRequest: asyncio.Lock()
         }
 
         self.remote_wants_to_proceed: bool = False
@@ -143,6 +146,7 @@ class AriaProtocol(BaseTransactionalProtocol):
         self.snapshot_timer: float = -1.0
 
         self.started = asyncio.Event()
+        self.wait_responses_to_be_sent = asyncio.Event()
 
         # performance measurements
         # self.function_running_time = 0
@@ -191,7 +195,6 @@ class AriaProtocol(BaseTransactionalProtocol):
             payload.key,
             t_id,
             payload.request_id,
-            payload.timestamp,
             payload.function_name,
             payload.partition,
             payload.ack_payload,
@@ -209,7 +212,9 @@ class AriaProtocol(BaseTransactionalProtocol):
             self.snapshot_timer = timer()
             if InMemoryOperatorState.__name__ == self.local_state.__class__.__name__:
                 loop = asyncio.get_running_loop()
-                self.async_snapshots.start_snapshotting()
+                self.async_snapshots.start_snapshotting(msgpack.decode(msgpack.encode(self.topic_partition_offsets)),
+                                                        msgpack.decode(msgpack.encode(self.egress.topic_partition_output_offsets)),
+                                                        self.sequencer.epoch_counter, self.sequencer.t_counter)
                 data = self.local_state.get_data_for_snapshot()
                 for operator_partition in self.registered_operators.keys():
                     operator_name, partition = operator_partition
@@ -217,16 +222,8 @@ class AriaProtocol(BaseTransactionalProtocol):
                                          self.async_snapshots.store_snapshot,
                                          self.async_snapshots.snapshot_id,
                                          f"data/{operator_name}/{partition}/{self.async_snapshots.snapshot_id}.bin",
-                                         (msgpack.decode(msgpack.encode(self.topic_partition_offsets[operator_partition])),
-                                          msgpack.decode(msgpack.encode(self.egress.topic_partition_output_offsets[operator_partition])),
-                                          msgpack.decode(msgpack.encode(data[operator_partition])))
+                                         msgpack.decode(msgpack.encode(data[operator_partition]))
                                          ).add_done_callback(self.async_snapshots.snapshot_completed_callback)
-                loop.run_in_executor(pool,
-                                     self.async_snapshots.store_snapshot,
-                                     self.async_snapshots.snapshot_id,
-                                     f"sequencer/{self.async_snapshots.snapshot_id}.bin",
-                                     msgpack.decode(msgpack.encode((self.sequencer.epoch_counter, self.sequencer.t_counter)))
-                                     ).add_done_callback(self.async_snapshots.snapshot_completed_callback)
                 self.local_state.clear_delta_map()
             else:
                 logging.warning("Snapshot currently supported only for in-memory and incremental operator state")
@@ -246,8 +243,8 @@ class AriaProtocol(BaseTransactionalProtocol):
                 async with self.networking_locks[message_type]:
                     logging.info('CALLED RUN FUN FROM PEER')
                     (t_id, request_id, operator_name, function_name,
-                     key, partition, timestamp, fallback_enabled, params, ack) = self.networking.decode_message(data)
-                    payload = RunFuncPayload(request_id=request_id, key=key, timestamp=timestamp,
+                     key, partition, fallback_enabled, params, ack) = self.networking.decode_message(data)
+                    payload = RunFuncPayload(request_id=request_id, key=key,
                                              operator_name=operator_name, partition=partition,
                                              function_name=function_name, params=params, ack_payload=ack)
 
@@ -271,6 +268,16 @@ class AriaProtocol(BaseTransactionalProtocol):
                                 internal=True
                             )
                         )
+            case MessageType.WrongPartitionRequest:
+                async with self.networking_locks[message_type]:
+                    # During migration a message might arrive from a different partition
+                    (request_id, operator_name, function_name, key, partition, kafka_ingress_partition,
+                     kafka_offset, params) = self.networking.decode_message(data)
+                    payload = RunFuncPayload(request_id=request_id, key=key,
+                                             operator_name=operator_name, partition=partition,
+                                             function_name=function_name, params=params,
+                                             kafka_ingress_partition=kafka_ingress_partition)
+                    self.sequencer.sequence(payload)
             case MessageType.RunFunRqRsRemote:
                 logging.error('REQUEST RESPONSE HAS BEEN DEPRECATED')
             case MessageType.AriaCommit:
@@ -450,13 +457,16 @@ class AriaProtocol(BaseTransactionalProtocol):
                             # if not we should modify the sequencer
                             if sequenced_item.t_id not in self.concurrency_aborts_everywhere:
                                 payload = sequenced_item.payload
-                                self.topic_partition_offsets[(payload.operator_name, payload.partition)] = (
-                                    max(
-                                        payload.kafka_offset,
-                                        self.topic_partition_offsets[(payload.operator_name, payload.partition)]
+                                tpo_key = (payload.operator_name, payload.kafka_ingress_partition)
+                                if tpo_key in self.topic_partition_offsets:
+                                    self.topic_partition_offsets[tpo_key] = (
+                                        max(
+                                            payload.kafka_offset,
+                                            self.topic_partition_offsets[tpo_key]
+                                        )
                                     )
-                                )
-
+                                else:
+                                    self.topic_partition_offsets[tpo_key] = payload.kafka_offset
                         # Cleanup
                         # start_seq_incr = timer()
                         self.sequencer.increment_epoch(
@@ -487,6 +497,7 @@ class AriaProtocol(BaseTransactionalProtocol):
                         #                 f'sync_time: {self.sync_time}\n'
                         #                 f'snapshot_time: {self.snapshot_time}\n'
                         #                 f'fallback_time: {self.fallback_time}\n')
+                        await self.wait_responses_to_be_sent.wait()
                         self.cleanup_after_epoch()
                         # start_sn = timer()
                         self.take_snapshot(pool)
@@ -499,6 +510,7 @@ class AriaProtocol(BaseTransactionalProtocol):
     def cleanup_after_epoch(self):
         self.concurrency_aborts_everywhere.clear()
         self.t_ids_to_reschedule.clear()
+        self.wait_responses_to_be_sent.clear()
         self.networking.cleanup_after_epoch()
         self.local_state.cleanup()
         self.waiting_on_transactions.clear()
@@ -637,6 +649,8 @@ class AriaProtocol(BaseTransactionalProtocol):
                                        operator_name=operator_name,
                                        partition=partition)
         await self.egress.send_batch()
+        self.wait_responses_to_be_sent.set()
+
 
     async def fallback_unlock(self, t_id: int, success: bool):
         # Release the locks for local
