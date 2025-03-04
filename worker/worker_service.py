@@ -28,6 +28,7 @@ from worker.operator_state.aria.in_memory_state import InMemoryOperatorState
 from worker.operator_state.stateless import Stateless
 from worker.fault_tolerance.async_snapshots import AsyncSnapshotsMinio
 from worker.transactional_protocols.aria import AriaProtocol
+from worker.util.container_monitor import ContainerMonitor
 
 SERVER_PORT: int = 5000
 PROTOCOL_PORT: int = 6000
@@ -330,12 +331,14 @@ class Worker(object):
     @staticmethod
     async def heartbeat_coroutine(worker_id: int):
         networking = NetworkingManager(None, size=1, mode=MessagingMode.HEARTBEAT)
+        monitor: ContainerMonitor = ContainerMonitor()
         sleep_in_seconds = HEARTBEAT_INTERVAL / 1000
         while True:
             await asyncio.sleep(sleep_in_seconds)
+            cpu_perc, mem_util, rx_net, tx_net = monitor.get_stats()
             await networking.send_message(
                 DISCOVERY_HOST, DISCOVERY_PORT,
-                msg=(worker_id, ),
+                msg=(worker_id, cpu_perc, mem_util, rx_net, tx_net),
                 msg_type=MessageType.Heartbeat,
                 serializer=Serializer.MSGPACK
             )

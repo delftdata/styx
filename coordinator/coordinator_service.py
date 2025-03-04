@@ -10,6 +10,7 @@ from timeit import default_timer as timer
 import uvloop
 from minio import Minio
 import minio.error
+from prometheus_client import start_http_server, Gauge
 
 from styx.common.logging import logging
 from styx.common.message_types import MessageType
@@ -73,6 +74,20 @@ class CoordinatorService(object):
 
         self.aria_metadata: AriaSyncMetadata = ...
 
+        self.metrics_server = start_http_server(8000)
+        self.cpu_usage_gauge = Gauge("container_cpu_usage_percent",
+                                     "CPU usage percentage",
+                                     ["instance"])
+        self.memory_usage_gauge = Gauge("container_memory_usage_mb",
+                                        "Memory usage in MB",
+                                        ["instance"])
+        self.network_rx_gauge = Gauge("container_network_rx_kb",
+                                      "Network received KB",
+                                      ["instance"])
+        self.network_tx_gauge = Gauge("container_network_tx_kb",
+                                      "Network transmitted KB",
+                                      ["instance"])
+
     # Refactoring candidate
     async def coordinator_controller(self, transport, data, pool: concurrent.futures.ProcessPoolExecutor):
         message_type: int = self.networking.get_msg_type(data)
@@ -108,7 +123,11 @@ class CoordinatorService(object):
                                                    pool)
             case MessageType.Heartbeat:
                 # HEARTBEATS
-                (worker_id,) = self.networking.decode_message(data)
+                (worker_id, cpu_perc, mem_util, rx_net, tx_net) = self.networking.decode_message(data)
+                self.cpu_usage_gauge.labels(instance=worker_id).set(cpu_perc) # %
+                self.memory_usage_gauge.labels(instance=worker_id).set(mem_util) # MB
+                self.network_rx_gauge.labels(instance=worker_id).set(rx_net) # KB
+                self.network_tx_gauge.labels(instance=worker_id).set(tx_net) # KB
                 heartbeat_rcv_time = timer()
                 logging.info(f'Heartbeat received from: {worker_id} at time: {heartbeat_rcv_time}')
                 self.coordinator.register_worker_heartbeat(worker_id, heartbeat_rcv_time)
