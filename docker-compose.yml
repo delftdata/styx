@@ -15,6 +15,18 @@ services:
       - HEARTBEAT_LIMIT=5000
       - HEARTBEAT_CHECK_INTERVAL=500
 
+  grafana:
+    image: grafana/grafana:11.5.2-ubuntu
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning  # Auto-config
+      - ./grafana/dashboards:/etc/grafana/dashboards      # Load dashboards
+
   worker:
     build:
       context: .
@@ -34,3 +46,6 @@ services:
 #          cpus: '2'
 #        reservations:
 #          cpus: '2'
+
+volumes:
+  grafana_data:

@@ -74,20 +74,6 @@ class CoordinatorService(object):
 
         self.aria_metadata: AriaSyncMetadata = ...
 
-        self.metrics_server = start_http_server(8000)
-        self.cpu_usage_gauge = Gauge("container_cpu_usage_percent",
-                                     "CPU usage percentage",
-                                     ["instance"])
-        self.memory_usage_gauge = Gauge("container_memory_usage_mb",
-                                        "Memory usage in MB",
-                                        ["instance"])
-        self.network_rx_gauge = Gauge("container_network_rx_kb",
-                                      "Network received KB",
-                                      ["instance"])
-        self.network_tx_gauge = Gauge("container_network_tx_kb",
-                                      "Network transmitted KB",
-                                      ["instance"])
-
     # Refactoring candidate
     async def coordinator_controller(self, transport, data, pool: concurrent.futures.ProcessPoolExecutor):
         message_type: int = self.networking.get_msg_type(data)
@@ -112,11 +98,13 @@ class CoordinatorService(object):
                 (worker_id, snapshot_id, start, end,
                  partial_input_offsets, partial_output_offsets,
                  epoch_counter, t_counter) = self.networking.decode_message(data)
+                snapshot_time = end - start
+                self.snapshotting_gauge.labels(instance=worker_id).set(snapshot_time)
                 logging.warning(f'Worker: {worker_id} | '
                                 f'Completed snapshot: {snapshot_id} | '
                                 f'started at: {start} | '
                                 f'ended at: {end} | '
-                                f'took: {end - start}ms')
+                                f'took: {snapshot_time}ms')
                 self.coordinator.register_snapshot(worker_id, snapshot_id,
                                                    partial_input_offsets, partial_output_offsets,
                                                    epoch_counter, t_counter,
@@ -172,6 +160,23 @@ class CoordinatorService(object):
                                                     Serializer.PICKLE)
                     await self.aria_metadata.cleanup()
             case MessageType.SyncCleanup | MessageType.AriaFallbackStart | MessageType.AriaFallbackDone:
+                if message_type == MessageType.SyncCleanup:
+                    (worker_id, epoch_throughput, epoch_latency,
+                     local_abort_rate, wal_time, func_time, chain_ack_time,
+                     sync_time, conflict_res_time, commit_time,
+                     fallback_time, snap_time) = self.protocol_networking.decode_message(data)
+                    self.epoch_throughput_gauge.labels(instance=worker_id).set(epoch_throughput)
+                    self.epoch_latency_gauge.labels(instance=worker_id).set(epoch_latency)
+                    self.epoch_abort_gauge.labels(instance=worker_id).set(local_abort_rate)
+                    self.wal_time_gauge.labels(instance=worker_id).set(wal_time)
+                    self.func_time_gauge.labels(instance=worker_id).set(func_time)
+                    self.chain_time_gauge.labels(instance=worker_id).set(chain_ack_time)
+                    self.sync_time_gauge.labels(instance=worker_id).set(sync_time)
+                    self.conflict_res_time_gauge.labels(instance=worker_id).set(conflict_res_time)
+                    self.commit_time_gauge.labels(instance=worker_id).set(commit_time)
+                    self.fallback_time_gauge.labels(instance=worker_id).set(fallback_time)
+                    self.snap_time_gauge.labels(instance=worker_id).set(snap_time)
+
                 sync_complete: bool = await self.aria_metadata.set_empty_sync_done()
                 if sync_complete:
                     await self.finalize_worker_sync(MessageType(message_type),
@@ -306,8 +311,61 @@ class CoordinatorService(object):
             # BUCKET ALREADY EXISTS
             pass
 
+    def init_prometheus(self):
+        self.metrics_server = start_http_server(8000)
+        self.cpu_usage_gauge = Gauge("worker_cpu_usage_percent",
+                                     "CPU usage percentage",
+                                     ["instance"])
+        self.memory_usage_gauge = Gauge("worker_memory_usage_mb",
+                                        "Memory usage in MB",
+                                        ["instance"])
+        self.network_rx_gauge = Gauge("worker_network_rx_kb",
+                                      "Network received KB",
+                                      ["instance"])
+        self.network_tx_gauge = Gauge("worker_network_tx_kb",
+                                      "Network transmitted KB",
+                                      ["instance"])
+        self.epoch_latency_gauge = Gauge("worker_epoch_latency_ms",
+                                         "Epoch Latency (ms)",
+                                         ["instance"])
+        self.epoch_throughput_gauge = Gauge("worker_epoch_throughput_tps",
+                                            "Epoch Throughput (transactions per second)",
+                                            ["instance"])
+        self.epoch_abort_gauge = Gauge("worker_abort_percent",
+                                            "Epoch Concurrency Abort percentage",
+                                            ["instance"])
+        self.wal_time_gauge = Gauge("worker_wal_time",
+                                            "Time Spend in the WAL",
+                                            ["instance"])
+        self.func_time_gauge = Gauge("worker_func_time",
+                                            "Time Spend in the call graph discovery",
+                                            ["instance"])
+        self.chain_time_gauge = Gauge("worker_chain_ack_time",
+                                            "Time Spend waiting for acknowledgments",
+                                            ["instance"])
+        self.sync_time_gauge = Gauge("worker_sync_time",
+                                            "Time Spend waiting for synchronization",
+                                            ["instance"])
+        self.conflict_res_time_gauge = Gauge("worker_conflict_res_time",
+                                            "Time Spend in the conflict resolution",
+                                            ["instance"])
+        self.commit_time_gauge = Gauge("worker_commit_time",
+                                            "Time Spend to commit in the lock free phase",
+                                            ["instance"])
+        self.fallback_time_gauge = Gauge("worker_fallback_time",
+                                            "Time Spend in lock based commit phase",
+                                            ["instance"])
+        self.snap_time_gauge = Gauge("worker_snap_time",
+                                            "Time Spend in the snapshotting phase",
+                                            ["instance"])
+        self.snapshotting_gauge = Gauge("worker_total_snapshotting_time_ms",
+                                            "Snapshotting time (ms)",
+                                            ["instance"])
+
+
     async def main(self):
         self.init_snapshot_minio_bucket()
+        self.init_prometheus()
         self.aio_task_scheduler.create_task(self.heartbeat_monitor_coroutine())
         self.start_networking_tasks()
         if PROTOCOL == Protocols.Unsafe or PROTOCOL == Protocols.MVCC:

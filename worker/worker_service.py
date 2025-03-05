@@ -329,9 +329,9 @@ class Worker(object):
         self.networking.set_worker_id(self.id)
 
     @staticmethod
-    async def heartbeat_coroutine(worker_id: int):
+    async def heartbeat_coroutine(worker_id: int, worker_pid: int):
         networking = NetworkingManager(None, size=1, mode=MessagingMode.HEARTBEAT)
-        monitor: ContainerMonitor = ContainerMonitor()
+        monitor: ContainerMonitor = ContainerMonitor(worker_pid)
         sleep_in_seconds = HEARTBEAT_INTERVAL / 1000
         while True:
             await asyncio.sleep(sleep_in_seconds)
@@ -343,13 +343,15 @@ class Worker(object):
                 serializer=Serializer.MSGPACK
             )
 
-    def start_heartbeat_process(self, worker_id: int):
-        uvloop.run(self.heartbeat_coroutine(worker_id))
+    def start_heartbeat_process(self, worker_id: int, worker_pid: int):
+        uvloop.run(self.heartbeat_coroutine(worker_id, worker_pid))
 
     async def main(self):
         try:
             await self.register_to_coordinator()
-            self.heartbeat_proc = multiprocessing.Process(target=self.start_heartbeat_process, args=(self.id,))
+            worker_pid: int = os.getpid()
+            self.heartbeat_proc = multiprocessing.Process(target=self.start_heartbeat_process, args=(self.id,
+                                                                                                     worker_pid))
             self.heartbeat_proc.start()
             self.start_networking_tasks()
             self.protocol_task = asyncio.create_task(self.start_protocol_tcp_service())
