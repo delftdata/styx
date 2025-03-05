@@ -3,8 +3,8 @@ uvloop==0.21.0
 msgspec==0.19.0
 cloudpickle==3.1.1
 cityhash==0.4.7
-# monitoring service
-# psutil==5.9.2
+# monitoring
+psutil==7.0.0
 # Kafka
 aiokafka==0.12.0
 # snapshots

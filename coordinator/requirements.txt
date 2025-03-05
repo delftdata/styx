@@ -4,7 +4,7 @@ msgspec==0.19.0
 cloudpickle==3.1.1
 cityhash==0.4.7
 # monitoring service
-# psutil==5.9.1
+prometheus-client==0.21.1
 # kafka
 confluent-kafka==2.8.0
 # snapshots
