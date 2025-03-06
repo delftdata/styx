@@ -169,10 +169,10 @@ class CoordinatorService(object):
                     self.epoch_latency_gauge.labels(instance=worker_id).set(epoch_latency)
                     self.epoch_abort_gauge.labels(instance=worker_id).set(local_abort_rate)
                     self.latency_breakdown_gauge.labels(instance=worker_id, component="WAL").set(wal_time)
-                    self.latency_breakdown_gauge.labels(instance=worker_id, component="1rst Run").set(func_time)
+                    self.latency_breakdown_gauge.labels(instance=worker_id, component="1st Run").set(func_time)
                     self.latency_breakdown_gauge.labels(instance=worker_id, component="Chain Acks").set(chain_ack_time)
                     self.latency_breakdown_gauge.labels(instance=worker_id, component="SYNC").set(sync_time)
-                    self.latency_breakdown_gauge.labels(instance=worker_id, component="Cnflct Res").set(conflict_res_time)
+                    self.latency_breakdown_gauge.labels(instance=worker_id, component="Conflict Res").set(conflict_res_time)
                     self.latency_breakdown_gauge.labels(instance=worker_id, component="CMT").set(commit_time)
                     self.latency_breakdown_gauge.labels(instance=worker_id, component="FB").set(fallback_time)
                     self.latency_breakdown_gauge.labels(instance=worker_id, component="SN").set(snap_time)
@@ -340,7 +340,6 @@ class CoordinatorService(object):
         self.snapshotting_gauge = Gauge("worker_total_snapshotting_time_ms",
                                             "Snapshotting time (ms)",
                                             ["instance"])
-
 
     async def main(self):
         self.init_snapshot_minio_bucket()

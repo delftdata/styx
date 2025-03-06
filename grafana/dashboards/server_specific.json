@@ -95,7 +95,7 @@
         "pluginVersion": "11.5.0-pre",
         "targets": [
           {
-            "expr": "container_cpu_usage_percent{exported_instance=~\"$Server\"}",
+            "expr": "worker_cpu_usage_percent{exported_instance=~\"$Server\"}",
             "refId": "A"
           }
         ],
@@ -162,7 +162,7 @@
         "pluginVersion": "11.5.0-pre",
         "targets": [
           {
-            "expr": "container_memory_usage_mb{exported_instance=~\"$Server\"} * 1000000",
+            "expr": "worker_memory_usage_mb{exported_instance=~\"$Server\"} * 1000000",
             "refId": "A"
           }
         ],
@@ -229,7 +229,7 @@
         "pluginVersion": "11.5.0-pre",
         "targets": [
           {
-            "expr": "container_network_rx_kb{exported_instance=~\"$Server\"} * 1000",
+            "expr": "worker_network_rx_kb{exported_instance=~\"$Server\"} * 1000",
             "refId": "A"
           }
         ],
@@ -296,7 +296,7 @@
         "pluginVersion": "11.5.0-pre",
         "targets": [
           {
-            "expr": "container_network_tx_kb{exported_instance=~\"$Server\"} * 1000",
+            "expr": "worker_network_tx_kb{exported_instance=~\"$Server\"} * 1000",
             "refId": "A"
           }
         ],
@@ -329,7 +329,7 @@
                 }
               ]
             },
-            "unit": "none"
+            "unit": "short"
           },
           "overrides": []
         },
@@ -523,7 +523,7 @@
         "id": 8,
         "type": "piechart",
         "title": "Latency Breakdown",
-        "description": "A breakdown of the transaction latency by component (using the CPU Util of different cores as a dummy).",
+        "description": "A breakdown of the transaction latency by component.",
         "gridPos": {
           "h": 10,
           "w": 8,
@@ -551,8 +551,8 @@
           {
             "refId": "A",
             "editorMode": "code",
-            "expr": "(rate(node_cpu_seconds_total{cpu=~\"$Server\", mode=\"idle\"}[1m])) * 100",
-            "legendFormat": "{{cpu}}",
+            "expr": "latency_breakdown{exported_instance=~\"$Server\"}",
+            "legendFormat": "{{component}}",
             "range": true
           }
         ],
@@ -657,22 +657,22 @@
       }
     ],
     "preload": false,
-    "refresh": "",
+    "refresh": "1s",
     "schemaVersion": 40,
     "tags": ["Styx", "Server"],
     "templating": {
       "list": [
         {
           "current": {
-            "text": "0",
-            "value": "0"
+            "text": "3",
+            "value": "3"
           },
-          "definition": "label_values(node_cpu_seconds_total,cpu)",
+          "definition": "label_values(worker_epoch_latency_ms,exported_instance)",
           "name": "Server",
           "options": [],
           "query": {
             "qryType": 1,
-            "query": "label_values(node_cpu_seconds_total,cpu)",
+            "query": "label_values(worker_epoch_latency_ms,exported_instance)",
             "refId": "PrometheusVariableQueryEditor-VariableQuery"
           },
           "refresh": 1,

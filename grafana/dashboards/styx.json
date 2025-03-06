@@ -95,7 +95,7 @@
         "pluginVersion": "11.5.0-pre",
         "targets": [
           {
-            "expr": "avg by(instance) (container_cpu_usage_percent)",
+            "expr": "avg by(instance) (worker_cpu_usage_percent)",
             "refId": "A"
           }
         ],
@@ -162,7 +162,7 @@
         "pluginVersion": "11.5.0-pre",
         "targets": [
           {
-            "expr": "avg by(instance) (container_memory_usage_mb) * 1000000",
+            "expr": "avg by(instance) (worker_memory_usage_mb) * 1000000",
             "refId": "A"
           }
         ],
@@ -229,7 +229,7 @@
         "pluginVersion": "11.5.0-pre",
         "targets": [
           {
-            "expr": "sum(container_network_rx_kb) * 1000",
+            "expr": "sum(worker_network_rx_kb) * 1000",
             "refId": "A"
           }
         ],
@@ -296,7 +296,7 @@
         "pluginVersion": "11.5.0-pre",
         "targets": [
           {
-            "expr": "sum(container_network_tx_kb) * 1000",
+            "expr": "sum(worker_network_tx_kb) * 1000",
             "refId": "A"
           }
         ],
@@ -329,7 +329,7 @@
                 }
               ]
             },
-            "unit": "none"
+            "unit": "short"
           },
           "overrides": []
         },
@@ -523,7 +523,7 @@
         "id": 8,
         "type": "piechart",
         "title": "Latency Breakdown",
-        "description": "A breakdown of the transaction latency by component (using the CPU Util of different cores as a dummy).",
+        "description": "A breakdown of the transaction latency by component.",
         "gridPos": {
           "h": 10,
           "w": 8,
@@ -551,7 +551,7 @@
           {
             "refId": "A",
             "editorMode": "code",
-            "expr": "(rate(node_cpu_seconds_total{mode=\"idle\"}[1m])) * 100",
+            "expr": "avg(latency_breakdown) by (component)",
             "legendFormat": "{{cpu}}",
             "range": true
           }
@@ -734,7 +734,7 @@
       }
     ],
     "preload": false,
-    "refresh": "30s",
+    "refresh": "1s",
     "schemaVersion": 40,
     "tags": ["Styx", "General"],
     "templating": {
