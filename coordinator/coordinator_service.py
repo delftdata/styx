@@ -168,14 +168,14 @@ class CoordinatorService(object):
                     self.epoch_throughput_gauge.labels(instance=worker_id).set(epoch_throughput)
                     self.epoch_latency_gauge.labels(instance=worker_id).set(epoch_latency)
                     self.epoch_abort_gauge.labels(instance=worker_id).set(local_abort_rate)
-                    self.wal_time_gauge.labels(instance=worker_id).set(wal_time)
-                    self.func_time_gauge.labels(instance=worker_id).set(func_time)
-                    self.chain_time_gauge.labels(instance=worker_id).set(chain_ack_time)
-                    self.sync_time_gauge.labels(instance=worker_id).set(sync_time)
-                    self.conflict_res_time_gauge.labels(instance=worker_id).set(conflict_res_time)
-                    self.commit_time_gauge.labels(instance=worker_id).set(commit_time)
-                    self.fallback_time_gauge.labels(instance=worker_id).set(fallback_time)
-                    self.snap_time_gauge.labels(instance=worker_id).set(snap_time)
+                    self.latency_breakdown_gauge.labels(instance=worker_id, component="WAL").set(wal_time)
+                    self.latency_breakdown_gauge.labels(instance=worker_id, component="1rst Run").set(func_time)
+                    self.latency_breakdown_gauge.labels(instance=worker_id, component="Chain Acks").set(chain_ack_time)
+                    self.latency_breakdown_gauge.labels(instance=worker_id, component="SYNC").set(sync_time)
+                    self.latency_breakdown_gauge.labels(instance=worker_id, component="Cnflct Res").set(conflict_res_time)
+                    self.latency_breakdown_gauge.labels(instance=worker_id, component="CMT").set(commit_time)
+                    self.latency_breakdown_gauge.labels(instance=worker_id, component="FB").set(fallback_time)
+                    self.latency_breakdown_gauge.labels(instance=worker_id, component="SN").set(snap_time)
 
                 sync_complete: bool = await self.aria_metadata.set_empty_sync_done()
                 if sync_complete:
@@ -334,30 +334,9 @@ class CoordinatorService(object):
         self.epoch_abort_gauge = Gauge("worker_abort_percent",
                                             "Epoch Concurrency Abort percentage",
                                             ["instance"])
-        self.wal_time_gauge = Gauge("worker_wal_time",
-                                            "Time Spend in the WAL",
-                                            ["instance"])
-        self.func_time_gauge = Gauge("worker_func_time",
-                                            "Time Spend in the call graph discovery",
-                                            ["instance"])
-        self.chain_time_gauge = Gauge("worker_chain_ack_time",
-                                            "Time Spend waiting for acknowledgments",
-                                            ["instance"])
-        self.sync_time_gauge = Gauge("worker_sync_time",
-                                            "Time Spend waiting for synchronization",
-                                            ["instance"])
-        self.conflict_res_time_gauge = Gauge("worker_conflict_res_time",
-                                            "Time Spend in the conflict resolution",
-                                            ["instance"])
-        self.commit_time_gauge = Gauge("worker_commit_time",
-                                            "Time Spend to commit in the lock free phase",
-                                            ["instance"])
-        self.fallback_time_gauge = Gauge("worker_fallback_time",
-                                            "Time Spend in lock based commit phase",
-                                            ["instance"])
-        self.snap_time_gauge = Gauge("worker_snap_time",
-                                            "Time Spend in the snapshotting phase",
-                                            ["instance"])
+        self.latency_breakdown_gauge = Gauge("latency_breakdown",
+                                             "Time Spent in different phases within the transactional protocol",
+                                             ["instance", "component"])
         self.snapshotting_gauge = Gauge("worker_total_snapshotting_time_ms",
                                             "Snapshotting time (ms)",
                                             ["instance"])
