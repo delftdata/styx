@@ -142,3 +142,7 @@ styx.sublime-project
 # Grafana files
 grafana.log
 grafana-enterprise-11.5.1.darwin-amd64.tar.gz
+
+!grafana/dashboards/styx.json
+!grafana/dashboards/server_specific.json
+!grafana/*
