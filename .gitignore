@@ -138,3 +138,7 @@ minio-volume
 demo/demo-tpc-c/tpcc-generator/tpcc-generator
 styx.sublime-workspace
 styx.sublime-project
+
+# Grafana files
+grafana.log
+grafana-enterprise-11.5.1.darwin-amd64.tar.gz

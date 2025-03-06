@@ -3,6 +3,13 @@ apiVersion: 1
 datasources:
   - name: Prometheus
     type: prometheus
-    access: proxy
+    access: direct
     url: http://coordinator:8000  # Matches your Prometheus inside the coordinator
+    isDefault: true
+    jsonData:
+      httpMethod: GET  # Explicitly set the HTTP method to GET
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://localhost:9090
     isDefault: true
