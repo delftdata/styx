@@ -229,7 +229,7 @@
         "pluginVersion": "11.5.0-pre",
         "targets": [
           {
-            "expr": "sum(worker_network_rx_kb) * 1000",
+            "expr": "sum(rate(worker_network_rx_kb[5s])) * 1000",
             "refId": "A"
           }
         ],
@@ -296,7 +296,7 @@
         "pluginVersion": "11.5.0-pre",
         "targets": [
           {
-            "expr": "sum(worker_network_tx_kb) * 1000",
+            "expr": "sum(rate(worker_network_tx_kb[5s])) * 1000",
             "refId": "A"
           }
         ],
@@ -363,7 +363,7 @@
         "pluginVersion": "11.5.0-pre",
         "targets": [
           {
-            "expr": "sum(worker_epoch_throughput_tps)",
+            "expr": "sum(rate(worker_epoch_throughput_tps[30s]))",
             "refId": "A"
           }
         ],
@@ -663,7 +663,6 @@
         "fieldConfig": {
           "defaults": {
             "min": 0,
-            "max": 5,
             "mappings": [],
             "thresholds": {
               "mode": "absolute",
@@ -674,11 +673,11 @@
                 },
                 {
                   "color": "orange",
-                  "value": 1
+                  "value": 1000
                 },
                 {
                   "color": "red",
-                  "value": 4
+                  "value": 1500
                 }
               ]
             },
@@ -723,12 +722,12 @@
         "pluginVersion": "11.5.0-pre",
         "targets": [
           {
-            "expr": "node_cpu_seconds_total{mode=\"idle\"} / 100000",
+            "expr": "time_since_last_heartbeat",
             "refId": "A",
-            "legendFormat": "{{cpu}}"
+            "legendFormat": "{{exported_instance}}"
           }
         ],
-        "title": "Heartbeat Latency",
+        "title": "Time since last heartbeat (ms)",
         "description": "Time since the last heartbeat for each worker",
         "type": "bargauge"
       }

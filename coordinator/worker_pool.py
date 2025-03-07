@@ -75,14 +75,17 @@ class WorkerPool(object):
                             f"that does not exist {self._worker_queue_idx}")
 
     def check_heartbeats(self,
-                         heartbeat_check_time: float) -> set[Worker]:
+                         heartbeat_check_time: float) -> tuple[set[Worker], dict[int, float]]:
         """Checks active workers whether one failed"""
         failed_workers: set[Worker] = set()
+        heartbeats_per_worker: dict[int, float] = {}
         for _, _, worker in self._queue:
             if worker == self._tombstone:
                 # If it is a dead worker continue
                 continue
-            if (heartbeat_check_time - worker.previous_heartbeat) * 1000 > HEARTBEAT_LIMIT:
+            time_since_last_heartbeat_ms = (heartbeat_check_time - worker.previous_heartbeat) * 1000
+            heartbeats_per_worker[worker.worker_id] = time_since_last_heartbeat_ms
+            if time_since_last_heartbeat_ms > HEARTBEAT_LIMIT:
                 logging.error(f"Worker: {worker.worker_id} failed to register a heartbeat")
                 # Worker is considered dead
                 worker = self.remove_worker(worker.worker_id)
@@ -91,7 +94,7 @@ class WorkerPool(object):
                     failed_workers.add(worker)
                     self.dead_worker_ids.append(worker.worker_id)
                     self.orphaned_operator_assignments |= worker.assigned_operators
-        return failed_workers
+        return failed_workers, heartbeats_per_worker
 
     async def initiate_recovery(self,
                                 failed_workers: set[Worker]):

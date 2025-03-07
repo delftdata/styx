@@ -229,7 +229,7 @@
         "pluginVersion": "11.5.0-pre",
         "targets": [
           {
-            "expr": "worker_network_rx_kb{exported_instance=~\"$Server\"} * 1000",
+            "expr": "rate(worker_network_rx_kb{exported_instance=~\"$Server\"}[5s]) * 1000",
             "refId": "A"
           }
         ],
@@ -296,7 +296,7 @@
         "pluginVersion": "11.5.0-pre",
         "targets": [
           {
-            "expr": "worker_network_tx_kb{exported_instance=~\"$Server\"} * 1000",
+            "expr": "rate(worker_network_tx_kb{exported_instance=~\"$Server\"}[5s]) * 1000",
             "refId": "A"
           }
         ],
@@ -363,7 +363,7 @@
         "pluginVersion": "11.5.0-pre",
         "targets": [
           {
-            "expr": "(worker_epoch_throughput_tps{exported_instance=~\"$Server\"})",
+            "expr": "rate(worker_epoch_throughput_tps{exported_instance=~\"$Server\"}[30s])",
             "refId": "A"
           }
         ],

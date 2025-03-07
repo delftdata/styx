@@ -19,8 +19,8 @@ from styx.common.protocols import Protocols
 from styx.common.serialization import Serializer
 from styx.common.util.aio_task_scheduler import AIOTaskScheduler
 
+from coordinator.worker_pool import Worker
 from coordinator_metadata import Coordinator
-from worker_pool import Worker
 from aria_sync_metadata import AriaSyncMetadata
 
 SERVER_PORT = 8888
@@ -35,9 +35,7 @@ PROTOCOL = Protocols.Aria
 SNAPSHOT_BUCKET_NAME: str = os.getenv('SNAPSHOT_BUCKET_NAME', "styx-snapshots")
 SNAPSHOT_FREQUENCY_SEC = int(os.getenv('SNAPSHOT_FREQUENCY_SEC', 10))
 SNAPSHOT_COMPACTION_INTERVAL_SEC = int(os.getenv('SNAPSHOT_COMPACTION_INTERVAL_SEC', 10))
-
-HEARTBEAT_CHECK_INTERVAL: int = int(os.getenv('HEARTBEAT_CHECK_INTERVAL', 500))  # 100ms
-HEARTBEAT_LIMIT: int = int(os.getenv('HEARTBEAT_LIMIT', 5000))  # 5000ms
+HEARTBEAT_CHECK_INTERVAL: int = int(os.getenv('HEARTBEAT_CHECK_INTERVAL', 1000))  # 1000ms
 
 
 class CoordinatorService(object):
@@ -73,6 +71,8 @@ class CoordinatorService(object):
         self.protocol_socket.setblocking(False)
 
         self.aria_metadata: AriaSyncMetadata = ...
+        self.workers_that_re_registered: list[Worker] = []
+        self.recovery_lock: asyncio.Lock = asyncio.Lock()
 
     # Refactoring candidate
     async def coordinator_controller(self, transport, data, pool: concurrent.futures.ProcessPoolExecutor):
@@ -87,11 +87,13 @@ class CoordinatorService(object):
             case MessageType.RegisterWorker:  # REGISTER_WORKER
                 worker_ip, worker_port, protocol_port = self.networking.decode_message(data)
                 # A worker registered to the coordinator
-                worker_id = self.coordinator.register_worker(worker_ip, worker_port, protocol_port)
+                worker_id, init_recovery = self.coordinator.register_worker(worker_ip, worker_port, protocol_port)
                 transport.write(self.networking.encode_message(msg=worker_id,
                                                             msg_type=MessageType.RegisterWorker,
                                                             serializer=Serializer.MSGPACK))
-                # await writer.drain()
+                if init_recovery:
+                    async with self.recovery_lock:
+                        self.workers_that_re_registered.append(self.coordinator.get_worker_with_id(worker_id))
                 logging.warning(f"Worker registered {worker_ip}:{worker_port} with id {worker_id}")
             case MessageType.SnapID:
                 # Get snap id from worker
@@ -271,26 +273,31 @@ class CoordinatorService(object):
         while True:
             await asyncio.sleep(interval_time)
             heartbeat_check_time = timer()
-            workers_to_remove: set[Worker] = self.coordinator.check_heartbeats(heartbeat_check_time)
-            if workers_to_remove:
-                # There was a failure on a participating worker
-                # 1) Clean up dead worker channels
-                logging.warning(f"Closing connections to dead workers: {workers_to_remove}")
-                for worker in workers_to_remove:
-                    await self.networking.close_worker_connections(worker.worker_ip, worker.worker_port)
-                # 2) Start recovery
-                logging.warning("Starting recovery process")
-                await self.coordinator.start_recovery_process(workers_to_remove)
-                # 3) Wait for the cluster to become healthy
-                logging.warning("Waiting on the cluster to become healthy")
-                await self.coordinator.wait_cluster_healthy()
-                # 4) Cleanup protocol metadata
-                logging.warning("Cleaning up protocol after everyone is healthy")
-                self.aria_metadata = AriaSyncMetadata(len(self.coordinator.worker_pool.get_participating_workers()))
-                await self.protocol_networking.close_all_connections()
-                # 4) Notify Cluster that everyone is ready
-                logging.warning("Notify workers")
-                await self.coordinator.notify_cluster_healthy()
+            workers_to_remove, heartbeats_per_worker = self.coordinator.check_heartbeats(heartbeat_check_time)
+            for worker_id, time_since_last_heartbeat_ms in heartbeats_per_worker.items():
+                self.heartbeat_gauge.labels(instance=worker_id).set(time_since_last_heartbeat_ms)
+            if workers_to_remove or self.workers_that_re_registered:
+                async with self.recovery_lock:
+                    # There was a failure on a participating worker
+                    workers_to_remove.update(self.workers_that_re_registered)
+                    # 1) Clean up dead worker channels
+                    logging.warning(f"Closing connections to dead workers: {workers_to_remove}")
+                    for worker in workers_to_remove:
+                        await self.networking.close_worker_connections(worker.worker_ip, worker.worker_port)
+                    # 2) Start recovery
+                    logging.warning("Starting recovery process")
+                    await self.coordinator.start_recovery_process(workers_to_remove)
+                    # 3) Wait for the cluster to become healthy
+                    logging.warning("Waiting on the cluster to become healthy")
+                    await self.coordinator.wait_cluster_healthy()
+                    # 4) Cleanup protocol metadata
+                    logging.warning("Cleaning up protocol after everyone is healthy")
+                    self.aria_metadata = AriaSyncMetadata(len(self.coordinator.worker_pool.get_participating_workers()))
+                    await self.protocol_networking.close_all_connections()
+                    # 4) Notify Cluster that everyone is ready
+                    logging.warning("Notify workers")
+                    await self.coordinator.notify_cluster_healthy()
+                    self.workers_that_re_registered = []
 
     async def send_snapshot_marker(self):
         while True:
@@ -339,6 +346,9 @@ class CoordinatorService(object):
                                              ["instance", "component"])
         self.snapshotting_gauge = Gauge("worker_total_snapshotting_time_ms",
                                             "Snapshotting time (ms)",
+                                            ["instance"])
+        self.heartbeat_gauge = Gauge("time_since_last_heartbeat",
+                                            "Time Since Last Heartbeat",
                                             ["instance"])
 
     async def main(self):

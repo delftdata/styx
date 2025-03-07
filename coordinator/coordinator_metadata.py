@@ -44,6 +44,7 @@ class Coordinator(object):
 
         self.worker_snapshot_ids: dict[int, int] = {}
         self.worker_is_healthy: dict[int, asyncio.Event] = {}
+        self.worker_ip_to_id: dict[tuple[str, int, int], int] = {}
 
         self.kafka_metadata_producer: AIOKafkaProducer | None = None
 
@@ -62,10 +63,20 @@ class Coordinator(object):
                 continue
             break
 
-    def register_worker(self, worker_ip: str, worker_port: int, protocol_port: int) -> int:
-        worker_id = self.worker_pool.register_worker(worker_ip, worker_port, protocol_port)
+    def register_worker(self, worker_ip: str, worker_port: int, protocol_port: int) -> tuple[int, bool]:
+        worker_key = (worker_ip, worker_port, protocol_port)
+        if worker_key not in self.worker_ip_to_id:
+            worker_id = self.worker_pool.register_worker(worker_ip, worker_port, protocol_port)
+            self.worker_ip_to_id[worker_key] = worker_id
+            init_recovery: bool = False
+        else:
+            worker_id = self.worker_ip_to_id[worker_key]
+            init_recovery: bool = True
         self.worker_snapshot_ids[worker_id] = self.get_current_completed_snapshot_id()
-        return worker_id
+        return worker_id, init_recovery
+
+    def get_worker_with_id(self, worker_id: int) -> Worker:
+        return self.worker_pool.peek(worker_id)
 
     async def start_recovery_process(self, workers_to_remove: set[Worker]):
         await self.worker_pool.initiate_recovery(workers_to_remove)
@@ -132,9 +143,9 @@ class Coordinator(object):
     def register_worker_heartbeat(self, worker_id: int, heartbeat_time: float):
         self.worker_pool.register_worker_heartbeat(worker_id, heartbeat_time)
 
-    def check_heartbeats(self, heartbeat_check_time: float) -> set[Worker]:
+    def check_heartbeats(self, heartbeat_check_time: float) -> tuple[set[Worker], dict[int, float]]:
         if not self.graph_submitted:
-            return set()
+            return set(), {}
         return self.worker_pool.check_heartbeats(heartbeat_check_time)
 
     def register_snapshot(self,
