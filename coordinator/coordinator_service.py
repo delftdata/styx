@@ -74,6 +74,38 @@ class CoordinatorService(object):
         self.workers_that_re_registered: list[Worker] = []
         self.recovery_lock: asyncio.Lock = asyncio.Lock()
 
+        self.metrics_server = start_http_server(8000)
+        self.cpu_usage_gauge = Gauge("worker_cpu_usage_percent",
+                                     "CPU usage percentage",
+                                     ["instance"])
+        self.memory_usage_gauge = Gauge("worker_memory_usage_mb",
+                                        "Memory usage in MB",
+                                        ["instance"])
+        self.network_rx_gauge = Gauge("worker_network_rx_kb",
+                                      "Network received KB",
+                                      ["instance"])
+        self.network_tx_gauge = Gauge("worker_network_tx_kb",
+                                      "Network transmitted KB",
+                                      ["instance"])
+        self.epoch_latency_gauge = Gauge("worker_epoch_latency_ms",
+                                         "Epoch Latency (ms)",
+                                         ["instance"])
+        self.epoch_throughput_gauge = Gauge("worker_epoch_throughput_tps",
+                                            "Epoch Throughput (transactions per second)",
+                                            ["instance"])
+        self.epoch_abort_gauge = Gauge("worker_abort_percent",
+                                            "Epoch Concurrency Abort percentage",
+                                            ["instance"])
+        self.latency_breakdown_gauge = Gauge("latency_breakdown",
+                                             "Time Spent in different phases within the transactional protocol",
+                                             ["instance", "component"])
+        self.snapshotting_gauge = Gauge("worker_total_snapshotting_time_ms",
+                                            "Snapshotting time (ms)",
+                                            ["instance"])
+        self.heartbeat_gauge = Gauge("time_since_last_heartbeat",
+                                            "Time Since Last Heartbeat",
+                                            ["instance"])
+
     # Refactoring candidate
     async def coordinator_controller(self, transport, data, pool: concurrent.futures.ProcessPoolExecutor):
         message_type: int = self.networking.get_msg_type(data)
@@ -318,42 +350,8 @@ class CoordinatorService(object):
             # BUCKET ALREADY EXISTS
             pass
 
-    def init_prometheus(self):
-        self.metrics_server = start_http_server(8000)
-        self.cpu_usage_gauge = Gauge("worker_cpu_usage_percent",
-                                     "CPU usage percentage",
-                                     ["instance"])
-        self.memory_usage_gauge = Gauge("worker_memory_usage_mb",
-                                        "Memory usage in MB",
-                                        ["instance"])
-        self.network_rx_gauge = Gauge("worker_network_rx_kb",
-                                      "Network received KB",
-                                      ["instance"])
-        self.network_tx_gauge = Gauge("worker_network_tx_kb",
-                                      "Network transmitted KB",
-                                      ["instance"])
-        self.epoch_latency_gauge = Gauge("worker_epoch_latency_ms",
-                                         "Epoch Latency (ms)",
-                                         ["instance"])
-        self.epoch_throughput_gauge = Gauge("worker_epoch_throughput_tps",
-                                            "Epoch Throughput (transactions per second)",
-                                            ["instance"])
-        self.epoch_abort_gauge = Gauge("worker_abort_percent",
-                                            "Epoch Concurrency Abort percentage",
-                                            ["instance"])
-        self.latency_breakdown_gauge = Gauge("latency_breakdown",
-                                             "Time Spent in different phases within the transactional protocol",
-                                             ["instance", "component"])
-        self.snapshotting_gauge = Gauge("worker_total_snapshotting_time_ms",
-                                            "Snapshotting time (ms)",
-                                            ["instance"])
-        self.heartbeat_gauge = Gauge("time_since_last_heartbeat",
-                                            "Time Since Last Heartbeat",
-                                            ["instance"])
-
     async def main(self):
         self.init_snapshot_minio_bucket()
-        self.init_prometheus()
         self.aio_task_scheduler.create_task(self.heartbeat_monitor_coroutine())
         self.start_networking_tasks()
         if PROTOCOL == Protocols.Unsafe or PROTOCOL == Protocols.MVCC:
