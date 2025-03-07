@@ -174,10 +174,10 @@ class CoordinatorService(object):
                     self.latency_breakdown_gauge.labels(instance=worker_id, component="1st Run").set(func_time)
                     self.latency_breakdown_gauge.labels(instance=worker_id, component="Chain Acks").set(chain_ack_time)
                     self.latency_breakdown_gauge.labels(instance=worker_id, component="SYNC").set(sync_time)
-                    self.latency_breakdown_gauge.labels(instance=worker_id, component="Conflict Res").set(conflict_res_time)
-                    self.latency_breakdown_gauge.labels(instance=worker_id, component="CMT").set(commit_time)
-                    self.latency_breakdown_gauge.labels(instance=worker_id, component="FB").set(fallback_time)
-                    self.latency_breakdown_gauge.labels(instance=worker_id, component="SN").set(snap_time)
+                    self.latency_breakdown_gauge.labels(instance=worker_id, component="Conflict Resolution").set(conflict_res_time)
+                    self.latency_breakdown_gauge.labels(instance=worker_id, component="Commit time").set(commit_time)
+                    self.latency_breakdown_gauge.labels(instance=worker_id, component="Fallback").set(fallback_time)
+                    self.latency_breakdown_gauge.labels(instance=worker_id, component="Async Snapshot").set(snap_time)
 
                 sync_complete: bool = await self.aria_metadata.set_empty_sync_done()
                 if sync_complete:
