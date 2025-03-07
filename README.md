@@ -25,8 +25,11 @@ pip install pandas numpy matplotlib
 *   [`demo`](https://github.com/delftdata/styx/tree/main/benchmark) 
     The YCSB-T, Deathstar, TPC-C and scalability benchmarks we used for the experiments.
 
-*   [`env`](https://github.com/delftdata/styx/tree/main/env-example)
+*   [`env`](https://github.com/delftdata/styx/tree/main/env)
     env folder for the docker-compose Minio container.
+
+*   [`grafana`](https://github.com/delftdata/styx/tree/main/grafana)
+    The confinguration files for the deployment of our visualization dashboards.
 
 *   [`styx-package`](https://github.com/delftdata/styx/tree/main/styx-package)
     The Styx framework Python package.

@@ -10,6 +10,7 @@ from timeit import default_timer as timer
 import uvloop
 from minio import Minio
 import minio.error
+from prometheus_client import start_http_server, Gauge
 
 from styx.common.logging import logging
 from styx.common.message_types import MessageType
@@ -18,8 +19,8 @@ from styx.common.protocols import Protocols
 from styx.common.serialization import Serializer
 from styx.common.util.aio_task_scheduler import AIOTaskScheduler
 
+from coordinator.worker_pool import Worker
 from coordinator_metadata import Coordinator
-from worker_pool import Worker
 from aria_sync_metadata import AriaSyncMetadata
 
 SERVER_PORT = 8888
@@ -34,9 +35,7 @@ PROTOCOL = Protocols.Aria
 SNAPSHOT_BUCKET_NAME: str = os.getenv('SNAPSHOT_BUCKET_NAME', "styx-snapshots")
 SNAPSHOT_FREQUENCY_SEC = int(os.getenv('SNAPSHOT_FREQUENCY_SEC', 10))
 SNAPSHOT_COMPACTION_INTERVAL_SEC = int(os.getenv('SNAPSHOT_COMPACTION_INTERVAL_SEC', 10))
-
-HEARTBEAT_CHECK_INTERVAL: int = int(os.getenv('HEARTBEAT_CHECK_INTERVAL', 500))  # 100ms
-HEARTBEAT_LIMIT: int = int(os.getenv('HEARTBEAT_LIMIT', 5000))  # 5000ms
+HEARTBEAT_CHECK_INTERVAL: int = int(os.getenv('HEARTBEAT_CHECK_INTERVAL', 1000))  # 1000ms
 
 
 class CoordinatorService(object):
@@ -72,6 +71,40 @@ class CoordinatorService(object):
         self.protocol_socket.setblocking(False)
 
         self.aria_metadata: AriaSyncMetadata = ...
+        self.workers_that_re_registered: list[Worker] = []
+        self.recovery_lock: asyncio.Lock = asyncio.Lock()
+
+        self.metrics_server = start_http_server(8000)
+        self.cpu_usage_gauge = Gauge("worker_cpu_usage_percent",
+                                     "CPU usage percentage",
+                                     ["instance"])
+        self.memory_usage_gauge = Gauge("worker_memory_usage_mb",
+                                        "Memory usage in MB",
+                                        ["instance"])
+        self.network_rx_gauge = Gauge("worker_network_rx_kb",
+                                      "Network received KB",
+                                      ["instance"])
+        self.network_tx_gauge = Gauge("worker_network_tx_kb",
+                                      "Network transmitted KB",
+                                      ["instance"])
+        self.epoch_latency_gauge = Gauge("worker_epoch_latency_ms",
+                                         "Epoch Latency (ms)",
+                                         ["instance"])
+        self.epoch_throughput_gauge = Gauge("worker_epoch_throughput_tps",
+                                            "Epoch Throughput (transactions per second)",
+                                            ["instance"])
+        self.epoch_abort_gauge = Gauge("worker_abort_percent",
+                                            "Epoch Concurrency Abort percentage",
+                                            ["instance"])
+        self.latency_breakdown_gauge = Gauge("latency_breakdown",
+                                             "Time Spent in different phases within the transactional protocol",
+                                             ["instance", "component"])
+        self.snapshotting_gauge = Gauge("worker_total_snapshotting_time_ms",
+                                            "Snapshotting time (ms)",
+                                            ["instance"])
+        self.heartbeat_gauge = Gauge("time_since_last_heartbeat",
+                                            "Time Since Last Heartbeat",
+                                            ["instance"])
 
     # Refactoring candidate
     async def coordinator_controller(self, transport, data, pool: concurrent.futures.ProcessPoolExecutor):
@@ -86,29 +119,37 @@ class CoordinatorService(object):
             case MessageType.RegisterWorker:  # REGISTER_WORKER
                 worker_ip, worker_port, protocol_port = self.networking.decode_message(data)
                 # A worker registered to the coordinator
-                worker_id = self.coordinator.register_worker(worker_ip, worker_port, protocol_port)
+                worker_id, init_recovery = self.coordinator.register_worker(worker_ip, worker_port, protocol_port)
                 transport.write(self.networking.encode_message(msg=worker_id,
                                                             msg_type=MessageType.RegisterWorker,
                                                             serializer=Serializer.MSGPACK))
-                # await writer.drain()
+                if init_recovery:
+                    async with self.recovery_lock:
+                        self.workers_that_re_registered.append(self.coordinator.get_worker_with_id(worker_id))
                 logging.warning(f"Worker registered {worker_ip}:{worker_port} with id {worker_id}")
             case MessageType.SnapID:
                 # Get snap id from worker
                 (worker_id, snapshot_id, start, end,
                  partial_input_offsets, partial_output_offsets,
                  epoch_counter, t_counter) = self.networking.decode_message(data)
+                snapshot_time = end - start
+                self.snapshotting_gauge.labels(instance=worker_id).set(snapshot_time)
                 logging.warning(f'Worker: {worker_id} | '
                                 f'Completed snapshot: {snapshot_id} | '
                                 f'started at: {start} | '
                                 f'ended at: {end} | '
-                                f'took: {end - start}ms')
+                                f'took: {snapshot_time}ms')
                 self.coordinator.register_snapshot(worker_id, snapshot_id,
                                                    partial_input_offsets, partial_output_offsets,
                                                    epoch_counter, t_counter,
                                                    pool)
             case MessageType.Heartbeat:
                 # HEARTBEATS
-                (worker_id,) = self.networking.decode_message(data)
+                (worker_id, cpu_perc, mem_util, rx_net, tx_net) = self.networking.decode_message(data)
+                self.cpu_usage_gauge.labels(instance=worker_id).set(cpu_perc) # %
+                self.memory_usage_gauge.labels(instance=worker_id).set(mem_util) # MB
+                self.network_rx_gauge.labels(instance=worker_id).set(rx_net) # KB
+                self.network_tx_gauge.labels(instance=worker_id).set(tx_net) # KB
                 heartbeat_rcv_time = timer()
                 logging.info(f'Heartbeat received from: {worker_id} at time: {heartbeat_rcv_time}')
                 self.coordinator.register_worker_heartbeat(worker_id, heartbeat_rcv_time)
@@ -153,6 +194,23 @@ class CoordinatorService(object):
                                                     Serializer.PICKLE)
                     await self.aria_metadata.cleanup()
             case MessageType.SyncCleanup | MessageType.AriaFallbackStart | MessageType.AriaFallbackDone:
+                if message_type == MessageType.SyncCleanup:
+                    (worker_id, epoch_throughput, epoch_latency,
+                     local_abort_rate, wal_time, func_time, chain_ack_time,
+                     sync_time, conflict_res_time, commit_time,
+                     fallback_time, snap_time) = self.protocol_networking.decode_message(data)
+                    self.epoch_throughput_gauge.labels(instance=worker_id).set(epoch_throughput)
+                    self.epoch_latency_gauge.labels(instance=worker_id).set(epoch_latency)
+                    self.epoch_abort_gauge.labels(instance=worker_id).set(local_abort_rate)
+                    self.latency_breakdown_gauge.labels(instance=worker_id, component="WAL").set(wal_time)
+                    self.latency_breakdown_gauge.labels(instance=worker_id, component="1st Run").set(func_time)
+                    self.latency_breakdown_gauge.labels(instance=worker_id, component="Chain Acks").set(chain_ack_time)
+                    self.latency_breakdown_gauge.labels(instance=worker_id, component="SYNC").set(sync_time)
+                    self.latency_breakdown_gauge.labels(instance=worker_id, component="Conflict Resolution").set(conflict_res_time)
+                    self.latency_breakdown_gauge.labels(instance=worker_id, component="Commit time").set(commit_time)
+                    self.latency_breakdown_gauge.labels(instance=worker_id, component="Fallback").set(fallback_time)
+                    self.latency_breakdown_gauge.labels(instance=worker_id, component="Async Snapshot").set(snap_time)
+
                 sync_complete: bool = await self.aria_metadata.set_empty_sync_done()
                 if sync_complete:
                     await self.finalize_worker_sync(MessageType(message_type),
@@ -247,26 +305,31 @@ class CoordinatorService(object):
         while True:
             await asyncio.sleep(interval_time)
             heartbeat_check_time = timer()
-            workers_to_remove: set[Worker] = self.coordinator.check_heartbeats(heartbeat_check_time)
-            if workers_to_remove:
-                # There was a failure on a participating worker
-                # 1) Clean up dead worker channels
-                logging.warning(f"Closing connections to dead workers: {workers_to_remove}")
-                for worker in workers_to_remove:
-                    await self.networking.close_worker_connections(worker.worker_ip, worker.worker_port)
-                # 2) Start recovery
-                logging.warning("Starting recovery process")
-                await self.coordinator.start_recovery_process(workers_to_remove)
-                # 3) Wait for the cluster to become healthy
-                logging.warning("Waiting on the cluster to become healthy")
-                await self.coordinator.wait_cluster_healthy()
-                # 4) Cleanup protocol metadata
-                logging.warning("Cleaning up protocol after everyone is healthy")
-                self.aria_metadata = AriaSyncMetadata(len(self.coordinator.worker_pool.get_participating_workers()))
-                await self.protocol_networking.close_all_connections()
-                # 4) Notify Cluster that everyone is ready
-                logging.warning("Notify workers")
-                await self.coordinator.notify_cluster_healthy()
+            workers_to_remove, heartbeats_per_worker = self.coordinator.check_heartbeats(heartbeat_check_time)
+            for worker_id, time_since_last_heartbeat_ms in heartbeats_per_worker.items():
+                self.heartbeat_gauge.labels(instance=worker_id).set(time_since_last_heartbeat_ms)
+            if workers_to_remove or self.workers_that_re_registered:
+                async with self.recovery_lock:
+                    # There was a failure on a participating worker
+                    workers_to_remove.update(self.workers_that_re_registered)
+                    # 1) Clean up dead worker channels
+                    logging.warning(f"Closing connections to dead workers: {workers_to_remove}")
+                    for worker in workers_to_remove:
+                        await self.networking.close_worker_connections(worker.worker_ip, worker.worker_port)
+                    # 2) Start recovery
+                    logging.warning("Starting recovery process")
+                    await self.coordinator.start_recovery_process(workers_to_remove)
+                    # 3) Wait for the cluster to become healthy
+                    logging.warning("Waiting on the cluster to become healthy")
+                    await self.coordinator.wait_cluster_healthy()
+                    # 4) Cleanup protocol metadata
+                    logging.warning("Cleaning up protocol after everyone is healthy")
+                    self.aria_metadata = AriaSyncMetadata(len(self.coordinator.worker_pool.get_participating_workers()))
+                    await self.protocol_networking.close_all_connections()
+                    # 4) Notify Cluster that everyone is ready
+                    logging.warning("Notify workers")
+                    await self.coordinator.notify_cluster_healthy()
+                    self.workers_that_re_registered = []
 
     async def send_snapshot_marker(self):
         while True:
