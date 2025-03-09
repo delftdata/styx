@@ -687,7 +687,7 @@
     },
     "timepicker": {},
     "timezone": "",
-    "title": "Styx Server Specific",
+    "title": "Styx Worker Specific",
     "uid": "decjikxh4zoqoc",
     "version": 2,
     "weekStart": ""
