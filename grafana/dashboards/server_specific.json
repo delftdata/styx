@@ -95,7 +95,7 @@
         "pluginVersion": "11.5.0-pre",
         "targets": [
           {
-            "expr": "worker_cpu_usage_percent{exported_instance=~\"$Server\"}",
+            "expr": "worker_cpu_usage_percent{exported_instance=~\"$Worker\"}",
             "refId": "A"
           }
         ],
@@ -162,7 +162,7 @@
         "pluginVersion": "11.5.0-pre",
         "targets": [
           {
-            "expr": "worker_memory_usage_mb{exported_instance=~\"$Server\"} * 1000000",
+            "expr": "worker_memory_usage_mb{exported_instance=~\"$Worker\"} * 1000000",
             "refId": "A"
           }
         ],
@@ -229,7 +229,7 @@
         "pluginVersion": "11.5.0-pre",
         "targets": [
           {
-            "expr": "rate(worker_network_rx_kb{exported_instance=~\"$Server\"}[5s]) * 1000",
+            "expr": "rate(worker_network_rx_kb{exported_instance=~\"$Worker\"}[5s]) * 1000",
             "refId": "A"
           }
         ],
@@ -296,7 +296,7 @@
         "pluginVersion": "11.5.0-pre",
         "targets": [
           {
-            "expr": "rate(worker_network_tx_kb{exported_instance=~\"$Server\"}[5s]) * 1000",
+            "expr": "rate(worker_network_tx_kb{exported_instance=~\"$Worker\"}[5s]) * 1000",
             "refId": "A"
           }
         ],
@@ -363,7 +363,7 @@
         "pluginVersion": "11.5.0-pre",
         "targets": [
           {
-            "expr": "rate(worker_epoch_throughput_tps{exported_instance=~\"$Server\"}[30s])",
+            "expr": "rate(worker_epoch_throughput_tps{exported_instance=~\"$Worker\"}[30s])",
             "refId": "A"
           }
         ],
@@ -437,7 +437,7 @@
         "pluginVersion": "11.5.0-pre",
         "targets": [
           {
-            "expr": "(worker_epoch_latency_ms{exported_instance=~\"$Server\"})",
+            "expr": "(worker_epoch_latency_ms{exported_instance=~\"$Worker\"})",
             "refId": "A"
           }
         ],
@@ -511,7 +511,7 @@
         "pluginVersion": "11.5.0-pre",
         "targets": [
           {
-            "expr": "(worker_abort_percent{exported_instance=~\"$Server\"})",
+            "expr": "(worker_abort_percent{exported_instance=~\"$Worker\"})",
             "refId": "A"
           }
         ],
@@ -551,7 +551,7 @@
           {
             "refId": "A",
             "editorMode": "code",
-            "expr": "latency_breakdown{exported_instance=~\"$Server\"}",
+            "expr": "latency_breakdown{exported_instance=~\"$Worker\"}",
             "legendFormat": "{{component}}",
             "range": true
           }
@@ -647,7 +647,7 @@
         "pluginVersion": "11.5.0-pre",
         "targets": [
           {
-            "expr": "(worker_total_snapshotting_time_ms{exported_instance=~\"$Server\"})",
+            "expr": "(worker_total_snapshotting_time_ms{exported_instance=~\"$Worker\"})",
             "refId": "A"
           }
         ],
@@ -659,7 +659,7 @@
     "preload": false,
     "refresh": "1s",
     "schemaVersion": 40,
-    "tags": ["Styx", "Server"],
+    "tags": ["Styx", "Worker"],
     "templating": {
       "list": [
         {
@@ -668,7 +668,7 @@
             "value": "3"
           },
           "definition": "label_values(worker_epoch_latency_ms,exported_instance)",
-          "name": "Server",
+          "name": "Worker",
           "options": [],
           "query": {
             "qryType": 1,
