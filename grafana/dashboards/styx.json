@@ -27,7 +27,7 @@
         "keepTime": false,
         "tags": [],
         "targetBlank": false,
-        "title": "Server Specific",
+        "title": "Worker Specific",
         "tooltip": "",
         "type": "dashboards",
         "url": ""
