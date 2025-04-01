@@ -33,3 +33,16 @@ services:
 #          cpus: '2'
 #        reservations:
 #          cpus: '2'
+
+#yet to work on this.
+  querystate:
+    build:
+      context: .
+      dockerfile: querystate/querystate.dockerfile
+    image: dev/styx-querystate:latest
+    environment:
+      - WORKER_THREADS=1
+      - INGRESS_TYPE=KAFKA
+      - KAFKA_URL=kafka1:19092
+      - STATE_HOST=coordinator
+      - STATE_PORT=8080

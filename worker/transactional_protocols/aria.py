@@ -31,6 +31,9 @@ from worker.sequencer.sequencer import Sequencer
 DISCOVERY_HOST: str = os.environ['DISCOVERY_HOST']
 DISCOVERY_PORT: int = int(os.environ['DISCOVERY_PORT'])
 
+STATE_HOST: str = os.environ['STATE_HOST']
+STATE_PORT: int = int(os.environ['STATE_PORT'])
+
 CONFLICT_DETECTION_METHOD: AriaConflictDetectionType = AriaConflictDetectionType(os.getenv('CONFLICT_DETECTION_METHOD',
                                                                                            0))
 # if more than 10% aborts use fallback strategy
@@ -251,6 +254,18 @@ class AriaProtocol(BaseTransactionalProtocol):
                 self.local_state.clear_delta_map()
             else:
                 logging.warning("Snapshot currently supported only for in-memory and incremental operator state")
+
+
+    async def send_state_delta(self,
+                           msg_type: MessageType,
+                           message: tuple | bytes,
+                           serializer: Serializer = Serializer.MSGPACK):
+
+            await self.networking.send_message(STATE_HOST, STATE_PORT,
+                                               msg=message,
+                                               msg_type=msg_type,
+                                               serializer=serializer)
+
 
     async def communication_protocol(self):
         await self.ingress.start(self.topic_partitions, self.topic_partition_offsets)
@@ -501,6 +516,14 @@ class AriaProtocol(BaseTransactionalProtocol):
                         #                 f'sync_time: {self.sync_time}\n'
                         #                 f'snapshot_time: {self.snapshot_time}\n'
                         #                 f'fallback_time: {self.fallback_time}\n')
+
+                        state_delta = self.local_state.get_delta_map()
+                        worker_id = self.id
+                        epoch_counter = self.sequencer.epoch_counter
+                        await self.send_state_delta(msg_type=MessageType.QueryMsg,
+                                                    message=(worker_id, epoch_counter, state_delta),
+                                                    serializer=Serializer.MSGPACK)
+
                         self.cleanup_after_epoch()
                         # start_sn = timer()
                         self.take_snapshot(pool)

@@ -25,6 +25,9 @@ class InMemoryOperatorState(BaseAriaState):
     def get_data_for_snapshot(self) -> dict[OperatorPartition, KVPairs]:
         return self.delta_map
 
+    def get_delta_map(self)-> dict[OperatorPartition, KVPairs]:
+        return self.delta_map
+
     def clear_delta_map(self):
         for operator_partition in self.operator_partitions:
             self.delta_map[operator_partition] = {}

@@ -5,7 +5,7 @@ services:
   coordinator:
     build:
       # Note the switch to the root project directory two levels up.
-      # It allows the Dockerfile to assume that location as working dir.
+      # It allows the querystate.dockerfile to assume that location as working dir.
       context: ../..
       dockerfile: coordinator/coordinator.dockerfile
     image: dev/styx-coordinator:latest
@@ -22,7 +22,7 @@ services:
   worker:
     build:
       # Note the switch to the root project directory two levels up.
-      # It allows the Dockerfile to assume that location as working dir.
+      # It allows the querystate.dockerfile to assume that location as working dir.
       context: ../..
       dockerfile: worker/worker.dockerfile
     image: dev/styx:latest

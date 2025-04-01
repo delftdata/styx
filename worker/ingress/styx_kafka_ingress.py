@@ -55,7 +55,9 @@ class StyxKafkaIngress(BaseIngress):
             f"{msg.key} {msg.value} {msg.timestamp}"
         )
         message_type: int = self.networking.get_msg_type(msg.value)
-        if message_type == MessageType.ClientMsg:
+
+        # also process message_type for queries.
+        if message_type == MessageType.ClientMsg or message_type == MessageType.QueryMsg:
             message = self.networking.decode_message(msg.value)
             operator_name, key, fun_name, params, partition = message
             run_func_payload: RunFuncPayload = RunFuncPayload(request_id=msg.key, key=key, timestamp=msg.timestamp,

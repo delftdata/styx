@@ -1,0 +1,14 @@
+# networking service
+uvloop==0.21.0
+# msgspec==0.18.6
+git+https://github.com/jcrist/msgspec.git
+cloudpickle==3.1.0
+mmh3==5.0.1
+# monitoring service
+# psutil==5.9.2
+# Kafka
+aiokafka==0.12.0
+# snapshots
+minio==7.2.10
+# deathstar
+geopy
