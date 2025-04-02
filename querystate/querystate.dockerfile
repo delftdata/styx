@@ -26,5 +26,3 @@ RUN chmod a+x /usr/local/bin/start-querystate.sh
 ENV PYTHONPATH /usr/local/styx
 
 CMD ["/usr/local/bin/start-querystate.sh"]
-
-EXPOSE 8080
