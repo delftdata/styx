@@ -14,9 +14,8 @@ def main(
         zipf_const,
         client_threads,
         warmup_seconds,
-        SAVE_DIR,
+        save_dir,
         run_with_validation
-
 ):
     print('Calculating metrics...')
 
@@ -27,16 +26,14 @@ def main(
 
     starting_money = 1_000_000
 
-    res_dict = {}
-
-    origin_input_msgs = pd.read_csv(f'{SAVE_DIR}/client_requests.csv',
+    origin_input_msgs = pd.read_csv(f'{save_dir}/client_requests.csv',
                                     dtype={'request_id': bytes,
                                         'timestamp': np.uint64}).sort_values('timestamp')
 
     duplicate_requests = not origin_input_msgs['request_id'].is_unique
 
 
-    output_msgs = pd.read_csv(f'{SAVE_DIR}/output.csv', dtype={'request_id': bytes,
+    output_msgs = pd.read_csv(f'{save_dir}/output.csv', dtype={'request_id': bytes,
                                                             'timestamp': np.uint64},
                             low_memory=False).sort_values('timestamp')
     print(
@@ -55,32 +52,22 @@ def main(
         f'due to an initial warmup period of {warmup_seconds} seconds.'
     )
 
-    joined = pd.merge(input_msgs, output_run_messages, on='request_id', how='outer')
+    # Perform a left join to include all rows from client_df
+    joined = input_msgs.merge(output_run_messages, on='request_id', how='left', suffixes=('_client', '_output'))
+
     print(
         f'Joined {len(joined)} messages from {len(input_msgs)} input messages '
         f'and {len(output_run_messages)} output messages.'
     )
 
-    missed = len(joined[joined['response'].isna()])
+    missed = len(joined[joined['timestamp_output'].isna()])
     print(
         f'Missed {missed} messages after the join for which no response '
          'was found.'
     )
 
     joined = joined.dropna()
-    runtime = joined['timestamp_y'] - joined['timestamp_x']
-
-    '''
-    print(origin_input_msgs['timestamp'] -
-                                        origin_input_msgs['timestamp'][0])
-    print(warmup_seconds * 1000)
-    print(origin_input_msgs['timestamp'][0])
-    print(origin_input_msgs)
-    print(input_msgs)
-    print(joined)
-    print(runtime)
-    '''
-
+    runtime = joined['timestamp_output'] - joined['timestamp_client']
 
     start_time = -math.inf
     throughput = {}
@@ -167,30 +154,21 @@ def main(
         res_dict["missing_verification_keys"] = missing_verification_keys
         res_dict["wrong_values"] = wrong_values
 
-    print(f'Done. Persisted metrics in {SAVE_DIR}/{exp_name}.json')
-
-    with open(f'{SAVE_DIR}/{exp_name}.json', 'w', encoding='utf-8') as f:
+        if not are_we_consistent:
+            print(f"{'\033[91m'}NOT CONSISTENT: {verification_total} != {n_keys * starting_money}{'\033[0m'}")
+    print(f'Done. Persisted metrics in {save_dir}/{exp_name}.json')
+    with open(f'{save_dir}/{exp_name}.json', 'w', encoding='utf-8') as f:
         json.dump(res_dict, f, ensure_ascii=False, indent=4)
 
 
 if __name__ == '__main__':
-
-    SAVE_DIR: str = sys.argv[1]
-    warmup_seconds = int(sys.argv[2])
-    n_keys = int(sys.argv[3])
-    n_partitions = int(sys.argv[4])
-    input_rate = int(sys.argv[5])
-    zipf_const = float(sys.argv[6])
-    client_threads = int(sys.argv[7])
-    run_with_validation = bool(sys.argv[8])
-
     main(
-        n_keys,
-        n_partitions,
-        input_rate,
-        zipf_const,
-        client_threads,
-        warmup_seconds,
-        SAVE_DIR,
-        run_with_validation
+        int(sys.argv[3]),
+        int(sys.argv[4]),
+        int(sys.argv[5]),
+        float(sys.argv[6]),
+        int(sys.argv[7]),
+        int(sys.argv[2]),
+        sys.argv[1],
+        bool(sys.argv[8])
     )

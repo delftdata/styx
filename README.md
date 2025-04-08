@@ -2,20 +2,6 @@
 
 This repository contains the codebase of Styx described in: https://arxiv.org/abs/2312.06893.
 
-
-##### Cite Styx
-
-```bibtex
-@misc{psarakis2024styx,
-      title={Styx: Transactional Stateful Functions on Streaming Dataflows}, 
-      author={Kyriakos Psarakis and George Siachamis and George Christodoulou and Marios Fragkoulis and Asterios Katsifodimos},
-      year={2024},
-      eprint={2312.06893},
-      archivePrefix={arXiv},
-      primaryClass={cs.DC}
-}
-```
-
 ## Preliminaries
 
 This project requires an environment with *python 3.12* installed. 
@@ -39,8 +25,11 @@ pip install pandas numpy matplotlib
 *   [`demo`](https://github.com/delftdata/styx/tree/main/benchmark) 
     The YCSB-T, Deathstar, TPC-C and scalability benchmarks we used for the experiments.
 
-*   [`env`](https://github.com/delftdata/styx/tree/main/env-example)
+*   [`env`](https://github.com/delftdata/styx/tree/main/env)
     env folder for the docker-compose Minio container.
+
+*   [`grafana`](https://github.com/delftdata/styx/tree/main/grafana)
+    The confinguration files for the deployment of our visualization dashboards.
 
 *   [`styx-package`](https://github.com/delftdata/styx/tree/main/styx-package)
     The Styx framework Python package.
@@ -110,3 +99,17 @@ Then, you can start the Styx engine and specify the desired scale.
 To run the SE: `docker-compose up --build --scale worker=4`
 
 To clear the SE: `docker-compose down --volumes`
+
+##### Cite Styx
+
+```bibtex
+@inproceedings{psarakis2025styx,
+author = {Psarakis, Kyriakos and Christodoulou, George and Siachamis, George and Fragkoulis, Marios and Katsifodimos, Asterios},
+title = {Styx: Transactional Stateful Functions on Streaming Dataflows},
+year = {2025},
+publisher = {Association for Computing Machinery},
+booktitle = {Proceedings of the 2025 International Conference on Management of Data},
+series = {SIGMOD '25}
+}
+```
+

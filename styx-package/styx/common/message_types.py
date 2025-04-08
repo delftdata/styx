@@ -22,15 +22,13 @@ class MessageType(IntEnum):
     DeterministicReordering = 17
     SnapID = 18
     Heartbeat = 19
-    # means some other worker died needs to snap_id and offsets
-    RecoveryOther = 20
-    # means worker died needs to receive everything
-    RecoveryOwn = 21
-    ReadyAfterRecovery = 22
-    SyncCleanup = 23
-    RemoteWantsToProceed = 24
-    ChainAbort = 25
-    AckCache = 26
+    InitRecovery = 20
+    ReadyAfterRecovery = 21
+    SyncCleanup = 22
+    RemoteWantsToProceed = 23
+    ChainAbort = 24
+    AckCache = 25
+    WrongPartitionRequest = 26
     SnapMarker = 99
     AlignStart = 100
     AlignEnd = 101

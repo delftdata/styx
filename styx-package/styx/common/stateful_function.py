@@ -1,11 +1,8 @@
 import asyncio
 import fractions
 import traceback
-import uuid
 
 from typing import Awaitable, Type
-
-import mmh3
 
 from .logging import logging
 from .tcp_networking import NetworkingManager
@@ -14,22 +11,9 @@ from .serialization import Serializer
 from .function import Function
 from .base_state import BaseOperatorState as State
 from .base_protocol import BaseTransactionalProtocol
-from .exceptions import NonSupportedKeyType
 from .message_types import MessageType
 from .run_func_payload import RunFuncPayload
-
-
-def make_key_hashable(key) -> int:
-    if isinstance(key, int):
-        return key
-    elif isinstance(key, str):
-        try:
-            # uuid type given by the user
-            return uuid.UUID(key).int
-        except ValueError:
-            return mmh3.hash(key, seed=0, signed=False)
-    # if not int, str or uuid throw exception
-    raise NonSupportedKeyType()
+from .partitioning.base_partitioner import BasePartitioner
 
 
 class StatefulFunction(Function):
@@ -41,19 +25,18 @@ class StatefulFunction(Function):
                  operator_name: str,
                  operator_state: State,
                  networking: NetworkingManager,
-                 timestamp: int,
-                 dns: dict[str, dict[str, tuple[str, int, int]]],
+                 dns: dict[str, dict[int, tuple[str, int, int]]],
                  t_id: int,
                  request_id: bytes,
                  fallback_mode: bool,
                  use_fallback_cache: bool,
+                 partitioner: BasePartitioner,
                  protocol: BaseTransactionalProtocol):
         super().__init__(name=function_name)
         self.__operator_name = operator_name
         self.__state: State = operator_state
         self.__networking: NetworkingManager = networking
-        self.__timestamp: int = timestamp
-        self.__dns: dict[str, dict[str, tuple[str, int, int]]] = dns
+        self.__dns: dict[str, dict[int, tuple[str, int, int]]] = dns
         self.__t_id: int = t_id
         self.__request_id: bytes = request_id
         self.__async_remote_calls: list[tuple[str, str, int, object, tuple, bool]] = []
@@ -62,6 +45,7 @@ class StatefulFunction(Function):
         self.__key = key
         self.__protocol = protocol
         self.__partition = partition
+        self.__partitioner = partitioner
 
     async def __call__(self, *args, **kwargs):
         try:
@@ -90,7 +74,7 @@ class StatefulFunction(Function):
                                                                is_root=True)
             return res, n_remote_calls, partial_node_count
         except Exception as e:
-            logging.debug(traceback.format_exc())
+            logging.warning(traceback.format_exc())
             return e, -1, -1
 
     @property
@@ -109,11 +93,19 @@ class StatefulFunction(Function):
             value = self.__state.get_immediate(self.key, self.__t_id, self.__operator_name, self.__partition)
         else:
             value = self.__state.get(self.key, self.__t_id, self.__operator_name, self.__partition)
-        # logging.info(f'GET: {self.key}:{value} with t_id: {self.__t_id} operator: {self.__operator_name}')
+        # logging.warning(f'GET: {self.key}:{value} '
+        #                 f'with t_id: {self.__t_id} '
+        #                 f'operator: {self.__operator_name} '
+        #                 f'fallback: {self.__fallback_enabled} '
+        #                 f'request_id: {self.__request_id} ')
         return value
 
     def put(self, value):
-        # logging.info(f'PUT: {self.key}:{value} with t_id: {self.__t_id} operator: {self.__operator_name}')
+        # logging.warning(f'PUT: {self.key}:{value} '
+        #                 f'with t_id: {self.__t_id} '
+        #                 f'operator: {self.__operator_name} '
+        #                 f'fallback: {self.__fallback_enabled} '
+        #                 f'request_id: {self.__request_id} ')
         if self.__fallback_enabled:
             self.__state.put_immediate(self.key, value, self.__t_id, self.__operator_name, self.__partition)
         else:
@@ -139,7 +131,7 @@ class StatefulFunction(Function):
             # This is the root
             ack_host = self.__networking.host_name
             ack_port = self.__networking.host_port
-            await self.__networking.prepare_function_chain(self.__t_id)
+            self.__networking.prepare_function_chain(self.__t_id)
         else:
             if not self.__networking.in_the_same_network(ack_host, ack_port):
                 chain_participants.append(self.__networking.worker_id)
@@ -157,7 +149,6 @@ class StatefulFunction(Function):
             if is_local:
                 payload = RunFuncPayload(request_id=self.__request_id,
                                          key=key,
-                                         timestamp=self.__timestamp,
                                          operator_name=operator_name,
                                          partition=partition,
                                          function_name=function_name,
@@ -173,7 +164,7 @@ class StatefulFunction(Function):
                                                                      payload=payload,
                                                                      internal=True))
                     # add to cache
-                    await self.__networking.add_remote_function_call(self.__t_id, payload)
+                    self.__networking.add_remote_function_call(self.__t_id, payload)
             else:
                 remote_calls.append(self.__call_remote_function_no_response(operator_name=operator_name,
                                                                             function_name=function_name,
@@ -182,9 +173,7 @@ class StatefulFunction(Function):
                                                                             params=params,
                                                                             ack_payload=ack_payload))
             partial_node_count = 0
-        async with asyncio.TaskGroup() as tg:
-            for remote_call in remote_calls:
-                tg.create_task(remote_call)
+        await asyncio.gather(*remote_calls)
         return n_remote_calls
 
     def call_remote_async(self,
@@ -194,9 +183,9 @@ class StatefulFunction(Function):
                           params: tuple = tuple()):
         if isinstance(function_name, type):
             function_name = function_name.__name__
-        partition: int = make_key_hashable(key) % len(self.__dns[operator_name].keys())
-        is_local: bool = self.__networking.in_the_same_network(self.__dns[operator_name][str(partition)][0],
-                                                               self.__dns[operator_name][str(partition)][2])
+        partition: int = self.__partitioner.get_partition(key)
+        is_local: bool = self.__networking.in_the_same_network(self.__dns[operator_name][partition][0],
+                                                               self.__dns[operator_name][partition][2])
         self.__async_remote_calls.append((operator_name, function_name, partition, key, params, is_local))
 
     async def __call_remote_function_no_response(self,
@@ -221,28 +210,6 @@ class StatefulFunction(Function):
                                              msg_type=MessageType.RunFunRemote,
                                              serializer=Serializer.MSGPACK)
 
-    # @deprecated(reason="Request response is no longer supported")
-    # async def __call_remote_function_request_response(self,
-    #                                                   operator_name: str,
-    #                                                   function_name:  Type | str,
-    #                                                   partition: int,
-    #                                                   key,
-    #                                                   params: tuple = tuple()):
-    #     if isinstance(function_name, type):
-    #         function_name = function_name.__name__
-    #     payload, operator_host, operator_port = self.__prepare_message_transmission(operator_name,
-    #                                                                                 key,
-    #                                                                                 function_name,
-    #                                                                                 partition,
-    #                                                                                 params)
-    #     logging.info(f'(SF)  Start {operator_host}:{operator_port} of {operator_name}:{partition}')
-    #     resp = await self.__networking.send_message_request_response(operator_host,
-    #                                                                  operator_port,
-    #                                                                  msg=payload,
-    #                                                                  msg_type=MessageType.RunFunRqRsRemote,
-    #                                                                  serializer=Serializer.MSGPACK)
-    #     return resp
-
     def __prepare_message_transmission(self, operator_name: str, key,
                                        function_name: str, partition: int, params: tuple, ack_payload=None):
         try:
@@ -253,13 +220,12 @@ class StatefulFunction(Function):
                        function_name,  # __FUN_NAME__
                        key,  # __KEY__
                        partition,  # __PARTITION__
-                       self.__timestamp,  # __TIMESTAMP__
                        self.__fallback_enabled,
                        params)  # __PARAMS__
             if ack_payload is not None:
                 payload += (ack_payload, )
-            operator_host = self.__dns[operator_name][str(partition)][0]
-            operator_port = self.__dns[operator_name][str(partition)][2]
+            operator_host = self.__dns[operator_name][partition][0]
+            operator_port = self.__dns[operator_name][partition][2]
         except KeyError:
             logging.error(f"Couldn't find operator: {operator_name} in {self.__dns}")
         else:

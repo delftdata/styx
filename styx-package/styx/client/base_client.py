@@ -5,12 +5,10 @@ from types import ModuleType
 from typing import Type
 
 from cloudpickle import cloudpickle
-from styx.common.base_networking import BaseNetworking
-from styx.common.tcp_networking import NetworkingManager
 
 from .styx_future import StyxFuture, StyxAsyncFuture
+from ..common.base_networking import BaseNetworking
 from ..common.base_operator import BaseOperator
-from ..common.stateful_function import make_key_hashable
 from ..common.stateflow_graph import StateflowGraph
 from ..common.message_types import MessageType
 from ..common.serialization import cloudpickle_serialization, cloudpickle_deserialization, Serializer, \
@@ -32,8 +30,8 @@ class BaseStyxClient(ABC):
                  styx_coordinator_port: int):
         self._styx_coordinator_adr: str = styx_coordinator_adr
         self._styx_coordinator_port: int = styx_coordinator_port
-        self._networking_manager: NetworkingManager = NetworkingManager(None)
         self._delivery_timestamps: dict[bytes, int] = {}
+        self._current_active_graph: StateflowGraph | None = None
 
     @property
     def delivery_timestamps(self):
@@ -72,6 +70,10 @@ class BaseStyxClient(ABC):
                 cloudpickle.register_pickle_by_value(external_module)
         self._check_serializability(stateflow_graph)
 
+    @abstractmethod
+    def get_operator_partition(self, key, operator: BaseOperator) -> int:
+        raise NotImplementedError()
+
     def _prepare_kafka_message(self,
                                key,
                                operator: BaseOperator,
@@ -80,7 +82,7 @@ class BaseStyxClient(ABC):
                                serializer: Serializer,
                                partition: int | None = None) -> tuple[bytes, bytes, int]:
         if partition is None:
-            partition: int = make_key_hashable(key) % operator.n_partitions
+            partition: int = self._current_active_graph.nodes[operator.name].which_partition(key)
         fun_name: str = function if isinstance(function, str) else function.__name__
         event = (operator.name,
                  key,
@@ -99,7 +101,7 @@ class BaseStyxClient(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def open(self):
+    def open(self, consume: bool = True):
         raise NotImplementedError
 
     @abstractmethod

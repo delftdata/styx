@@ -1,3 +1,4 @@
+import multiprocessing
 import random
 import sys
 from timeit import default_timer as timer
@@ -13,6 +14,9 @@ from styx.client import SyncStyxClient
 from graph import (geo_operator, rate_operator, recommendation_operator, search_operator, order_operator,
                    user_operator, hotel_operator, flight_operator)
 
+import kafka_output_consumer
+import calculate_metrics
+
 SAVE_DIR: str = sys.argv[1]
 threads = int(sys.argv[2])
 N_PARTITIONS = int(sys.argv[3])
@@ -20,6 +24,7 @@ messages_per_second = int(sys.argv[4])
 sleeps_per_second = 100
 sleep_time = 0.0085
 seconds = int(sys.argv[5])
+warmup_seconds = int(sys.argv[6])
 STYX_HOST: str = 'localhost'
 STYX_PORT: int = 8886
 KAFKA_URL = 'localhost:9092'
@@ -300,7 +305,7 @@ def deathstar_workload_generator():
 def benchmark_runner(proc_num) -> dict[bytes, dict]:
     print(f'Generator: {proc_num} starting')
     styx = SyncStyxClient(STYX_HOST, STYX_PORT, kafka_url=KAFKA_URL)
-    styx.open()
+    styx.open(consume=False)
     deathstar_generator = deathstar_workload_generator()
     timestamp_futures: dict[bytes, dict] = {}
     start = timer()
@@ -333,7 +338,7 @@ def benchmark_runner(proc_num) -> dict[bytes, dict]:
 def main():
     styx_client = SyncStyxClient(STYX_HOST, STYX_PORT, kafka_url=KAFKA_URL)
 
-    styx_client.open()
+    styx_client.open(consume=False)
 
     deathstar_init(styx_client)
 
@@ -355,4 +360,16 @@ def main():
 
 
 if __name__ == "__main__":
+    multiprocessing.set_start_method('fork')
     main()
+
+    print()
+    kafka_output_consumer.main(SAVE_DIR)
+
+    print()
+    calculate_metrics.main(
+        SAVE_DIR,
+        messages_per_second,
+        warmup_seconds,
+        threads
+    )

@@ -1,13 +1,13 @@
 # networking service
 uvloop==0.21.0
-# msgspec==0.18.6
-git+https://github.com/jcrist/msgspec.git
-cloudpickle==3.1.0
+msgspec==0.19.0
+cloudpickle==3.1.1
+cityhash==0.4.7
 # monitoring service
-# psutil==5.9.1
+prometheus-client==0.21.1
 # kafka
-confluent-kafka==2.6.0
+confluent-kafka==2.8.0
 # snapshots
-minio==7.2.10
+minio==7.2.15
 # deathstar
 geopy

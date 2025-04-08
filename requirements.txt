@@ -1,27 +1,26 @@
 # STYX
 # networking service
-uvloop==0.19.0
-msgspec==0.18.6
-cloudpickle==3.0.0
-mmh3==4.1.0
+uvloop==0.21.0
+msgspec==0.19.0
+cloudpickle==3.1.1
+cityhash==0.4.7
 # monitoring service
-# psutil==5.9.2
+prometheus-client==0.21.1
+psutil==7.0.0
 # Kafka
-aiokafka==0.11.0
-confluent-kafka==2.5.0
+aiokafka==0.12.0
+confluent-kafka==2.8.0
 # snapshots
-minio==7.2.7
+minio==7.2.15
 # deathstar
-geopy~=2.4.1
-# WDM demo
-sanic==23.12.1
+geopy
+# shopping cart demo
+sanic==24.12.0
+aiohttp==3.11.12
+locust==2.32.9
 # Plots and demo
-pandas~=2.2.3
-tqdm~=4.66.5
-numpy~=2.1.1
-scipy~=1.14.1
-matplotlib~=3.9.2
-styx~=0.0.1
-fastapi~=0.115.6
-aiologger~=0.7.0
-logging~=0.4.9.6
+pandas==2.2.3
+tqdm==4.67.1
+numpy==2.2.3
+scipy==1.15.2
+matplotlib==3.10.0

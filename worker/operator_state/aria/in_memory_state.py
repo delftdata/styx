@@ -30,7 +30,7 @@ class InMemoryOperatorState(BaseAriaState):
 
     def clear_delta_map(self):
         for operator_partition in self.operator_partitions:
-            self.delta_map[operator_partition] = {}
+            self.delta_map[operator_partition].clear()
 
     def commit_fallback_transaction(self, t_id: int):
         if t_id in self.fallback_commit_buffer:
@@ -60,7 +60,9 @@ class InMemoryOperatorState(BaseAriaState):
 
     def get_immediate(self, key, t_id: int, operator_name: str, partition: int):
         operator_partition: OperatorPartition = (operator_name, partition)
-        if key in self.fallback_commit_buffer[t_id][operator_partition]:
+        if (t_id in self.fallback_commit_buffer and
+                operator_partition in self.fallback_commit_buffer[t_id] and
+                key in self.fallback_commit_buffer[t_id][operator_partition]):
             return self.fallback_commit_buffer[t_id][operator_partition][key]
         return msgpack.decode(msgpack.encode(self.data[operator_partition].get(key)))
 
@@ -70,6 +72,8 @@ class InMemoryOperatorState(BaseAriaState):
 
     def exists(self, key, operator_name: str, partition: int):
         operator_partition: OperatorPartition = (operator_name, partition)
+        if operator_partition not in self.data:
+            return False
         return key in self.data[operator_partition]
 
     def commit(self, aborted_from_remote: set[int]) -> set[int]:

@@ -17,13 +17,11 @@ do
   warmup_seconds="${ss[5]}"
   epoch_size="${ss[6]}"
 
-  bash scripts/start_styx_cluster.sh $n_part $epoch_size
+  bash scripts/start_styx_cluster.sh "$n_part" "$epoch_size"
 
   sleep 10
 
-  python demo/demo-scalability/client.py $client_threads $pm $n_part $input_rate $total_time $saving_dir
-  python demo/demo-scalability/kafka_output_consumer.py $saving_dir
-  python demo/demo-scalability/calculate_metrics.py $saving_dir $warmup_seconds $pm $n_part $input_rate $client_threads
+  python demo/demo-scalability/client.py "$client_threads" "$pm" "$n_part" "$input_rate" "$total_time" "$saving_dir" "$warmup_seconds"
 
   bash scripts/stop_styx_cluster.sh
 

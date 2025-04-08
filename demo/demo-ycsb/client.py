@@ -10,7 +10,6 @@ from styx.client.sync_client import SyncStyxClient
 from styx.common.local_state_backends import LocalStateBackend
 from styx.common.operator import Operator
 from styx.common.stateflow_graph import StateflowGraph
-from styx.common.stateful_function import make_key_hashable
 
 import kafka_output_consumer
 import calculate_metrics
@@ -58,7 +57,7 @@ def ycsb_init(styx: SyncStyxClient, operator: Operator, keys: list[int]):
     # INSERT
     partitions: dict[int, dict] = {p: {} for p in range(N_PARTITIONS)}
     for i in tqdm(keys):
-        partition: int = make_key_hashable(i) % operator.n_partitions
+        partition: int = styx.get_operator_partition(i, operator)
         partitions[partition] |= {i: STARTING_MONEY}
         if i % 100_000 == 0 or i == len(keys) - 1:
             for partition, kv_pairs in partitions.items():
@@ -69,15 +68,16 @@ def ycsb_init(styx: SyncStyxClient, operator: Operator, keys: list[int]):
             partitions: dict[int, dict] = {p: {} for p in range(N_PARTITIONS)}
 
 
-def transactional_ycsb_generator(keys, operator: Operator,
-                                 n: int, zipf_const: float) -> [Operator, int, str, tuple[int, ]]:
+def transactional_ycsb_generator(keys,
+                                 operator: Operator,
+                                 n: int,
+                                 zipf_const: float) -> [Operator, int, str, tuple[int, ]]:
     zipf_gen = ZipfGenerator(items=n, zipf_const=zipf_const)
     uniform_gen = ZipfGenerator(items=n, zipf_const=0.0)
     while True:
         key = keys[next(uniform_gen)]
         key2 = keys[next(zipf_gen)]
-        while (key2 == key or
-               make_key_hashable(key2) % N_PARTITIONS == make_key_hashable(key) % N_PARTITIONS):
+        while key2 == key:
             key2 = keys[next(zipf_gen)]
         yield operator, key, 'transfer', (key2, )
 
@@ -91,8 +91,8 @@ def read_only_ycsb_generator(keys, operator: Operator, n: int, zipf_const: float
 
 def benchmark_runner(proc_num) -> dict[bytes, dict]:
     print(f'Generator: {proc_num} starting')
-    styx = SyncStyxClient(STYX_HOST, STYX_PORT, kafka_url=KAFKA_URL, start_futures_consumer=False)
-    styx.open()
+    styx = SyncStyxClient(STYX_HOST, STYX_PORT, kafka_url=KAFKA_URL)
+    styx.open(consume=False)
     ycsb_generator = transactional_ycsb_generator(key_list, ycsb_operator, N_ENTITIES, zipf_const=ZIPF_CONST)
     timestamp_futures: dict[bytes, dict] = {}
     start = timer()
@@ -131,9 +131,9 @@ def main():
         print("Impossible to run this benchmark with one key")
         return
 
-    styx_client = SyncStyxClient(STYX_HOST, STYX_PORT, kafka_url=KAFKA_URL, start_futures_consumer=False)
+    styx_client = SyncStyxClient(STYX_HOST, STYX_PORT, kafka_url=KAFKA_URL)
 
-    styx_client.open()
+    styx_client.open(consume=False)
 
     ycsb_init(styx_client, ycsb_operator, key_list)
 
@@ -149,11 +149,11 @@ def main():
 
     if run_with_validation:
         # wait for system to stabilize
-        time.sleep(60)
+        time.sleep(30)
 
-        styx_client = SyncStyxClient(STYX_HOST, STYX_PORT, kafka_url=KAFKA_URL, start_futures_consumer=False)
+        styx_client = SyncStyxClient(STYX_HOST, STYX_PORT, kafka_url=KAFKA_URL)
 
-        styx_client.open()
+        styx_client.open(consume=False)
 
         print('Starting Consistency measurement')
 

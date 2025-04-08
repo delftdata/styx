@@ -1,16 +1,16 @@
 import asyncio
 import os
 import socket
-import time
 import concurrent.futures
+import struct
 from asyncio import StreamReader, StreamWriter
-from struct import unpack
 
 from timeit import default_timer as timer
 
 import uvloop
 from minio import Minio
 import minio.error
+from prometheus_client import start_http_server, Gauge
 
 from styx.common.logging import logging
 from styx.common.message_types import MessageType
@@ -19,7 +19,8 @@ from styx.common.protocols import Protocols
 from styx.common.serialization import Serializer
 from styx.common.util.aio_task_scheduler import AIOTaskScheduler
 
-from coordinator import Coordinator
+from coordinator.worker_pool import Worker
+from coordinator_metadata import Coordinator
 from aria_sync_metadata import AriaSyncMetadata
 
 SERVER_PORT = 8888
@@ -34,9 +35,7 @@ PROTOCOL = Protocols.Aria
 SNAPSHOT_BUCKET_NAME: str = os.getenv('SNAPSHOT_BUCKET_NAME', "styx-snapshots")
 SNAPSHOT_FREQUENCY_SEC = int(os.getenv('SNAPSHOT_FREQUENCY_SEC', 10))
 SNAPSHOT_COMPACTION_INTERVAL_SEC = int(os.getenv('SNAPSHOT_COMPACTION_INTERVAL_SEC', 10))
-
-HEARTBEAT_CHECK_INTERVAL: int = int(os.getenv('HEARTBEAT_CHECK_INTERVAL', 500))  # 100ms
-HEARTBEAT_LIMIT: int = int(os.getenv('HEARTBEAT_LIMIT', 5000))  # 5000ms
+HEARTBEAT_CHECK_INTERVAL: int = int(os.getenv('HEARTBEAT_CHECK_INTERVAL', 1000))  # 1000ms
 
 
 class CoordinatorService(object):
@@ -44,31 +43,71 @@ class CoordinatorService(object):
     def __init__(self):
         self.networking = NetworkingManager(SERVER_PORT)
         self.protocol_networking = NetworkingManager(PROTOCOL_PORT, size=4, mode=MessagingMode.PROTOCOL_PROTOCOL)
-        self.coordinator = Coordinator(self.networking)
+        self.minio_client: Minio = Minio(
+            MINIO_URL, access_key=MINIO_ACCESS_KEY,
+            secret_key=MINIO_SECRET_KEY, secure=False
+        )
+        self.coordinator = Coordinator(self.networking,self.minio_client)
         self.aio_task_scheduler = AIOTaskScheduler()
-        self.background_tasks = set()
-        self.healthy_workers: set[int] = set()
-        self.worker_is_healthy: dict[int, asyncio.Event] = {}
 
         self.puller_task: asyncio.Task = ...
 
         self.coor_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.coor_socket.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER,
+                                 struct.pack('ii', 1, 0))  # Enable LINGER, timeout 0
+        self.coor_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        self.coor_socket.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 1024 * 1024)
+        self.coor_socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1024 * 1024)
         self.coor_socket.bind(('0.0.0.0', SERVER_PORT))
         self.coor_socket.setblocking(False)
 
         self.protocol_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.protocol_socket.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER,
+                                 struct.pack('ii', 1, 0))  # Enable LINGER, timeout 0
+        self.protocol_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        self.protocol_socket.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 1024 * 1024)
+        self.protocol_socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1024 * 1024)
         self.protocol_socket.bind(('0.0.0.0', SERVER_PORT + 1))
         self.protocol_socket.setblocking(False)
 
         self.aria_metadata: AriaSyncMetadata = ...
+        self.workers_that_re_registered: list[Worker] = []
+        self.recovery_lock: asyncio.Lock = asyncio.Lock()
 
-    def create_task(self, coroutine):
-        task = asyncio.create_task(coroutine)
-        self.background_tasks.add(task)
-        task.add_done_callback(self.background_tasks.discard)
+        self.metrics_server = start_http_server(8000)
+        self.cpu_usage_gauge = Gauge("worker_cpu_usage_percent",
+                                     "CPU usage percentage",
+                                     ["instance"])
+        self.memory_usage_gauge = Gauge("worker_memory_usage_mb",
+                                        "Memory usage in MB",
+                                        ["instance"])
+        self.network_rx_gauge = Gauge("worker_network_rx_kb",
+                                      "Network received KB",
+                                      ["instance"])
+        self.network_tx_gauge = Gauge("worker_network_tx_kb",
+                                      "Network transmitted KB",
+                                      ["instance"])
+        self.epoch_latency_gauge = Gauge("worker_epoch_latency_ms",
+                                         "Epoch Latency (ms)",
+                                         ["instance"])
+        self.epoch_throughput_gauge = Gauge("worker_epoch_throughput_tps",
+                                            "Epoch Throughput (transactions per second)",
+                                            ["instance"])
+        self.epoch_abort_gauge = Gauge("worker_abort_percent",
+                                            "Epoch Concurrency Abort percentage",
+                                            ["instance"])
+        self.latency_breakdown_gauge = Gauge("latency_breakdown",
+                                             "Time Spent in different phases within the transactional protocol",
+                                             ["instance", "component"])
+        self.snapshotting_gauge = Gauge("worker_total_snapshotting_time_ms",
+                                            "Snapshotting time (ms)",
+                                            ["instance"])
+        self.heartbeat_gauge = Gauge("time_since_last_heartbeat",
+                                            "Time Since Last Heartbeat",
+                                            ["instance"])
 
     # Refactoring candidate
-    async def coordinator_controller(self, writer: StreamWriter, data, pool: concurrent.futures.ProcessPoolExecutor):
+    async def coordinator_controller(self, transport, data, pool: concurrent.futures.ProcessPoolExecutor):
         message_type: int = self.networking.get_msg_type(data)
         match message_type:
             case MessageType.SendExecutionGraph:
@@ -76,46 +115,53 @@ class CoordinatorService(object):
                 # Received execution graph from a styx client
                 await self.coordinator.submit_stateflow_graph(message[0])
                 logging.info("Submitted Stateflow Graph to Workers")
-                logging.warning(f"Registering metadata with: {len(self.coordinator.workers)} workers")
-                self.aria_metadata = AriaSyncMetadata(len(self.coordinator.workers))
+                self.aria_metadata = AriaSyncMetadata(len(self.coordinator.worker_pool.get_participating_workers()))
             case MessageType.RegisterWorker:  # REGISTER_WORKER
                 worker_ip, worker_port, protocol_port = self.networking.decode_message(data)
                 # A worker registered to the coordinator
-                worker_id, send_recovery = await self.coordinator.register_worker(worker_ip, worker_port, protocol_port)
-                reply = self.networking.encode_message(msg=worker_id,
-                                                       msg_type=MessageType.RegisterWorker,
-                                                       serializer=Serializer.MSGPACK)
-                writer.write(reply)
-                await writer.drain()
-                logging.info(f"Worker registered {worker_ip}:{worker_port} with id {reply}")
-                if send_recovery:
-                    await self.coordinator.send_operators_snapshot_offsets(worker_id)
-                self.healthy_workers.add(worker_id)
+                worker_id, init_recovery = self.coordinator.register_worker(worker_ip, worker_port, protocol_port)
+                transport.write(self.networking.encode_message(msg=worker_id,
+                                                            msg_type=MessageType.RegisterWorker,
+                                                            serializer=Serializer.MSGPACK))
+                if init_recovery:
+                    async with self.recovery_lock:
+                        self.workers_that_re_registered.append(self.coordinator.get_worker_with_id(worker_id))
+                logging.warning(f"Worker registered {worker_ip}:{worker_port} with id {worker_id}")
             case MessageType.SnapID:
                 # Get snap id from worker
-                worker_id, snapshot_id, start, end = self.networking.decode_message(data)
-                self.coordinator.register_snapshot(worker_id, snapshot_id, pool)
+                (worker_id, snapshot_id, start, end,
+                 partial_input_offsets, partial_output_offsets,
+                 epoch_counter, t_counter) = self.networking.decode_message(data)
+                snapshot_time = end - start
+                self.snapshotting_gauge.labels(instance=worker_id).set(snapshot_time)
                 logging.warning(f'Worker: {worker_id} | '
                                 f'Completed snapshot: {snapshot_id} | '
                                 f'started at: {start} | '
                                 f'ended at: {end} | '
-                                f'took: {end - start}ms')
+                                f'took: {snapshot_time}ms')
+                self.coordinator.register_snapshot(worker_id, snapshot_id,
+                                                   partial_input_offsets, partial_output_offsets,
+                                                   epoch_counter, t_counter,
+                                                   pool)
             case MessageType.Heartbeat:
                 # HEARTBEATS
-                worker_id = self.networking.decode_message(data)[0]
+                (worker_id, cpu_perc, mem_util, rx_net, tx_net) = self.networking.decode_message(data)
+                self.cpu_usage_gauge.labels(instance=worker_id).set(cpu_perc) # %
+                self.memory_usage_gauge.labels(instance=worker_id).set(mem_util) # MB
+                self.network_rx_gauge.labels(instance=worker_id).set(rx_net) # KB
+                self.network_tx_gauge.labels(instance=worker_id).set(tx_net) # KB
                 heartbeat_rcv_time = timer()
                 logging.info(f'Heartbeat received from: {worker_id} at time: {heartbeat_rcv_time}')
                 self.coordinator.register_worker_heartbeat(worker_id, heartbeat_rcv_time)
             case MessageType.ReadyAfterRecovery:
                 # report ready after recovery
-                worker_id = self.networking.decode_message(data)[0]
-                self.worker_is_healthy[worker_id].set()
+                (worker_id,) = self.networking.decode_message(data)
+                self.coordinator.worker_is_ready_after_recovery(worker_id)
                 logging.info(f'ready after recovery received from: {worker_id}')
             case _:
                 # Any other message type
                 logging.error(f"COORDINATOR SERVER: Non supported message type: {message_type}")
 
-    # Refactoring candidate
     async def protocol_controller(self, data):
         message_type: int = self.protocol_networking.get_msg_type(data)
         match message_type:
@@ -148,6 +194,23 @@ class CoordinatorService(object):
                                                     Serializer.PICKLE)
                     await self.aria_metadata.cleanup()
             case MessageType.SyncCleanup | MessageType.AriaFallbackStart | MessageType.AriaFallbackDone:
+                if message_type == MessageType.SyncCleanup:
+                    (worker_id, epoch_throughput, epoch_latency,
+                     local_abort_rate, wal_time, func_time, chain_ack_time,
+                     sync_time, conflict_res_time, commit_time,
+                     fallback_time, snap_time) = self.protocol_networking.decode_message(data)
+                    self.epoch_throughput_gauge.labels(instance=worker_id).set(epoch_throughput)
+                    self.epoch_latency_gauge.labels(instance=worker_id).set(epoch_latency)
+                    self.epoch_abort_gauge.labels(instance=worker_id).set(local_abort_rate)
+                    self.latency_breakdown_gauge.labels(instance=worker_id, component="WAL").set(wal_time)
+                    self.latency_breakdown_gauge.labels(instance=worker_id, component="1st Run").set(func_time)
+                    self.latency_breakdown_gauge.labels(instance=worker_id, component="Chain Acks").set(chain_ack_time)
+                    self.latency_breakdown_gauge.labels(instance=worker_id, component="SYNC").set(sync_time)
+                    self.latency_breakdown_gauge.labels(instance=worker_id, component="Conflict Resolution").set(conflict_res_time)
+                    self.latency_breakdown_gauge.labels(instance=worker_id, component="Commit time").set(commit_time)
+                    self.latency_breakdown_gauge.labels(instance=worker_id, component="Fallback").set(fallback_time)
+                    self.latency_breakdown_gauge.labels(instance=worker_id, component="Async Snapshot").set(snap_time)
+
                 sync_complete: bool = await self.aria_metadata.set_empty_sync_done()
                 if sync_complete:
                     await self.finalize_worker_sync(MessageType(message_type),
@@ -169,19 +232,20 @@ class CoordinatorService(object):
                                                     Serializer.PICKLE)
                     await self.aria_metadata.cleanup()
 
+
     async def start_puller(self):
         async def request_handler(reader: StreamReader, writer: StreamWriter):
             try:
                 while True:
                     data = await reader.readexactly(8)
-                    (size,) = unpack('>Q', data)
+                    (size,) = struct.unpack('>Q', data)
                     self.aio_task_scheduler.create_task(self.protocol_controller(await reader.readexactly(size)))
             except asyncio.IncompleteReadError as e:
-                logging.warning(f"Client disconnected unexpectedly: {e}")
+                logging.info(f"Client disconnected unexpectedly: {e}")
             except asyncio.CancelledError:
                 pass
             finally:
-                logging.warning("Closing the connection")
+                logging.info("Closing the connection")
                 writer.close()
                 await writer.wait_closed()
 
@@ -190,22 +254,22 @@ class CoordinatorService(object):
             await server.serve_forever()
 
     async def tcp_service(self):
-        self.puller_task = self.aio_task_scheduler.create_task(self.start_puller())
+        self.puller_task = asyncio.create_task(self.start_puller())
         logging.info(f"Coordinator Server listening at 0.0.0.0:{SERVER_PORT}")
         with concurrent.futures.ProcessPoolExecutor(1) as pool:
             async def request_handler(reader: StreamReader, writer: StreamWriter):
                 try:
                     while True:
                         data = await reader.readexactly(8)
-                        (size,) = unpack('>Q', data)
+                        (size,) = struct.unpack('>Q', data)
                         message = await reader.readexactly(size)
                         self.aio_task_scheduler.create_task(self.coordinator_controller(writer, message, pool))
                 except asyncio.IncompleteReadError as e:
-                    logging.warning(f"Client disconnected unexpectedly: {e}")
+                    logging.info(f"Client disconnected unexpectedly: {e}")
                 except asyncio.CancelledError:
                     pass
                 finally:
-                    logging.warning("Closing the connection")
+                    logging.info("Closing the connection")
                     writer.close()
                     await writer.wait_closed()
 
@@ -222,16 +286,16 @@ class CoordinatorService(object):
                                    message: tuple | bytes,
                                    serializer: Serializer = Serializer.MSGPACK):
         async with asyncio.TaskGroup() as tg:
-            for worker_id, worker in self.coordinator.workers.items():
-                tg.create_task(self.protocol_networking.send_message(worker[0], worker[2],
+            for worker in self.coordinator.worker_pool.get_participating_workers():
+                tg.create_task(self.protocol_networking.send_message(worker.worker_ip, worker.protocol_port,
                                                                      msg=message,
                                                                      msg_type=msg_type,
                                                                      serializer=serializer))
 
     async def worker_wants_to_proceed(self):
         async with asyncio.TaskGroup() as tg:
-            for worker_id, worker in self.coordinator.workers.items():
-                tg.create_task(self.protocol_networking.send_message(worker[0], worker[2],
+            for worker in self.coordinator.worker_pool.get_participating_workers():
+                tg.create_task(self.protocol_networking.send_message(worker.worker_ip, worker.protocol_port,
                                                                      msg=b'',
                                                                      msg_type=MessageType.RemoteWantsToProceed,
                                                                      serializer=Serializer.NONE))
@@ -240,59 +304,48 @@ class CoordinatorService(object):
         interval_time = HEARTBEAT_CHECK_INTERVAL / 1000
         while True:
             await asyncio.sleep(interval_time)
-            workers_to_remove = set()
             heartbeat_check_time = timer()
-            for worker_id, heartbeat_rcv_time in self.coordinator.worker_heartbeats.items():
-                if worker_id in self.healthy_workers and \
-                        (heartbeat_check_time - heartbeat_rcv_time) * 1000 > HEARTBEAT_LIMIT:
-                    logging.error(f"Did not receive heartbeat for worker: {worker_id} \n"
-                                  f"Initiating automatic recovery...at time: {time.time() * 1000}")
-                    workers_to_remove.add(worker_id)
-                    self.healthy_workers.remove(worker_id)
-            if workers_to_remove:
-                self.worker_is_healthy = {peer_id: asyncio.Event()
-                                          for peer_id in self.coordinator.worker_heartbeats.keys()}
-                await self.coordinator.remove_workers(workers_to_remove)
-                await self.networking.close_all_connections()
-                await self.protocol_networking.close_all_connections()
-                self.aio_task_scheduler.create_task(self.cluster_became_healthy_monitor())
-
-    async def cluster_became_healthy_monitor(self):
-        logging.info('waiting for cluster to be ready')
-        # wait for everyone to recover
-        async with asyncio.TaskGroup() as tg:
-            for event in self.worker_is_healthy.values():
-                tg.create_task(event.wait())
-        await self.aria_metadata.cleanup()
-        # notify that everyone is ready after recovery
-        async with asyncio.TaskGroup() as tg:
-            for worker_id, worker in self.coordinator.workers.items():
-                tg.create_task(self.networking.send_message(worker[0], worker[1],
-                                                            msg=b'',
-                                                            msg_type=MessageType.ReadyAfterRecovery,
-                                                            serializer=Serializer.NONE))
-        logging.info('ready events sent')
+            workers_to_remove, heartbeats_per_worker = self.coordinator.check_heartbeats(heartbeat_check_time)
+            for worker_id, time_since_last_heartbeat_ms in heartbeats_per_worker.items():
+                self.heartbeat_gauge.labels(instance=worker_id).set(time_since_last_heartbeat_ms)
+            if workers_to_remove or self.workers_that_re_registered:
+                async with self.recovery_lock:
+                    # There was a failure on a participating worker
+                    workers_to_remove.update(self.workers_that_re_registered)
+                    # 1) Clean up dead worker channels
+                    logging.warning(f"Closing connections to dead workers: {workers_to_remove}")
+                    for worker in workers_to_remove:
+                        await self.networking.close_worker_connections(worker.worker_ip, worker.worker_port)
+                    # 2) Start recovery
+                    logging.warning("Starting recovery process")
+                    await self.coordinator.start_recovery_process(workers_to_remove)
+                    # 3) Wait for the cluster to become healthy
+                    logging.warning("Waiting on the cluster to become healthy")
+                    await self.coordinator.wait_cluster_healthy()
+                    # 4) Cleanup protocol metadata
+                    logging.warning("Cleaning up protocol after everyone is healthy")
+                    self.aria_metadata = AriaSyncMetadata(len(self.coordinator.worker_pool.get_participating_workers()))
+                    await self.protocol_networking.close_all_connections()
+                    # 4) Notify Cluster that everyone is ready
+                    logging.warning("Notify workers")
+                    await self.coordinator.notify_cluster_healthy()
+                    self.workers_that_re_registered = []
 
     async def send_snapshot_marker(self):
         while True:
             await asyncio.sleep(SNAPSHOT_FREQUENCY_SEC)
             async with asyncio.TaskGroup() as tg:
-                for worker_id, worker in self.coordinator.workers.items():
+                for worker_id, worker in self.coordinator.worker_pool.get_workers().items():
                     tg.create_task(self.networking.send_message(worker[0], worker[1],
                                                                 msg=b'',
                                                                 msg_type=MessageType.SnapMarker,
                                                                 serializer=Serializer.NONE))
             logging.warning('Snapshot marker sent')
 
-    @staticmethod
-    def init_snapshot_minio_bucket():
-        minio_client: Minio = Minio(
-            MINIO_URL, access_key=MINIO_ACCESS_KEY,
-            secret_key=MINIO_SECRET_KEY, secure=False
-        )
+    def init_snapshot_minio_bucket(self):
         try:
-            if not minio_client.bucket_exists(SNAPSHOT_BUCKET_NAME):
-                minio_client.make_bucket(SNAPSHOT_BUCKET_NAME)
+            if not self.minio_client.bucket_exists(SNAPSHOT_BUCKET_NAME):
+                self.minio_client.make_bucket(SNAPSHOT_BUCKET_NAME)
         except minio.error.S3Error:
             # BUCKET ALREADY EXISTS
             pass
@@ -304,7 +357,6 @@ class CoordinatorService(object):
         if PROTOCOL == Protocols.Unsafe or PROTOCOL == Protocols.MVCC:
             self.aio_task_scheduler.create_task(self.send_snapshot_marker())
         await self.tcp_service()
-        # TODO: No closing of connections in the end.
 
 
 if __name__ == "__main__":

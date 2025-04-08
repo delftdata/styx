@@ -30,6 +30,7 @@ class StyxKafkaBatchEgress(BaseEgress):
         self.messages_sent_before_recovery: dict[TopicPartition, set] = defaultdict(set)
         self.restart_after_failure = restart_after_failure
         self.batch: list = []
+        self.started: asyncio.Event = asyncio.Event()
 
     def clear_messages_sent_before_recovery(self):
         self.messages_sent_before_recovery: dict[TopicPartition, set] = defaultdict(set)
@@ -43,7 +44,7 @@ class StyxKafkaBatchEgress(BaseEgress):
         self.kafka_egress_producer = AIOKafkaProducer(
             bootstrap_servers=[KAFKA_URL],
             client_id=f"W{worker_id}_{uuid.uuid4()}",
-            enable_idempotence=True
+            acks=1,
         )
         while True:
             try:
@@ -53,12 +54,15 @@ class StyxKafkaBatchEgress(BaseEgress):
                 logging.info("Waiting for Kafka")
                 continue
             break
+        self.started.set()
 
     async def stop(self):
         await self.send_batch()
         await self.kafka_egress_producer.stop()
 
     async def send(self, key, value, operator_name: str, partition: int):
+        if not self.started.is_set():
+            await self.started.wait()
         tp = TopicPartition(operator_name + "--OUT", partition)
         if key not in self.messages_sent_before_recovery[tp]:
             self.batch.append(await self.kafka_egress_producer.send(operator_name + "--OUT",
@@ -67,6 +71,14 @@ class StyxKafkaBatchEgress(BaseEgress):
                                                                     partition=partition))
         else:
             self.messages_sent_before_recovery[tp].remove(key)
+
+    async def send_message_to_topic(self, key, message, topic: str) -> RecordMetadata:
+        if not self.started.is_set():
+            await self.started.wait()
+        res: RecordMetadata = await self.kafka_egress_producer.send_and_wait(topic,
+                                                                             key=key,
+                                                                             value=message)
+        return res
 
     async def send_immediate(self, key, value, operator_name: str, partition: int):
         tp = TopicPartition(operator_name + "--OUT", partition)
@@ -121,6 +133,10 @@ class StyxKafkaBatchEgress(BaseEgress):
             logging.warning(f'Reading from output from: {self.topic_partition_output_offsets} + 1 to {current_offsets}')
             all_partitions_done: dict[TopicPartition, bool] = {topic_partition: False
                                                                for topic_partition in output_topic_partitions}
+            for topic_partition, current_offset in current_offsets.items():
+                if (current_offset == self.topic_partition_output_offsets[(topic_partition.topic[:-5],
+                                                                           topic_partition.partition)] + 1):
+                    all_partitions_done[topic_partition] = True
             while not all(partition_is_done for partition_is_done in all_partitions_done.values()):
                 result = await kafka_output_consumer.getmany(timeout_ms=EPOCH_INTERVAL_MS)
                 for _, messages in result.items():

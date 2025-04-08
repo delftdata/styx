@@ -1,3 +1,4 @@
+import multiprocessing
 import random
 import sys
 import time
@@ -11,11 +12,13 @@ from styx.client.sync_client import SyncStyxClient
 from styx.common.local_state_backends import LocalStateBackend
 from styx.common.operator import Operator
 from styx.common.stateflow_graph import StateflowGraph
-from styx.common.stateful_function import make_key_hashable
 
 from tqdm import tqdm
 
 from ycsb import ycsb_operator
+
+import kafka_output_consumer
+import calculate_metrics
 
 
 threads = int(sys.argv[1])
@@ -32,6 +35,7 @@ STYX_HOST: str = 'localhost'
 STYX_PORT: int = 8886
 KAFKA_URL = 'localhost:9092'
 SAVE_DIR: str = sys.argv[6]
+warmup_seconds: int = int(sys.argv[7])
 
 g = StateflowGraph('ycsb-benchmark', operator_state_backend=LocalStateBackend.DICT)
 ####################################################################################################################
@@ -50,7 +54,7 @@ def ycsb_init(styx: SyncStyxClient, operator: Operator):
     # INSERT
     partitions: dict[int, dict] = {p: {} for p in range(N_PARTITIONS)}
     for i in tqdm(range(N_ENTITIES)):
-        partition: int = make_key_hashable(i) % operator.n_partitions
+        partition: int = styx.get_operator_partition(i, operator)
         partitions[partition] |= {i: STARTING_MONEY}
         if i % 100_000 == 0 or i == N_ENTITIES - 1:
             for partition, kv_pairs in partitions.items():
@@ -87,7 +91,7 @@ def transactional_ycsb_generator(operator: Operator) -> [Operator, int, str, tup
 def benchmark_runner(proc_num) -> dict[bytes, dict]:
     print(f'Generator: {proc_num} starting')
     styx = SyncStyxClient(STYX_HOST, STYX_PORT, kafka_url=KAFKA_URL)
-    styx.open()
+    styx.open(consume=False)
     ycsb_generator = transactional_ycsb_generator(ycsb_operator)
     timestamp_futures: dict[bytes, dict] = {}
     start = timer()
@@ -124,7 +128,7 @@ def main():
 
     styx_client = SyncStyxClient(STYX_HOST, STYX_PORT, kafka_url=KAFKA_URL)
 
-    styx_client.open()
+    styx_client.open(consume=False)
 
     ycsb_init(styx_client, ycsb_operator)
 
@@ -145,4 +149,18 @@ def main():
 
 
 if __name__ == "__main__":
+    multiprocessing.set_start_method('fork')
     main()
+
+    print()
+    kafka_output_consumer.main(SAVE_DIR)
+
+    print()
+    calculate_metrics.main(
+        SAVE_DIR,
+        warmup_seconds,
+        PERC_MULT,
+        N_PARTITIONS,
+        messages_per_second,
+        threads
+    )

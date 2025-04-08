@@ -1,10 +1,10 @@
 import csv
+import multiprocessing
 import os
 import sys
 import random
 from datetime import datetime
 
-from styx.common.stateful_function import make_key_hashable
 from tqdm import tqdm
 
 from timeit import default_timer as timer
@@ -23,6 +23,9 @@ from graph import (customer_operator, district_operator, history_operator, item_
 
 import rand
 
+import kafka_output_consumer
+import calculate_metrics
+
 SAVE_DIR: str = sys.argv[1]
 threads = int(sys.argv[2])
 N_PARTITIONS = int(sys.argv[3])
@@ -33,8 +36,8 @@ seconds = int(sys.argv[5])
 STYX_HOST: str = 'localhost'
 STYX_PORT: int = 8886
 KAFKA_URL = 'localhost:9092'
-
-N_W = int(sys.argv[6])
+warmup_seconds = int(sys.argv[6])
+N_W = int(sys.argv[7])
 C_Per_District = 3000
 D_Per_Warehouse = 10
 N_D = N_W * D_Per_Warehouse
@@ -136,7 +139,7 @@ def populate_customer(styx: SyncStyxClient):
         for i, line in tqdm(enumerate(reader), desc="Populating Customer"):
             # Primary Key: (C_W_ID, C_D_ID, C_ID)
             customer_key = f'{line[2]}:{line[1]}:{line[0]}'
-            partition: int = make_key_hashable(customer_key) % customer_operator.n_partitions
+            partition: int = styx.get_operator_partition(customer_key, customer_operator)
             customer_data = {
                 "C_ID": int(line[0]),
                 "C_D_ID": int(line[1]),
@@ -192,7 +195,7 @@ def populate_customer(styx: SyncStyxClient):
 
         partitions: dict[int, dict] = {p: {} for p in range(N_PARTITIONS)}
         for i, (customer_idx_key, customer_idx_data) in enumerate(customer_index_data.items()):
-            partition = make_key_hashable(customer_idx_key) % customer_idx_operator.n_partitions
+            partition: int = styx.get_operator_partition(customer_idx_key, customer_idx_operator)
             partitions[partition] |= {customer_idx_key: customer_idx_data}
             if i % 1_000 == 0 or i == num_lines - 1:
                 for partition, kv_pairs in partitions.items():
@@ -216,7 +219,7 @@ def populate_history(styx: SyncStyxClient):
         for i, line in tqdm(enumerate(reader), desc="Populating History"):
             # Primary Key: (H_W_ID, H_D_ID, H_C_ID)
             history_key = f'{line[4]}:{line[3]}:{line[0]}'
-            partition = make_key_hashable(history_key) % history_operator.n_partitions
+            partition: int = styx.get_operator_partition(history_key, history_operator)
             history_data = {
                 "H_C_ID": int(line[0]),
                 "H_C_D_ID": int(line[1]),
@@ -250,7 +253,7 @@ def populate_new_order(styx: SyncStyxClient):
         for i, line in tqdm(enumerate(reader), desc="Populating New Order"):
             # Primary Key: (NO_W_ID, NO_D_ID, NO_O_ID)
             new_order_key = f'{line[2]}:{line[1]}:{line[0]}'
-            partition = make_key_hashable(new_order_key) % new_order_operator.n_partitions
+            partition: int = styx.get_operator_partition(new_order_key, new_order_operator)
             new_order_data = {
                 "NO_O_ID": int(line[0]),
                 "NO_D_ID": int(line[1]),
@@ -279,7 +282,7 @@ def populate_order(styx: SyncStyxClient):
         for i, line in tqdm(enumerate(reader), desc="Populating Order"):
             # Primary Key: (O_W_ID, O_D_ID, O_ID)
             order_key = f'{line[2]}:{line[1]}:{line[0]}'
-            partition = make_key_hashable(order_key) % order_operator.n_partitions
+            partition: int = styx.get_operator_partition(order_key, order_operator)
             order_data = {
                 "O_ID": int(line[0]),
                 "O_D_ID": int(line[1]),
@@ -313,7 +316,7 @@ def populate_order_line(styx: SyncStyxClient):
         for i, line in tqdm(enumerate(reader), desc="Populating Order Line"):
             # Primary Key: (OL_W_ID, OL_D_ID, OL_O_ID, OL_NUMBER)
             order_line_key = f'{line[2]}:{line[1]}:{line[0]}:{line[3]}'
-            partition = make_key_hashable(order_line_key) % order_line_operator.n_partitions
+            partition: int = styx.get_operator_partition(order_line_key, order_line_operator)
             order_line_data = {
                 "OL_O_ID": int(line[0]),
                 "OL_D_ID": int(line[1]),
@@ -348,7 +351,7 @@ def populate_item(styx: SyncStyxClient):
         partitions: dict[int, dict] = {p: {} for p in range(N_PARTITIONS)}
         for i, line in tqdm(enumerate(reader), desc="Populating Item"):
             item_key = int(line[0])
-            partition = make_key_hashable(item_key) % item_operator.n_partitions
+            partition: int = styx.get_operator_partition(item_key, item_operator)
             item_data = {
                 "I_IM_ID": int(line[1]),
                 "I_NAME": line[2],
@@ -378,7 +381,7 @@ def populate_stock(styx: SyncStyxClient):
         for i, line in tqdm(enumerate(reader), desc="Populating Stock"):
             # Primary Key: (S_W_ID, S_I_ID)
             stock_key = f'{line[1]}:{line[0]}'
-            partition = make_key_hashable(stock_key) % stock_operator.n_partitions
+            partition: int = styx.get_operator_partition(stock_key, stock_operator)
             stock_data = {
                 "S_I_ID": int(line[0]),
                 "S_W_ID": int(line[1]),
@@ -550,7 +553,7 @@ def tpc_c_workload_generator():
 def benchmark_runner(proc_num) -> dict[bytes, dict]:
     print(f'Generator: {proc_num} starting')
     styx = SyncStyxClient(STYX_HOST, STYX_PORT, kafka_url=KAFKA_URL)
-    styx.open()
+    styx.open(consume=False)
     tpc_c_generator = tpc_c_workload_generator()
     timestamp_futures: dict[bytes, dict] = {}
     start = timer()
@@ -583,7 +586,7 @@ def benchmark_runner(proc_num) -> dict[bytes, dict]:
 def main():
     styx_client = SyncStyxClient(STYX_HOST, STYX_PORT, kafka_url=KAFKA_URL)
 
-    styx_client.open()
+    styx_client.open(consume=False)
     tpc_c_init(styx_client)
     styx_client.close()
 
@@ -599,4 +602,17 @@ def main():
 
 
 if __name__ == "__main__":
+    multiprocessing.set_start_method('fork')
     main()
+
+    print()
+    kafka_output_consumer.main(SAVE_DIR)
+
+    print()
+    calculate_metrics.main(
+        SAVE_DIR,
+        messages_per_second,
+        warmup_seconds,
+        threads,
+        N_W
+    )
