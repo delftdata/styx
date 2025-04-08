@@ -23,7 +23,8 @@ from struct import unpack
 SERVER_PORT = 8080
 
 PROTOCOL = Protocols.Aria
-KAFKA_URL: str = os.getenv('KAFKA_URL', None)
+KAFKA_URL = 'localhost:9092'
+# KAFKA_URL: str = os.getenv('KAFKA_URL', None)
 KAFKA_CONSUME_TIMEOUT_MS = 10 # ms
 KAFKA_QUERY_RESPONSE_TOPIC="query_state_response"
 

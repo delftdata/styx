@@ -25,6 +25,8 @@ services:
       - KAFKA_URL=kafka1:19092
       - DISCOVERY_HOST=coordinator
       - DISCOVERY_PORT=8888
+      - STATE_HOST=querystate
+      - STATE_PORT=8080
     env_file:
       - env/minio.env
 #    deploy:
@@ -41,8 +43,4 @@ services:
       dockerfile: querystate/querystate.dockerfile
     image: dev/styx-querystate:latest
     environment:
-      - WORKER_THREADS=1
-      - INGRESS_TYPE=KAFKA
       - KAFKA_URL=kafka1:19092
-      - STATE_HOST=coordinator
-      - STATE_PORT=8080

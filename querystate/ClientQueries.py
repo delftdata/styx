@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import os
 import uuid
 
@@ -11,8 +12,10 @@ from styx.common.tcp_networking import NetworkingManager
 
 from querystate.querystate_service import KAFKA_CONSUME_TIMEOUT_MS
 
+
 KAFKA_QUERY_TOPIC = "query_processing"
-KAFKA_URL: str = os.getenv('KAFKA_URL', None)
+KAFKA_URL = 'localhost:9092'
+# KAFKA_URL: str = os.getenv('KAFKA_URL', None)
 SERVER_PORT=8080
 
 class ClientQueries:
@@ -62,6 +65,7 @@ class ClientQueries:
                     msg = await self.kafka_consumer.getone()
                     response = self.networking.decode_message(msg)
                     req_res_id = response['uuid']
+                    logging.warning(f':{response}')
                     '''send response back to client'''
 
             except TimeoutError:
