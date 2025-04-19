@@ -23,9 +23,9 @@ SNAPSHOT_BUCKET_NAME: str = os.getenv('SNAPSHOT_BUCKET_NAME', "styx-snapshots")
 
 class AsyncSnapshotsMinio(BaseSnapshotter):
 
-    def __init__(self, worker_id: int, n_assigned_partitions: int):
+    def __init__(self, worker_id: int, n_assigned_partitions: int = 0, snapshot_id: int = 0):
         self.worker_id: int = worker_id
-        self.snapshot_id: int = 0
+        self.snapshot_id: int = snapshot_id
         self.n_assigned_partitions: int = n_assigned_partitions
         self.completed_snapshots: int = 0
         self.snapshot_in_progress: bool = False
@@ -34,6 +34,9 @@ class AsyncSnapshotsMinio(BaseSnapshotter):
         self.current_output_offsets = None
         self.current_epoch_counter = -1
         self.current_t_counter = -1
+
+    def update_n_assigned_partitions(self, n_assigned_partitions: int):
+        self.n_assigned_partitions = n_assigned_partitions
 
     def snapshot_completed_callback(self, _, ):
         self.completed_snapshots += 1
@@ -68,7 +71,7 @@ class AsyncSnapshotsMinio(BaseSnapshotter):
     @staticmethod
     def store_snapshot(snapshot_id: int,
                        snapshot_name: str,
-                       data_to_snapshot: tuple):
+                       data_to_snapshot: dict):
         minio_client: Minio = Minio(MINIO_URL, access_key=MINIO_ACCESS_KEY, secret_key=MINIO_SECRET_KEY, secure=False)
         sn_data: bytes = msgpack_serialization(data_to_snapshot)
         minio_client.put_object(SNAPSHOT_BUCKET_NAME, snapshot_name, io.BytesIO(sn_data), len(sn_data))

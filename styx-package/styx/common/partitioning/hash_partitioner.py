@@ -13,6 +13,10 @@ class HashPartitioner(BasePartitioner):
     def update_partitions(self, partitions: int):
         self._partitions = partitions
 
+    @property
+    def partitions(self):
+        return self._partitions
+
     def get_partition(self, key) -> int | None:
         if key is None:
             return None

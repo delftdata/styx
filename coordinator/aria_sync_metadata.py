@@ -1,4 +1,5 @@
 import asyncio
+from typing import Any
 
 
 class AriaSyncMetadata(object):
@@ -16,9 +17,17 @@ class AriaSyncMetadata(object):
         self.global_write_set: None | dict = None
         self.global_read_set: None | dict = None
         self.lock: asyncio.Lock = asyncio.Lock()
+        self.stop_next_epoch: bool = False
+        self.take_snapshot: bool = False
 
     def check_sum(self) -> bool:
         return self.sync_sum == self.n_workers
+
+    def stop_in_next_epoch(self):
+        self.stop_next_epoch = True
+
+    def take_snapshot_at_next_epoch(self):
+        self.take_snapshot = True
 
     async def set_aria_processing_done(self, workers_logic_aborts: set[int]) -> bool:
         async with self.lock:
@@ -54,10 +63,10 @@ class AriaSyncMetadata(object):
             return self.check_sum()
 
     @staticmethod
-    def __merge_rw_sets(d1: dict[str, dict[any, set[any] | dict[any, any]]],
-                        d2: dict[str, dict[any, set[any] | dict[any, any]]]
-                        ) -> dict[str, dict[any, set[any] | dict[any, any]]]:
-        output_dict: dict[str, dict[any, set[any] | dict[any, any]]] = {}
+    def __merge_rw_sets(d1: dict[str, dict[Any, set[Any] | dict[Any, Any]]],
+                        d2: dict[str, dict[Any, set[Any] | dict[Any, Any]]]
+                        ) -> dict[str, dict[Any, set[Any] | dict[Any, Any]]]:
+        output_dict: dict[str, dict[Any, set[Any] | dict[Any, Any]]] = {}
         namespaces: set[str] = set(d1.keys()) | set(d2.keys())
         for namespace in namespaces:
             output_dict[namespace] = {}
@@ -77,10 +86,10 @@ class AriaSyncMetadata(object):
         return output_dict
 
     @staticmethod
-    def __merge_rw_reservations(d1: dict[str, dict[any, list[int]]],
-                                d2: dict[str, dict[any, list[int]]]
-                                ) -> dict[str, dict[any, list[int]]]:
-        output_dict: dict[str, dict[any, list[int]]] = {}
+    def __merge_rw_reservations(d1: dict[str, dict[Any, list[int]]],
+                                d2: dict[str, dict[Any, list[int]]]
+                                ) -> dict[str, dict[Any, list[int]]]:
+        output_dict: dict[str, dict[Any, list[int]]] = {}
         namespaces: set[str] = set(d1.keys()) | set(d2.keys())
         for namespace in namespaces:
             output_dict[namespace] = {}
@@ -94,7 +103,7 @@ class AriaSyncMetadata(object):
                 output_dict[namespace] = d2[namespace]
         return output_dict
 
-    async def cleanup(self):
+    async def cleanup(self, epoch_end: bool = False) -> None:
         async with self.lock:
             self.logic_aborts_everywhere: set[int] = set()
             self.sync_sum: int = 0
@@ -105,3 +114,6 @@ class AriaSyncMetadata(object):
             self.global_read_reservations: None | dict = None
             self.global_write_set: None | dict = None
             self.global_read_set: None | dict = None
+            if epoch_end:
+                self.stop_next_epoch = False
+                self.take_snapshot = False

@@ -23,6 +23,9 @@ class Operator(BaseOperator):
         self.__partitioner: HashPartitioner = HashPartitioner(n_partitions)
         self.__is_shadow: bool = False
 
+    def get_partitioner(self) -> HashPartitioner:
+        return self.__partitioner
+
     def which_partition(self, key):
         return self.__partitioner.get_partition(key)
 

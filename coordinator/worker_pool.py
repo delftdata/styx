@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from styx.common.operator import Operator
 from styx.common.logging import logging
+from styx.common.types import OperatorPartition
 
 HEARTBEAT_LIMIT: int = int(os.getenv('HEARTBEAT_LIMIT', 5000))  # 5000ms
 MAX_WAIT_FOR_RESTARTS_SEC: int = int(os.getenv('MAX_WAIT_FOR_RESTARTS_SEC', 0)) # 0s
@@ -17,7 +18,7 @@ class Worker(object):
     worker_ip: str
     worker_port: int
     protocol_port: int
-    assigned_operators:  dict[tuple[str, int], Operator]
+    assigned_operators:  dict[OperatorPartition, Operator]
     previous_heartbeat: float = 1_000_000.0
 
     @property
@@ -45,8 +46,8 @@ class WorkerPool(object):
         self.worker_counter: int = 1
         self.dead_worker_ids: list[int] = []
         self._worker_queue_idx: dict[int, list[int | Worker | str]] = {}
-        self.operator_partition_to_worker: dict[tuple[str, int], int] = {}
-        self.orphaned_operator_assignments: dict[tuple[str, int], Operator] = {}
+        self.operator_partition_to_worker: dict[OperatorPartition, int] = {}
+        self.orphaned_operator_assignments: dict[OperatorPartition, Operator] = {}
 
     def register_worker(self,
                         worker_ip: str,
@@ -113,14 +114,14 @@ class WorkerPool(object):
         self._worker_queue_idx[worker.worker_id] = entry
         self._index += 1
 
-    def schedule_operator_partition(self, operator_partition: tuple[str, int], operator: Operator):
+    def schedule_operator_partition(self, operator_partition: OperatorPartition, operator: Operator):
         """ Add an operator partition using RoundRobin """
         worker: Worker = self.pop()
         self.operator_partition_to_worker[operator_partition] = worker.worker_id
         worker.assigned_operators[operator_partition] = operator
         self.put(worker)
 
-    def remove_operator_partition(self, operator_partition: tuple[str, int]):
+    def remove_operator_partition(self, operator_partition: OperatorPartition):
         """ Downscale an operator by removing partitions """
         worker_id = self.operator_partition_to_worker[operator_partition]
         # need to remove and put again because the priority changes
@@ -128,6 +129,11 @@ class WorkerPool(object):
         del worker.assigned_operators[operator_partition]
         del self.operator_partition_to_worker[operator_partition]
         self.put(worker)
+
+    def update_operator(self, operator_partition: OperatorPartition, operator: Operator):
+        worker_id = self.operator_partition_to_worker[operator_partition]
+        worker = self.peek(worker_id)
+        worker.assigned_operators[operator_partition] = operator
 
     def pop(self) -> Worker | None:
         # O(log(n)) [heappop]
@@ -162,7 +168,7 @@ class WorkerPool(object):
         return {worker.worker_id: (worker.worker_ip, worker.worker_port, worker.protocol_port)
                 for _, _, worker in self._queue if worker != self._tombstone}
 
-    def get_worker_assignments(self) -> dict[tuple[str, int, int], dict[tuple[str, int], Operator]]:
+    def get_worker_assignments(self) -> dict[tuple[str, int, int], dict[OperatorPartition, Operator]]:
         return {(worker.worker_ip, worker.worker_port, worker.protocol_port): worker.assigned_operators
                 for _, _, worker in self._queue if worker != self._tombstone and worker.participating}
 

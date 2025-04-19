@@ -1,6 +1,10 @@
+import traceback
+
 from msgspec import msgpack
+from styx.common.partitioning.hash_partitioner import HashPartitioner
 
 from styx.common.types import OperatorPartition, KVPairs
+from styx.common.logging import logging
 
 from worker.operator_state.aria.base_aria_state import BaseAriaState
 
@@ -19,8 +23,19 @@ class InMemoryOperatorState(BaseAriaState):
             self.delta_map[operator_partition] = {}
 
     def set_data_from_snapshot(self, data: dict[OperatorPartition, KVPairs]):
-        if data:
-            self.data = data
+        for operator_partition, kv_pairs in data.items():
+            self.data[operator_partition] = kv_pairs
+
+    def repartition(self, operator_name: str, partitioner: HashPartitioner) -> dict[OperatorPartition, KVPairs]:
+        new_partitions: dict[OperatorPartition, KVPairs] = {(operator_name, partition): {}
+                                                            for partition in range(partitioner.partitions)}
+        for operator_partition, kv_pairs in self.data.items():
+            op_name, _ = operator_partition
+            if op_name == operator_name:
+                for key, value in kv_pairs.items():
+                    partition = partitioner.get_partition(key)
+                    new_partitions[(op_name,partition)][key] = value
+        return new_partitions
 
     def get_data_for_snapshot(self) -> dict[OperatorPartition, KVPairs]:
         return self.delta_map
@@ -75,12 +90,16 @@ class InMemoryOperatorState(BaseAriaState):
 
     def commit(self, aborted_from_remote: set[int]) -> set[int]:
         committed_t_ids = set()
-        for operator_name in self.write_sets.keys():
-            updates_to_commit = {}
-            for t_id, ws in self.write_sets[operator_name].items():
-                if t_id not in aborted_from_remote:
-                    updates_to_commit.update(ws)
-                    committed_t_ids.add(t_id)
-            self.data[operator_name].update(updates_to_commit)
-            self.delta_map[operator_name].update(updates_to_commit)
+        try:
+            for operator_name in self.write_sets.keys():
+                updates_to_commit = {}
+                for t_id, ws in self.write_sets[operator_name].items():
+                    if t_id not in aborted_from_remote:
+                        updates_to_commit.update(ws)
+                        committed_t_ids.add(t_id)
+                self.data[operator_name].update(updates_to_commit)
+                self.delta_map[operator_name].update(updates_to_commit)
+        except Exception as e:
+            logging.warning(traceback.format_exc())
+            raise e
         return committed_t_ids

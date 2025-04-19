@@ -46,7 +46,7 @@ class StyxKafkaIngress(BaseIngress):
 
     async def start(self,
                     topic_partitions: list[TopicPartition],
-                    topic_partition_offsets: dict[tuple[str, int], int]):
+                    topic_partition_offsets: dict[OperatorPartition, int]):
         self.kafka_ingress_task: asyncio.Task = asyncio.create_task(self.start_kafka_consumer(topic_partitions,
                                                                                               topic_partition_offsets))
         await self.started.wait()
@@ -56,7 +56,7 @@ class StyxKafkaIngress(BaseIngress):
         try:
             await self.kafka_ingress_task
         except asyncio.CancelledError:
-            logging.warning("kafka ingress coroutine restarting...")
+            logging.warning("kafka ingress coroutine suts down...")
         await self.kafka_consumer.stop()
 
     def handle_message_from_kafka(self, msg):
@@ -94,7 +94,7 @@ class StyxKafkaIngress(BaseIngress):
                     self.sequencer.sequence(run_func_payload)
                 else:
                     payload = (msg.key, operator_name, fun_name,
-                               key, true_partition, msg.partition, msg.timestamp, msg.offset, partition, params)
+                               key, true_partition, msg.partition, msg.offset, params)
                     self.send_message_tasks.append(self.networking.send_message(operator_host,
                                                                                 operator_port,
                                                                                 msg=payload,
@@ -105,8 +105,8 @@ class StyxKafkaIngress(BaseIngress):
 
     async def start_kafka_consumer(self,
                                    topic_partitions: list[TopicPartition],
-                                   topic_partition_offsets: dict[tuple[str, int], int]):
-        logging.info(f'{self.worker_id} CREATED Kafka consumer for topic partitions: {topic_partitions}')
+                                   topic_partition_offsets: dict[OperatorPartition, int]):
+        logging.warning(f'{self.worker_id} CREATED Kafka consumer for topic partitions: {topic_partitions}')
         # enable_auto_commit=False needed for exactly once
         self.kafka_consumer = AIOKafkaConsumer(bootstrap_servers=[self.kafka_url],
                                                enable_auto_commit=False,
@@ -125,7 +125,7 @@ class StyxKafkaIngress(BaseIngress):
             break
         try:
             # Consume messages
-            logging.info(f'{self.worker_id} STARTED Kafka consumer for topic partitions: {topic_partitions}')
+            logging.warning(f'{self.worker_id} STARTED Kafka consumer from offsets (-1): {topic_partition_offsets}')
             self.started.set()
             while True:
                 async with self.sequencer.lock:

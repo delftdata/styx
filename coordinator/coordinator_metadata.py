@@ -124,22 +124,6 @@ class Coordinator(object):
                                                             serializer=Serializer.NONE))
         logging.info('ReadyAfterRecovery events sent')
 
-    # def change_operator_partition_locations(self,
-    #                                         dead_worker_id: int,
-    #                                         worker_ip: str,
-    #                                         worker_port: int,
-    #                                         protocol_port: int):
-    #     removed_ip = self.worker_pool.peek(dead_worker_id).worker_ip
-    #     new_operator_partition_locations = {}
-    #     for operator_name, partition_dict in self.operator_partition_locations.items():
-    #         new_operator_partition_locations[operator_name] = {}
-    #         for partition, worker in partition_dict.items():
-    #             if worker[0] == removed_ip:
-    #                 new_operator_partition_locations[operator_name][partition] = (worker_ip, worker_port, protocol_port)
-    #             else:
-    #                 new_operator_partition_locations[operator_name][partition] = worker
-    #     self.operator_partition_locations = new_operator_partition_locations
-
     def register_worker_heartbeat(self, worker_id: int, heartbeat_time: float):
         self.worker_pool.register_worker_heartbeat(worker_id, heartbeat_time)
 
@@ -189,6 +173,37 @@ class Coordinator(object):
         if self.worker_snapshot_ids:
             return min(self.worker_snapshot_ids.values())
         return -1
+
+    async def update_stateflow_graph(self,
+                                     new_stateflow_graph: StateflowGraph):
+        if not isinstance(new_stateflow_graph, StateflowGraph):
+            raise NotAStateflowGraph
+        # TODO the cluster was balnced by the previous deployment, if the graph is complex it might be unbalanced after the update
+        for operator_name, operator in iter(new_stateflow_graph):
+            for partition in range(MAX_OPERATOR_PARALLELISM):
+                operator_copy = deepcopy(operator)
+                if partition > operator.n_partitions:
+                    operator_copy.make_shadow()
+                self.worker_pool.update_operator((operator_copy.name, partition), operator_copy)
+        worker_assignments = self.worker_pool.get_worker_assignments()
+        tasks = [self.networking.send_message(worker.worker_ip, worker.worker_port,
+                                              msg=(new_stateflow_graph,
+                                                  worker_assignments[(worker.worker_ip,
+                                                                       worker.worker_port,
+                                                                       worker.protocol_port)],
+                                                   self.worker_pool.get_operator_partition_locations(),
+                                                   self.worker_pool.get_workers(),
+                                                   new_stateflow_graph.operator_state_backend),
+                                              msg_type=MessageType.InitMigration)
+                 for worker in self.worker_pool.get_participating_workers()]
+        await asyncio.gather(*tasks)
+        self.submitted_graph = new_stateflow_graph
+        metadata_key = msgpack_serialization(self.submitted_graph.name)
+        serialized_graph = cloudpickle_serialization(new_stateflow_graph)
+        await self.kafka_metadata_producer.send_and_wait('styx-metadata',
+                                                         key=metadata_key,
+                                                         value=serialized_graph)
+
 
     async def submit_stateflow_graph(self,
                                      stateflow_graph: StateflowGraph,

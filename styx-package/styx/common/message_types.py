@@ -29,6 +29,13 @@ class MessageType(IntEnum):
     ChainAbort = 24
     AckCache = 25
     WrongPartitionRequest = 26
-    SnapMarker = 99
+    InitMigration = 27
+    MigrationRepartitioningDone = 28
+    MigrationDone = 29
+    SnapMarker = 30
+    SnapProcDelta = 31
+    SnapClearState = 32
+    SnapTakeSnapshot = 33
+    SnapNAssigned = 34
     AlignStart = 100
     AlignEnd = 101
