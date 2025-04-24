@@ -4,14 +4,17 @@ from enum import Enum, auto
 import msgspec
 import cloudpickle
 import gzip
-
+import zstandard as zstd
 
 class Serializer(Enum):
     CLOUDPICKLE = auto()
     MSGPACK = auto()
+    COMPRESSED_MSGPACK = auto()
     PICKLE = auto()
     NONE = auto()
 
+zstd_cctx = zstd.ZstdCompressor(level=3)
+zstd_dctx = zstd.ZstdDecompressor()
 
 def msgpack_serialization(serializable_object: object) -> bytes:
     return msgspec.msgpack.encode(serializable_object)
@@ -27,6 +30,17 @@ def compressed_msgpack_serialization(serializable_object: object) -> bytes:
 
 def compressed_msgpack_deserialization(serialized_object: bytes):
     return msgpack_deserialization(gzip.decompress(serialized_object))
+
+
+def zstd_msgpack_serialization(serializable_object: object | bytes, already_ser: bool = False) -> bytes:
+    if already_ser:
+        return zstd_cctx.compress(serializable_object)
+    else:
+        return zstd_cctx.compress(msgpack_serialization(serializable_object))
+
+
+def zstd_msgpack_deserialization(serialized_object: bytes):
+    return msgpack_deserialization(zstd_dctx.decompress(serialized_object))
 
 
 def cloudpickle_serialization(serializable_object: object) -> bytes:

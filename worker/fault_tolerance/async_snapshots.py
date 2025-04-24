@@ -9,7 +9,7 @@ from styx.common.message_types import MessageType
 from styx.common.types import OperatorPartition, KVPairs
 from styx.common.tcp_networking import NetworkingManager
 
-from styx.common.serialization import Serializer, msgpack_deserialization, msgpack_serialization
+from styx.common.serialization import Serializer, zstd_msgpack_deserialization
 
 from worker.fault_tolerance.base_snapshoter import BaseSnapshotter
 
@@ -38,7 +38,10 @@ class AsyncSnapshotsMinio(BaseSnapshotter):
     def update_n_assigned_partitions(self, n_assigned_partitions: int):
         self.n_assigned_partitions = n_assigned_partitions
 
-    def snapshot_completed_callback(self, _, ):
+    def set_snapshot_id(self, snapshot_id: int):
+        self.snapshot_id = snapshot_id + 1
+
+    def snapshot_completed_callback(self, _):
         self.completed_snapshots += 1
         if self.completed_snapshots == self.n_assigned_partitions:
             snapshot_end = time.time() * 1000
@@ -71,9 +74,8 @@ class AsyncSnapshotsMinio(BaseSnapshotter):
     @staticmethod
     def store_snapshot(snapshot_id: int,
                        snapshot_name: str,
-                       data_to_snapshot: dict):
+                       sn_data: bytes):
         minio_client: Minio = Minio(MINIO_URL, access_key=MINIO_ACCESS_KEY, secret_key=MINIO_SECRET_KEY, secure=False)
-        sn_data: bytes = msgpack_serialization(data_to_snapshot)
         minio_client.put_object(SNAPSHOT_BUCKET_NAME, snapshot_name, io.BytesIO(sn_data), len(sn_data))
         return True
 
@@ -102,7 +104,7 @@ class AsyncSnapshotsMinio(BaseSnapshotter):
                 if sn_id > snapshot_id:
                     # recover only from a stable snapshot
                     continue
-                partition_data = msgpack_deserialization(minio_client.get_object(SNAPSHOT_BUCKET_NAME, sn_name).data)
+                partition_data = zstd_msgpack_deserialization(minio_client.get_object(SNAPSHOT_BUCKET_NAME, sn_name).data)
                 if operator_partition in data and partition_data:
                     data[operator_partition].update(partition_data)
                 else:
@@ -126,6 +128,6 @@ class AsyncSnapshotsMinio(BaseSnapshotter):
                 # recover only from a stable snapshot
                 continue
             (topic_partition_offsets, topic_partition_output_offsets,
-             epoch, t_counter) = msgpack_deserialization(minio_client.get_object(SNAPSHOT_BUCKET_NAME, sn_name).data)
+             epoch, t_counter) = zstd_msgpack_deserialization(minio_client.get_object(SNAPSHOT_BUCKET_NAME, sn_name).data)
         # The recovered snapshot will have the latest metadata and merged operator state
         return data, topic_partition_offsets, topic_partition_output_offsets, epoch, t_counter

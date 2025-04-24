@@ -11,7 +11,8 @@ from .exceptions import SerializerNotSupported
 from .logging import logging
 from .run_func_payload import RunFuncPayload
 from .serialization import Serializer, cloudpickle_serialization, msgpack_serialization, \
-    pickle_serialization, cloudpickle_deserialization, msgpack_deserialization, pickle_deserialization
+    pickle_serialization, cloudpickle_deserialization, msgpack_deserialization, pickle_deserialization, \
+    zstd_msgpack_deserialization, zstd_msgpack_serialization
 
 
 class MessagingMode(IntEnum):
@@ -153,13 +154,13 @@ class BaseNetworking(ABC):
             self.waited_ack_events[ack_id].clear()
             self.ack_fraction[ack_id] = fractions.Fraction(0)
         else:
-            logging.error(f"{ack_id} should exist!")
+            logging.error(f"ACK_ID: {ack_id} should exist in the reset_ack_for_fallback!")
 
     def reset_ack_for_fallback_cache(self, ack_id: int):
         if ack_id in self.waited_ack_events:
             self.waited_ack_events[ack_id].clear()
         else:
-            logging.error(f"{ack_id} should exist!")
+            logging.error(f"ACK_ID: {ack_id} should exist in the reset_ack_for_fallback_cache!")
 
     def clear_aborted_events_for_fallback(self):
         self.aborted_events.clear()
@@ -184,13 +185,22 @@ class BaseNetworking(ABC):
             msg = struct.pack('>B', msg_type) + struct.pack('>B', 0) + cloudpickle_serialization(msg)
             return msg
         elif serializer == Serializer.MSGPACK:
-            msg = struct.pack('>B', msg_type) + struct.pack('>B', 1) + msgpack_serialization(msg)
+            ser_msg: bytes = msgpack_serialization(msg)
+            ser_id = 1
+            if len(ser_msg) > 1_048_576:
+                # If it's more than 1MB compress by default
+                ser_msg = zstd_msgpack_serialization(ser_msg, already_ser=True)
+                ser_id = 4
+            msg = struct.pack('>B', msg_type) + struct.pack('>B', ser_id) + ser_msg
             return msg
         elif serializer == Serializer.PICKLE:
             msg = struct.pack('>B', msg_type) + struct.pack('>B', 2) + pickle_serialization(msg)
             return msg
         elif serializer == Serializer.NONE:
             msg = struct.pack('>B', msg_type) + struct.pack('>B', 3) + msg
+            return msg
+        elif serializer == Serializer.COMPRESSED_MSGPACK:
+            msg = struct.pack('>B', msg_type) + struct.pack('>B', 4) + zstd_msgpack_serialization(msg)
             return msg
         else:
             logging.error(f'Serializer: {serializer} is not supported')
@@ -215,6 +225,9 @@ class BaseNetworking(ABC):
                 return msg
             elif serializer == 3:
                 msg = data[2:]
+                return msg
+            elif serializer == 4:
+                msg = zstd_msgpack_deserialization(data[2:])
                 return msg
             else:
                 logging.error(f'Serializer: {serializer} is not supported')

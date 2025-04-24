@@ -1,6 +1,6 @@
 #!/bin/bash
 
-docker compose logs worker | sort -s -t '|' -k1,1 > worker-logs.log
+docker compose logs worker | sort -t '|' -k1,1 -k2,2 > worker-logs.log
 docker compose logs coordinator > coordinator-logs.log
 
 # DELETE PREVIOUS DEPLOYMENT

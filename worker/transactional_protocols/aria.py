@@ -63,6 +63,7 @@ class AriaProtocol(BaseTransactionalProtocol):
 
         self.topic_partitions = topic_partitions
         self.networking = networking
+        self.snapshotting_networking_manager = NetworkingManager(None, size=1)
 
         self.local_state: InMemoryOperatorState | Stateless = state
         self.aio_task_scheduler: AIOTaskScheduler = AIOTaskScheduler()
@@ -106,8 +107,6 @@ class AriaProtocol(BaseTransactionalProtocol):
         self.function_scheduler_task: asyncio.Task = ...
         self.communication_task: asyncio.Task = ...
 
-        self.snapshot_counter = 0
-
         self.max_t_counter: int = -1
         self.total_processed_seq_size: int = -1
 
@@ -138,8 +137,6 @@ class AriaProtocol(BaseTransactionalProtocol):
         self.remote_wants_to_proceed: bool = False
         self.currently_processing: bool = False
 
-        self.snapshot_timer: float = -1.0
-
         self.started = asyncio.Event()
         self.wait_responses_to_be_sent = asyncio.Event()
 
@@ -155,6 +152,8 @@ class AriaProtocol(BaseTransactionalProtocol):
         await self.ingress.stop()
         await self.egress.stop()
         await self.aio_task_scheduler.close()
+        await self.background_functions.close()
+        await self.snapshotting_networking_manager.close_all_connections()
         self.function_scheduler_task.cancel()
         self.communication_task.cancel()
         try:
@@ -170,7 +169,6 @@ class AriaProtocol(BaseTransactionalProtocol):
         self.function_scheduler_task = asyncio.create_task(self.function_scheduler())
         self.communication_task = asyncio.create_task(self.communication_protocol())
         logging.warning(f"Aria protocol started with operator partitions: {list(self.registered_operators.keys())}")
-        self.snapshot_timer = timer()
 
     async def run_function(
             self,
@@ -200,12 +198,13 @@ class AriaProtocol(BaseTransactionalProtocol):
 
     async def take_snapshot(self):
         if self.snapshot_marker_received:
-            await self.networking.send_message(self.networking.host_name, self.snapshotting_port,
-                                               msg=(self.topic_partition_offsets,
-                                                    self.egress.topic_partition_output_offsets,
-                                                    self.sequencer.epoch_counter, self.sequencer.t_counter),
-                                               msg_type=MessageType.SnapTakeSnapshot,
-                                               serializer=Serializer.MSGPACK)
+            logging.warning(f"ARIA | Snapshot marker received @epoch: {self.sequencer.epoch_counter}")
+            await self.snapshotting_networking_manager.send_message(self.networking.host_name, self.snapshotting_port,
+                                                                    msg=(self.topic_partition_offsets,
+                                                                         self.egress.topic_partition_output_offsets,
+                                                                         self.sequencer.epoch_counter, self.sequencer.t_counter),
+                                                                    msg_type=MessageType.SnapTakeSnapshot,
+                                                                    serializer=Serializer.MSGPACK)
             self.snapshot_marker_received = False
 
     async def communication_protocol(self):
@@ -264,14 +263,14 @@ class AriaProtocol(BaseTransactionalProtocol):
             case MessageType.AriaCommit:
                 async with self.networking_locks[message_type]:
                     (self.concurrency_aborts_everywhere, self.total_processed_seq_size,
-                     self.max_t_counter) = self.networking.decode_message(data)
+                     self.max_t_counter, self.snapshot_marker_received) = self.networking.decode_message(data)
                     self.sync_workers_event[message_type].set()
             case (MessageType.AriaFallbackDone | MessageType.AriaFallbackStart):
                 async with self.networking_locks[message_type]:
                     self.sync_workers_event[message_type].set()
             case MessageType.SyncCleanup:
                 async with self.networking_locks[message_type]:
-                    (stop_gracefully, self.snapshot_marker_received) = self.networking.decode_message(data)
+                    (stop_gracefully, ) = self.networking.decode_message(data)
                     if stop_gracefully:
                         self.running = False
                     self.sync_workers_event[message_type].set()
@@ -422,11 +421,7 @@ class AriaProtocol(BaseTransactionalProtocol):
                         msgpack.decode(msgpack.encode(self.networking.aborted_events))
                     ))
 
-                    await self.networking.send_message(self.networking.host_name, self.snapshotting_port,
-                                                       msg=(self.local_state.get_data_for_snapshot(), ),
-                                                       msg_type=MessageType.SnapProcDelta,
-                                                       serializer=Serializer.MSGPACK)
-                    self.local_state.clear_delta_map()
+                    await self.send_delta_to_snapshotting_proc()
 
                     end_commit = timer()
 
@@ -443,6 +438,7 @@ class AriaProtocol(BaseTransactionalProtocol):
                         )
 
                         await self.run_fallback_strategy()
+                        await self.send_delta_to_snapshotting_proc()
                         self.concurrency_aborts_everywhere = set()
                         concurrency_aborts = set()
                         self.t_ids_to_reschedule = set()
@@ -495,6 +491,14 @@ class AriaProtocol(BaseTransactionalProtocol):
                                                      round((snap_end - snap_start) * 1000, 4)),
                                             serializer=Serializer.MSGPACK)
         await self.stop()
+
+    async def send_delta_to_snapshotting_proc(self):
+        delta_to_send = self.local_state.get_data_for_snapshot()
+        await self.snapshotting_networking_manager.send_message(self.networking.host_name, self.snapshotting_port,
+                                                                msg=(delta_to_send,),
+                                                                msg_type=MessageType.SnapProcDelta,
+                                                                serializer=Serializer.MSGPACK)
+        self.local_state.clear_delta_map()
 
     def cleanup_after_epoch(self):
         self.concurrency_aborts_everywhere.clear()
@@ -605,12 +609,6 @@ class AriaProtocol(BaseTransactionalProtocol):
             f'Epoch: {self.sequencer.epoch_counter} '
             f'Fallback strategy done waiting for peers'
         )
-
-        await self.networking.send_message(self.networking.host_name, self.snapshotting_port,
-                                           msg=(self.local_state.get_data_for_snapshot(), ),
-                                           msg_type=MessageType.SnapProcDelta,
-                                           serializer=Serializer.MSGPACK)
-        self.local_state.clear_delta_map()
 
         await self.sync_workers(msg_type=MessageType.AriaFallbackDone,
                                 message=b'',

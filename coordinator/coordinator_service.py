@@ -169,6 +169,7 @@ class CoordinatorService(object):
                 snapshot_time = end - start
                 self.snapshotting_gauge.labels(instance=worker_id).set(snapshot_time)
                 logging.warning(f'Worker: {worker_id} | '
+                                f'@Epoch: {epoch_counter} | '
                                 f'Completed snapshot: {snapshot_id} | '
                                 f'started at: {start} | '
                                 f'ended at: {end} | '
@@ -224,9 +225,10 @@ class CoordinatorService(object):
                     await self.finalize_worker_sync(MessageType(message_type),
                                                     (self.aria_metadata.concurrency_aborts_everywhere,
                                                      self.aria_metadata.processed_seq_size,
-                                                     self.aria_metadata.max_t_counter),
+                                                     self.aria_metadata.max_t_counter,
+                                                     self.aria_metadata.take_snapshot),
                                                     Serializer.PICKLE)
-                    await self.aria_metadata.cleanup()
+                    await self.aria_metadata.cleanup(take_snapshot=True)
             case MessageType.AriaFallbackStart | MessageType.AriaFallbackDone:
                 sync_complete: bool = await self.aria_metadata.set_empty_sync_done()
                 if sync_complete:
@@ -254,8 +256,7 @@ class CoordinatorService(object):
                 sync_complete: bool = await self.aria_metadata.set_empty_sync_done()
                 if sync_complete:
                     await self.finalize_worker_sync(MessageType(message_type),
-                                                    (self.aria_metadata.stop_next_epoch,
-                                                     self.aria_metadata.take_snapshot),
+                                                    (self.aria_metadata.stop_next_epoch, ),
                                                     Serializer.MSGPACK)
                     await self.aria_metadata.cleanup(epoch_end=True)
             case MessageType.DeterministicReordering:

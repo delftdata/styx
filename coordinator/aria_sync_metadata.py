@@ -103,7 +103,7 @@ class AriaSyncMetadata(object):
                 output_dict[namespace] = d2[namespace]
         return output_dict
 
-    async def cleanup(self, epoch_end: bool = False) -> None:
+    async def cleanup(self, epoch_end: bool = False, take_snapshot: bool = False) -> None:
         async with self.lock:
             self.logic_aborts_everywhere: set[int] = set()
             self.sync_sum: int = 0
@@ -116,4 +116,5 @@ class AriaSyncMetadata(object):
             self.global_read_set: None | dict = None
             if epoch_end:
                 self.stop_next_epoch = False
+            if take_snapshot:
                 self.take_snapshot = False

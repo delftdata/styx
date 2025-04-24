@@ -20,7 +20,7 @@ from styx.common.logging import logging
 from styx.common.tcp_networking import NetworkingManager, MessagingMode
 from styx.common.operator import Operator
 from styx.common.protocols import Protocols
-from styx.common.serialization import Serializer, msgpack_deserialization, msgpack_serialization
+from styx.common.serialization import Serializer, msgpack_deserialization, zstd_msgpack_serialization, zstd_msgpack_deserialization
 from styx.common.message_types import MessageType
 from styx.common.types import OperatorPartition, KVPairs
 from styx.common.util.aio_task_scheduler import AIOTaskScheduler
@@ -86,7 +86,7 @@ class Worker(object):
 
         self.operator_state_backend: LocalStateBackend = ...
         self.registered_operators: dict[OperatorPartition, Operator] = {}
-        self.dns: dict[str, dict[str, tuple[str, int, int]]] = {}
+        self.dns: dict[str, dict[int, tuple[str, int, int]]] = {}
         self.topic_partitions: list[TopicPartition] = []
         # worker_id: (host, port)
         self.peers: dict[int, tuple[str, int, int]] = {}
@@ -129,111 +129,136 @@ class Worker(object):
                 message = self.networking.decode_message(data)
                 await self.handle_execution_plan(message)
             case MessageType.InitMigration:
-                # FIXME THIS IS JUST FOR THE STOP AND RESTART need to see how to generalize
-                logging.warning("MIGRATION | START")
-                start_time = timer()
-                # 1) Wait for the transactional protocol to get stopped gracefully
-                await self.function_execution_protocol.wait_stopped()
-                (new_graph, new_worker_operators, self.dns,
-                 self.peers, self.operator_state_backend) = self.networking.decode_message(data)
-                del self.peers[self.id]
-                logging.warning("MIGRATION | ARIA STOPPED")
-                # 2) Once stopped take the hashes and store stage
-                for operator in self.worker_operators.values():
-                    new_operator_partitioner = new_graph.get_operator(operator).get_partitioner()
-                    res: dict[OperatorPartition, KVPairs] = self.local_state.repartition(operator.name,
-                                                                                         new_operator_partitioner)
-                    for n_op, data in res.items():
-                        n_o, n_p = n_op
-                        snapshot_name = f"migration/{n_o}/{n_p}/{self.id}.bin"
-                        sn_data: bytes = msgpack_serialization(data)
-                        logging.warning(f"MIGRATION | STORING {snapshot_name}")
-                        self.minio_client.put_object(SNAPSHOT_BUCKET_NAME, snapshot_name,
-                                                     io.BytesIO(sn_data), len(sn_data))
-                self.worker_operators = new_worker_operators
-                # 3) Coordinate: Everyone done with repartitioning
-                await self.networking.send_message(DISCOVERY_HOST, DISCOVERY_PORT,
-                                                   msg=(self.function_execution_protocol.sequencer.epoch_counter,
-                                                        self.function_execution_protocol.sequencer.t_counter,
-                                                        self.function_execution_protocol.topic_partition_offsets,
-                                                        self.function_execution_protocol.egress.topic_partition_output_offsets),
-                                                   msg_type=MessageType.MigrationRepartitioningDone,
-                                                   serializer=Serializer.MSGPACK)
-                await self.migration_repartitioning_done.wait()
-                logging.warning("MIGRATION | REPARTITIONING DONE")
-                # 4) Deploy new_graph, dns, networking, state, protocol, kafka topics
-                await self.protocol_networking.close_all_connections()
-                del (self.function_execution_protocol,
-                     self.local_state,
-                     self.protocol_networking)
-                gc.collect()
-                self.protocol_networking = NetworkingManager(self.protocol_port,
-                                                             mode=MessagingMode.PROTOCOL_PROTOCOL)
-                self.protocol_networking.set_worker_id(self.id)
-                self.registered_operators = {}
-                self.topic_partitions = []
-                for operator_partition, operator in self.worker_operators.items():
-                    operator_name, partition = operator_partition
-                    self.registered_operators[(operator_name, partition)] = deepcopy(operator)
-                    if INGRESS_TYPE == 'KAFKA':
-                        self.topic_partitions.append(TopicPartition(operator_name, partition))
-                self.async_snapshots.update_n_assigned_partitions(n_assigned_partitions=len(self.registered_operators))
-                await self.networking.send_message(self.networking.host_name, self.snapshotting_port,
-                                                   msg=(len(self.registered_operators),),
-                                                   msg_type=MessageType.SnapNAssigned,
-                                                   serializer=Serializer.MSGPACK)
-                # Read from the stored state
-                logging.warning("MIGRATION | LOADING DATA START")
-                data: dict[OperatorPartition, KVPairs] = {}
-                for operator_partition in self.registered_operators:
-                    operator_name, partition = operator_partition
-                    snapshot_files: list[str] = [sn_file.object_name
-                                                 for sn_file in
-                                                 self.minio_client.list_objects(bucket_name=SNAPSHOT_BUCKET_NAME,
-                                                                                prefix=f"migration/{operator_name}/{partition}/",
-                                                                                recursive=True)
-                                                 if sn_file.object_name.endswith(".bin")]
-                    for sn_name in snapshot_files:
-                        partition_data = msgpack_deserialization(
-                            self.minio_client.get_object(SNAPSHOT_BUCKET_NAME, sn_name).data
-                        )
-                        if operator_partition in data and partition_data:
-                            data[operator_partition].update(partition_data)
-                        else:
-                            data[operator_partition] = partition_data
-                logging.warning(f"MIGRATION | DATA: {data.keys()}")
-                self.attach_state_to_operators_after_snapshot(data)
-                logging.warning("MIGRATION | LOADING DATA DONE")
-                topic_partition_offsets = {k: v for k, v in self.m_input_offsets.items()
-                                           if k in self.registered_operators}
-                topic_partition_output_offsets = {k: v for k, v in self.m_output_offsets.items()
-                                           if k in self.registered_operators}
-                self.function_execution_protocol = AriaProtocol(worker_id=self.id,
-                                                                peers=self.peers,
-                                                                networking=self.protocol_networking,
-                                                                registered_operators=self.registered_operators,
-                                                                topic_partitions=self.topic_partitions,
-                                                                state=self.local_state,
-                                                                snapshotting_port=self.snapshotting_port,
-                                                                topic_partition_offsets=topic_partition_offsets,
-                                                                output_offsets=topic_partition_output_offsets,
-                                                                epoch_counter=self.m_epoch_counter,
-                                                                t_counter=self.m_t_counter)
-                # 5) Coordinate everyone ready to resume processing
-                await self.networking.send_message(DISCOVERY_HOST, DISCOVERY_PORT,
-                                                   msg=b'',
-                                                   msg_type=MessageType.MigrationDone,
-                                                   serializer=Serializer.NONE)
-                await self.migration_completed.wait()
-                logging.warning("MIGRATION | PROCESSING CONTINUES")
-                # 6) Start the function_execution_protocol
-                self.function_execution_protocol.start()
-                self.function_execution_protocol.started.set()
-                self.migration_completed.clear()
-                self.migration_repartitioning_done.clear()
-                # TODO cleanup the minio folder used for the migration
-                end_time = timer()
-                logging.warning(f'Worker: {self.id} | Migration took: {round((end_time - start_time) * 1000, 4)}ms')
+                try:
+                    # FIXME THIS IS JUST FOR THE STOP AND RESTART need to see how to generalize
+                    logging.warning("MIGRATION | START")
+                    start_time = timer()
+                    # 1) Wait for the transactional protocol to get stopped gracefully
+                    await self.function_execution_protocol.wait_stopped()
+                    t1 = timer()
+                    logging.warning(f"MIGRATION | Function Execution Protocol Stopped! |"
+                                    f" @Epoch {self.function_execution_protocol.sequencer.epoch_counter} |"
+                                    f" took: {t1 - start_time}")
+                    (new_graph, new_worker_operators, self.dns,
+                     self.peers, self.operator_state_backend) = self.networking.decode_message(data)
+                    del self.peers[self.id]
+                    logging.warning("MIGRATION | ARIA STOPPED")
+                    # 2) Once stopped take the hashes and store stage
+                    ser_time = 0.0
+                    wire_time = 0.0
+                    repart_time = 0.0
+                    for operator in self.worker_operators.values():
+                        start_repart = timer()
+                        new_operator_partitioner = new_graph.get_operator(operator).get_partitioner()
+                        res: dict[OperatorPartition, KVPairs] = self.local_state.repartition(operator.name,
+                                                                                             new_operator_partitioner)
+                        end_repart = timer()
+                        repart_time += end_repart - start_repart
+                        for n_op, data in res.items():
+                            n_o, n_p = n_op
+                            snapshot_name = f"migration/{n_o}/{n_p}/{self.id}.bin"
+                            s_ser = timer()
+                            sn_data: bytes = zstd_msgpack_serialization(data)
+                            e_ser = timer()
+                            ser_time += e_ser - s_ser
+                            logging.warning(f"MIGRATION | STORING {snapshot_name}")
+                            s_wire = timer()
+                            self.minio_client.put_object(SNAPSHOT_BUCKET_NAME, snapshot_name,
+                                                         io.BytesIO(sn_data), len(sn_data))
+                            e_wire = timer()
+                            wire_time += e_wire - s_wire
+                    self.worker_operators = new_worker_operators
+                    t2 = timer()
+                    logging.warning(f"MIGRATION | Took Hashes | took: {t2 - t1} | ser_time: {ser_time} | wire_time: {wire_time} | repart_time: {repart_time}")
+                    # 3) Coordinate: Everyone done with repartitioning
+                    await self.networking.send_message(DISCOVERY_HOST, DISCOVERY_PORT,
+                                                       msg=(self.function_execution_protocol.sequencer.epoch_counter,
+                                                            self.function_execution_protocol.sequencer.t_counter,
+                                                            self.function_execution_protocol.topic_partition_offsets,
+                                                            self.function_execution_protocol.egress.topic_partition_output_offsets),
+                                                       msg_type=MessageType.MigrationRepartitioningDone,
+                                                       serializer=Serializer.MSGPACK)
+                    await self.migration_repartitioning_done.wait()
+                    t3 = timer()
+                    logging.warning(f"MIGRATION | REPARTITIONING DONE | took: {t3 - t2}")
+                    # 4) Deploy new_graph, dns, networking, state, protocol, kafka topics
+                    await self.protocol_networking.close_all_connections()
+                    del (self.function_execution_protocol,
+                         self.local_state,
+                         self.protocol_networking)
+                    gc.collect()
+                    self.protocol_networking = NetworkingManager(self.protocol_port,
+                                                                 mode=MessagingMode.PROTOCOL_PROTOCOL)
+                    self.protocol_networking.set_worker_id(self.id)
+                    self.registered_operators = {}
+                    self.topic_partitions = []
+                    for operator_partition, operator in self.worker_operators.items():
+                        operator_name, partition = operator_partition
+                        self.registered_operators[(operator_name, partition)] = deepcopy(operator)
+                        if INGRESS_TYPE == 'KAFKA':
+                            self.topic_partitions.append(TopicPartition(operator_name, partition))
+                    self.async_snapshots.update_n_assigned_partitions(n_assigned_partitions=len(self.registered_operators))
+                    await self.networking.send_message(self.networking.host_name, self.snapshotting_port,
+                                                       msg=(list(self.registered_operators.keys()),-1),
+                                                       msg_type=MessageType.SnapNAssigned,
+                                                       serializer=Serializer.MSGPACK)
+                    # Read from the stored state
+                    t4 = timer()
+                    logging.warning(f"MIGRATION | LOADING DATA START | took: {t4 - t3}")
+                    data: dict[OperatorPartition, KVPairs] = {}
+                    for operator_partition in self.registered_operators:
+                        operator_name, partition = operator_partition
+                        snapshot_files: list[str] = [sn_file.object_name
+                                                     for sn_file in
+                                                     self.minio_client.list_objects(bucket_name=SNAPSHOT_BUCKET_NAME,
+                                                                                    prefix=f"migration/{operator_name}/{partition}/",
+                                                                                    recursive=True)
+                                                     if sn_file.object_name.endswith(".bin")]
+                        for sn_name in snapshot_files:
+                            partition_data = zstd_msgpack_deserialization(
+                                self.minio_client.get_object(SNAPSHOT_BUCKET_NAME, sn_name).data
+                            )
+                            if operator_partition in data and partition_data:
+                                data[operator_partition].update(partition_data)
+                            else:
+                                data[operator_partition] = partition_data
+                    logging.warning(f"MIGRATION | DATA: {data.keys()}")
+                    self.attach_state_to_operators_after_snapshot(data)
+                    t5 = timer()
+                    logging.warning(f"MIGRATION | LOADING DATA DONE | took: {t5 - t4}")
+                    topic_partition_offsets = {k: v for k, v in self.m_input_offsets.items()
+                                               if k in self.registered_operators}
+                    topic_partition_output_offsets = {k: v for k, v in self.m_output_offsets.items()
+                                               if k in self.registered_operators}
+                    self.function_execution_protocol = AriaProtocol(worker_id=self.id,
+                                                                    peers=self.peers,
+                                                                    networking=self.protocol_networking,
+                                                                    registered_operators=self.registered_operators,
+                                                                    topic_partitions=self.topic_partitions,
+                                                                    state=self.local_state,
+                                                                    snapshotting_port=self.snapshotting_port,
+                                                                    topic_partition_offsets=topic_partition_offsets,
+                                                                    output_offsets=topic_partition_output_offsets,
+                                                                    epoch_counter=self.m_epoch_counter,
+                                                                    t_counter=self.m_t_counter)
+                    # 5) Coordinate everyone ready to resume processing
+                    await self.networking.send_message(DISCOVERY_HOST, DISCOVERY_PORT,
+                                                       msg=b'',
+                                                       msg_type=MessageType.MigrationDone,
+                                                       serializer=Serializer.NONE)
+                    await self.migration_completed.wait()
+                    t6 = timer()
+                    logging.warning(f"MIGRATION | PROCESSING CONTINUES | took: {t6 - t5}")
+                    # 6) Start the function_execution_protocol
+                    self.function_execution_protocol.start()
+                    self.function_execution_protocol.started.set()
+                    self.migration_completed.clear()
+                    self.migration_repartitioning_done.clear()
+                    # TODO cleanup the minio folder used for the migration
+                    end_time = timer()
+                    logging.warning(f'Worker: {self.id} | Migration took: {round((end_time - start_time) * 1000, 4)}ms')
+                except Exception as e:
+                    logging.error(f"Uncaught exception while migrating: {e}")
             case MessageType.MigrationRepartitioningDone:
                 (self.m_epoch_counter, self.m_t_counter,
                  self.m_input_offsets, self.m_output_offsets) = self.networking.decode_message(data)
@@ -270,7 +295,7 @@ class Worker(object):
                 self.async_snapshots = AsyncSnapshotsMinio(self.id,
                                                            n_assigned_partitions=len(self.registered_operators))
                 await self.networking.send_message(self.networking.host_name, self.snapshotting_port,
-                                                   msg=(len(self.registered_operators),),
+                                                   msg=(list(self.registered_operators.keys()), snapshot_id),
                                                    msg_type=MessageType.SnapNAssigned,
                                                    serializer=Serializer.MSGPACK)
                 (data, topic_partition_offsets, topic_partition_output_offsets, epoch,
@@ -382,7 +407,7 @@ class Worker(object):
             if INGRESS_TYPE == 'KAFKA':
                 self.topic_partitions.append(TopicPartition(operator_name, partition))
         await self.networking.send_message(self.networking.host_name, self.snapshotting_port,
-                                           msg=(len(self.registered_operators), ),
+                                           msg=(list(self.registered_operators.keys()), -1),
                                            msg_type=MessageType.SnapNAssigned,
                                            serializer=Serializer.MSGPACK)
         self.attach_state_to_operators()
@@ -436,9 +461,13 @@ class Worker(object):
                     data = await reader.readexactly(8)
                     (size,) = struct.unpack('>Q', data)
                     message = await reader.readexactly(size)
-                    self.protocol_task_scheduler.create_task(
-                        self.function_execution_protocol.protocol_tcp_controller(message)
-                    )
+                    if self.function_execution_protocol is not None:
+                        self.protocol_task_scheduler.create_task(
+                            self.function_execution_protocol.protocol_tcp_controller(message)
+                        )
+                    else:
+                        logging.debug(f"Dropped message_type: {self.networking.get_msg_type(message)} "
+                                      f"due to protocol service restart (This is the expected behaviour)")
             except asyncio.IncompleteReadError as e:
                 logging.info(f"Client disconnected unexpectedly: {e}")
             except asyncio.CancelledError:

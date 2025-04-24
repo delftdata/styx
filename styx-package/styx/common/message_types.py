@@ -34,8 +34,7 @@ class MessageType(IntEnum):
     MigrationDone = 29
     SnapMarker = 30
     SnapProcDelta = 31
-    SnapClearState = 32
-    SnapTakeSnapshot = 33
-    SnapNAssigned = 34
+    SnapTakeSnapshot = 32
+    SnapNAssigned = 33
     AlignStart = 100
     AlignEnd = 101

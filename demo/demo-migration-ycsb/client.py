@@ -1,5 +1,7 @@
 import os
+import pickle
 import random
+import string
 import sys
 import time
 import multiprocessing
@@ -20,18 +22,16 @@ from tqdm import tqdm
 from ycsb import ycsb_operator
 
 
-N_ENTITIES = 1_000_000 # 10 million entities
-random_100_bytes_0: bytes = os.urandom(100)
-random_100_bytes_1: bytes = os.urandom(100)
-random_100_bytes_2: bytes = os.urandom(100)
-random_100_bytes_3: bytes = os.urandom(100)
-random_100_bytes_4: bytes = os.urandom(100)
-random_100_bytes_5: bytes = os.urandom(100)
-random_100_bytes_6: bytes = os.urandom(100)
-random_100_bytes_7: bytes = os.urandom(100)
-random_100_bytes_8: bytes = os.urandom(100)
-random_100_bytes_9: bytes = os.urandom(100)
+def ycsb_field(size=100, seed=0):
+    "Translated from the original Java code"
+    if seed is not None:
+        random.seed(seed)
+    charset = string.ascii_letters + string.digits  # 62 characters
+    return ''.join(random.choices(charset, k=size))
 
+
+N_ENTITIES = 10_000_000 # 10 million entities
+SECOND_TO_TAKE_MIGRATION = 60
 
 threads = int(sys.argv[1])
 N_PARTITIONS = int(sys.argv[2])
@@ -45,6 +45,7 @@ sleep_time = 0.0085
 STYX_HOST: str = 'localhost'
 STYX_PORT: int = 8886
 KAFKA_URL = 'localhost:9092'
+YCSB_DATASET_PATH = "ycsb_dataset.pkl"
 ####################################################################################################################
 g = StateflowGraph('ycsb-benchmark', operator_state_backend=LocalStateBackend.DICT)
 ycsb_operator.set_n_partitions(N_PARTITIONS)
@@ -58,28 +59,51 @@ def submit_graph(styx: SyncStyxClient):
 
 def ycsb_init(styx: SyncStyxClient, operator: Operator):
     submit_graph(styx)
+    print("Graph Submitted, sleeping for 5sec...")
     time.sleep(5)
-    # INSERT
+
     partitions: dict[int, dict] = {p: {} for p in range(N_PARTITIONS)}
-    for i in tqdm(range(N_ENTITIES)):
-        partition: int = styx.get_operator_partition(i, operator)
-        # 1 int PK + 10 random bytes columns of 100 bytes each
-        partitions[partition] |= {i: (random_100_bytes_0, random_100_bytes_1,
-                                      random_100_bytes_2, random_100_bytes_3,
-                                      random_100_bytes_4, random_100_bytes_5,
-                                      random_100_bytes_6, random_100_bytes_7,
-                                      random_100_bytes_8, random_100_bytes_9)}
-        if i % 2_000 == 0 or i == N_ENTITIES - 1:
-            for partition, kv_pairs in partitions.items():
+    if os.path.exists(YCSB_DATASET_PATH):
+        print("Loading YCSB dataset...")
+        with open(YCSB_DATASET_PATH, 'rb') as f:
+            partitions = pickle.load(f)
+    else:
+        print("Generating YCSB dataset...")
+        for i in tqdm(range(N_ENTITIES)):
+            partition: int = styx.get_operator_partition(i, operator)
+            partitions[partition] |= {i: (ycsb_field(), ycsb_field(),
+                                          ycsb_field(), ycsb_field(),
+                                          ycsb_field(), ycsb_field(),
+                                          ycsb_field(), ycsb_field(),
+                                          ycsb_field(), ycsb_field())}
+        with open(YCSB_DATASET_PATH, 'wb') as f:
+            pickle.dump(partitions, f)
+    print("Data ready")
+    i = 0
+    batch_size = 10_000
+    for partition, kv_pairs in partitions.items():
+        batch = {}
+        for key, value in tqdm(kv_pairs.items()):
+            batch[key] = value
+            i += 1
+            if i == batch_size:
                 styx.send_batch_insert(operator=operator,
                                        partition=partition,
                                        function='insert_batch',
-                                       key_value_pairs=kv_pairs)
-            partitions: dict[int, dict] = {p: {} for p in range(N_PARTITIONS)}
+                                       key_value_pairs=batch)
+                styx.flush()
+                batch = {}
+                i = 0
+        if batch:
+            styx.send_batch_insert(operator=operator,
+                                   partition=partition,
+                                   function='insert_batch',
+                                   key_value_pairs=batch)
             styx.flush()
+            i = 0
 
 
-def transactional_ycsb_generator(operator: Operator) -> [Operator, int, str, tuple[int, ]]:
+def transactional_ycsb_generator(operator: Operator):
     while True:
         key = random.randint(0, N_ENTITIES - 1)
         op = "read" if random.random() < 0.85 else "update"
@@ -110,7 +134,7 @@ def benchmark_runner(proc_num) -> dict[bytes, dict]:
             time.sleep(1 - lps)
         sec_end2 = timer()
         print(f'Latency per second: {sec_end2 - sec_start}')
-        if cur_sec == 150:
+        if cur_sec == SECOND_TO_TAKE_MIGRATION:
             new_g = StateflowGraph('ycsb-benchmark', operator_state_backend=LocalStateBackend.DICT)
             ycsb_operator.set_n_partitions(N_PARTITIONS-1)
             new_g.add_operators(ycsb_operator)

@@ -8,7 +8,8 @@ from timeit import default_timer as timer
 from .exceptions import SerializerNotSupported
 from .base_networking import BaseNetworking, MessagingMode
 from .logging import logging
-from .serialization import Serializer, cloudpickle_serialization, msgpack_serialization, pickle_serialization
+from .serialization import Serializer, cloudpickle_serialization, msgpack_serialization, pickle_serialization, \
+    zstd_msgpack_serialization
 from .util.aio_task_scheduler import AIOTaskScheduler
 
 
@@ -235,11 +236,19 @@ class NetworkingManager(BaseNetworking):
         if serializer == Serializer.CLOUDPICKLE:
             msg = struct.pack('>B', msg_type) + struct.pack('>B', 0) + cloudpickle_serialization(msg)
         elif serializer == Serializer.MSGPACK:
-            msg = struct.pack('>B', msg_type) + struct.pack('>B', 1) + msgpack_serialization(msg)
+            ser_msg: bytes = msgpack_serialization(msg)
+            ser_id = 1
+            if len(ser_msg) > 1_048_576:
+                # If it's more than 1MB compress by default
+                ser_msg = zstd_msgpack_serialization(ser_msg, already_ser=True)
+                ser_id = 4
+            msg = struct.pack('>B', msg_type) + struct.pack('>B', ser_id) + ser_msg
         elif serializer == Serializer.PICKLE:
             msg = struct.pack('>B', msg_type) + struct.pack('>B', 2) + pickle_serialization(msg)
         elif serializer == Serializer.NONE:
             msg = struct.pack('>B', msg_type) + struct.pack('>B', 3) + msg
+        elif serializer == Serializer.COMPRESSED_MSGPACK:
+            msg = struct.pack('>B', msg_type) + struct.pack('>B', 4) + zstd_msgpack_serialization(msg)
         else:
             logging.error(f'Serializer: {serializer} is not supported')
             raise SerializerNotSupported()

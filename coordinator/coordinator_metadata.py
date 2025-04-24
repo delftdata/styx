@@ -11,7 +11,8 @@ from confluent_kafka.admin import AdminClient, NewTopic, KafkaException
 from minio import Minio
 
 from styx.common.message_types import MessageType
-from styx.common.serialization import Serializer, msgpack_serialization, cloudpickle_serialization
+from styx.common.serialization import Serializer, msgpack_serialization, cloudpickle_serialization, \
+    zstd_msgpack_serialization
 from styx.common.tcp_networking import NetworkingManager
 from styx.common.types import OperatorPartition
 from styx.common.stateflow_graph import StateflowGraph
@@ -155,10 +156,10 @@ class Coordinator(object):
         if current_completed_snapshot != self.prev_completed_snapshot_id:
             logging.warning(f"Cluster completed snapshot: {current_completed_snapshot}")
             # if we reached a complete snapshot we could compact its deltas with the previous one
-            sn_data: bytes = msgpack_serialization((self.completed_input_offsets,
-                                                    self.completed_out_offsets,
-                                                    self.completed_epoch_counter,
-                                                    self.completed_t_counter))
+            sn_data: bytes = zstd_msgpack_serialization((self.completed_input_offsets,
+                                                         self.completed_out_offsets,
+                                                         self.completed_epoch_counter,
+                                                         self.completed_t_counter))
             self.minio_client.put_object(SNAPSHOT_BUCKET_NAME,
                                          f"sequencer/{current_completed_snapshot}.bin",
                                          io.BytesIO(sn_data),

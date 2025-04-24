@@ -4,7 +4,7 @@ import os
 from collections import defaultdict
 
 from minio import Minio
-from styx.common.serialization import msgpack_deserialization, msgpack_serialization
+from styx.common.serialization import zstd_msgpack_deserialization, zstd_msgpack_serialization
 from styx.common.types import OperatorPartition, KVPairs
 
 MINIO_URL: str = f"{os.environ['MINIO_HOST']}:{os.environ['MINIO_PORT']}"
@@ -20,13 +20,13 @@ def get_snapshots_per_worker(snapshot_files: list[str],
     sequencer_snapshots: list[tuple[int, str]] = []
     for sn_file in snapshot_files:
         sn_file_parts: list[str] = sn_file.split("/")
-        sn_type: str = sn_file_parts[0] # sequencer or data
-        if sn_type[0] == "s":
+        sn_type: str = sn_file_parts[0] # sequencer, data or migration (we should never include migration to the compaction)
+        if sn_type == "sequencer":
             # sequencer
             snapshot_id = int(sn_file_parts[1].split(".")[0])
             if snapshot_id <= max_snap_id:
                 sequencer_snapshots.append((snapshot_id, sn_file))
-        else:
+        elif sn_type == "data":
             # data
             operator_name, partition, snapshot_id = sn_file_parts[1], int(sn_file_parts[2]), int(sn_file_parts[3].split(".")[0])
             if snapshot_id <= max_snap_id:
@@ -63,7 +63,7 @@ def compact_deltas(minio_client, snapshot_files, max_snap_id):
     for operator_partition, sn_info in snapshots_per_operator_partition.items():
         # The snapshots must be sorted
         for sn_id, sn_name in sn_info:
-            partition_data = msgpack_deserialization(
+            partition_data = zstd_msgpack_deserialization(
                 minio_client.get_object(SNAPSHOT_BUCKET_NAME, sn_name).data
             )
             if operator_partition in data:
@@ -75,7 +75,7 @@ def compact_deltas(minio_client, snapshot_files, max_snap_id):
 
     for operator_partition, partition_data in data.items():
         operator_name, partition = operator_partition
-        sn_data: bytes = msgpack_serialization(partition_data)
+        sn_data: bytes = zstd_msgpack_serialization(partition_data)
         snapshot_name: str = f"data/{operator_name}/{partition}/0.bin"
         # Store the primary snapshot after compaction
         minio_client.put_object(SNAPSHOT_BUCKET_NAME, snapshot_name, io.BytesIO(sn_data), len(sn_data))
