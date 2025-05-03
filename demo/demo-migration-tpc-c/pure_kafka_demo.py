@@ -29,22 +29,22 @@ import rand
 import kafka_output_consumer
 import calculate_metrics
 
-
-random.seed(42)
-
 SAVE_DIR: str = sys.argv[1]
 threads = int(sys.argv[2])
-N_PARTITIONS = int(sys.argv[3])
-messages_per_second = int(sys.argv[4])
+START_N_PARTITIONS = int(sys.argv[3])
+END_N_PARTITIONS = int(sys.argv[4])
+messages_per_second = int(sys.argv[5])
+SECOND_TO_TAKE_MIGRATION = 60
 sleeps_per_second = 100
 sleep_time = 0.0085
-seconds = int(sys.argv[5])
+seconds = int(sys.argv[6])
 STYX_HOST: str = 'localhost'
 STYX_PORT: int = 8886
 KAFKA_URL = 'localhost:9092'
-warmup_seconds = int(sys.argv[6])
-N_W = int(sys.argv[7])
-N_PARTITIONS = min(N_W, N_PARTITIONS)
+warmup_seconds = int(sys.argv[7])
+N_W = int(sys.argv[8])
+START_N_PARTITIONS = min(N_W, START_N_PARTITIONS)
+END_N_PARTITIONS = min(N_W, END_N_PARTITIONS)
 C_Per_District = 3000
 D_Per_Warehouse = 10
 N_D = N_W * D_Per_Warehouse
@@ -61,22 +61,22 @@ customers_per_district: dict[tuple, list] = {}
 script_path = os.path.dirname(os.path.realpath(__file__))
 
 
-flush_interval = 100
+flush_interval = 1000
 
 g = StateflowGraph('tpcc_benchmark', operator_state_backend=LocalStateBackend.DICT)
 ####################################################################################################################
-customer_operator.set_n_partitions(N_PARTITIONS)
-district_operator.set_n_partitions(N_PARTITIONS)
-history_operator.set_n_partitions(N_PARTITIONS)
-item_operator.set_n_partitions(N_PARTITIONS)
-new_order_operator.set_n_partitions(N_PARTITIONS)
-order_operator.set_n_partitions(N_PARTITIONS)
-order_line_operator.set_n_partitions(N_PARTITIONS)
-stock_operator.set_n_partitions(N_PARTITIONS)
-warehouse_operator.set_n_partitions(N_PARTITIONS)
-new_order_txn_operator.set_n_partitions(N_PARTITIONS)
-customer_idx_operator.set_n_partitions(N_PARTITIONS)
-payment_txn_operator.set_n_partitions(N_PARTITIONS)
+customer_operator.set_n_partitions(START_N_PARTITIONS)
+district_operator.set_n_partitions(START_N_PARTITIONS)
+history_operator.set_n_partitions(START_N_PARTITIONS)
+item_operator.set_n_partitions(START_N_PARTITIONS)
+new_order_operator.set_n_partitions(START_N_PARTITIONS)
+order_operator.set_n_partitions(START_N_PARTITIONS)
+order_line_operator.set_n_partitions(START_N_PARTITIONS)
+stock_operator.set_n_partitions(START_N_PARTITIONS)
+warehouse_operator.set_n_partitions(START_N_PARTITIONS)
+new_order_txn_operator.set_n_partitions(START_N_PARTITIONS)
+customer_idx_operator.set_n_partitions(START_N_PARTITIONS)
+payment_txn_operator.set_n_partitions(START_N_PARTITIONS)
 g.add_operators(customer_operator, district_operator, history_operator, item_operator, new_order_operator,
                 order_operator, order_line_operator, stock_operator, warehouse_operator,
                 new_order_txn_operator, customer_idx_operator, payment_txn_operator)
@@ -86,7 +86,7 @@ g.add_operators(customer_operator, district_operator, history_operator, item_ope
 def populate_warehouse(styx: SyncStyxClient):
     with open(os.path.join(script_path, "data/warehouse.csv"), "r") as f:
         reader = csv.reader(f, delimiter=",")
-        partitions: dict[int, dict] = {p: {} for p in range(N_PARTITIONS)}
+        partitions: dict[int, dict] = {p: {} for p in range(START_N_PARTITIONS)}
         for _, line in tqdm(enumerate(reader), desc="Populating Warehouse"):
             warehouse_key = int(line[0])
             partition: int = styx.get_operator_partition(warehouse_key, warehouse_operator)
@@ -109,7 +109,7 @@ def populate_warehouse(styx: SyncStyxClient):
 def populate_district(styx: SyncStyxClient):
     with open(os.path.join(script_path, "data/district.csv"), "r") as f:
         reader = csv.reader(f, delimiter=",")
-        partitions: dict[int, dict] = {p: {} for p in range(N_PARTITIONS)}
+        partitions: dict[int, dict] = {p: {} for p in range(START_N_PARTITIONS)}
         for _, line in tqdm(enumerate(reader), desc="Populating District"):
             # Primary Key: (D_W_ID, D_ID)
             district_key = f'{line[1]}:{line[0]}'
@@ -137,7 +137,7 @@ def populate_customer(styx: SyncStyxClient):
     customer_index_data: dict[str, list[dict[str, str | int]]] = defaultdict(list)
     with open(os.path.join(script_path, "data/customer.csv"), "r") as f:
         reader = csv.reader(f, delimiter=",")
-        partitions: dict[int, dict] = {p: {} for p in range(N_PARTITIONS)}
+        partitions: dict[int, dict] = {p: {} for p in range(START_N_PARTITIONS)}
         for i, line in tqdm(enumerate(reader), desc="Populating Customer"):
             # Primary Key: (C_W_ID, C_D_ID, C_ID)
             customer_key = f'{line[2]}:{line[1]}:{line[0]}'
@@ -189,7 +189,7 @@ def populate_customer(styx: SyncStyxClient):
             styx.init_data(customer_operator, partition, partition_data)
 
         # Final batch insert for customer index
-        index_partitions: dict[int, dict[str, list[str]]] = {p: {} for p in range(N_PARTITIONS)}
+        index_partitions: dict[int, dict[str, list[str]]] = {p: {} for p in range(START_N_PARTITIONS)}
         index_keys = list(customer_index_data.items())
 
         for i, (customer_idx_key, customer_idx_values) in enumerate(index_keys):
@@ -206,7 +206,7 @@ def populate_customer(styx: SyncStyxClient):
 def populate_history(styx: SyncStyxClient):
     with open(os.path.join(script_path, "data/history.csv"), "r") as f:
         reader = csv.reader(f, delimiter=",")
-        partitions: dict[int, dict] = {p: {} for p in range(N_PARTITIONS)}
+        partitions: dict[int, dict] = {p: {} for p in range(START_N_PARTITIONS)}
         for i, line in tqdm(enumerate(reader), desc="Populating History"):
             # Primary Key: (H_W_ID, H_D_ID, H_C_ID)
             history_key = f'{line[4]}:{line[3]}:{line[0]}'
@@ -230,7 +230,7 @@ def populate_history(styx: SyncStyxClient):
 def populate_new_order(styx: SyncStyxClient):
     with open(os.path.join(script_path, "data/new_order.csv"), "r") as f:
         reader = csv.reader(f, delimiter=",")
-        partitions: dict[int, dict] = {p: {} for p in range(N_PARTITIONS)}
+        partitions: dict[int, dict] = {p: {} for p in range(START_N_PARTITIONS)}
         for i, line in tqdm(enumerate(reader), desc="Populating New Order"):
             # Primary Key: (NO_W_ID, NO_D_ID, NO_O_ID)
             new_order_key = f'{line[2]}:{line[1]}:{line[0]}'
@@ -249,7 +249,7 @@ def populate_new_order(styx: SyncStyxClient):
 def populate_order(styx: SyncStyxClient):
     with open(os.path.join(script_path, "data/order.csv"), "r") as f:
         reader = csv.reader(f, delimiter=",")
-        partitions: dict[int, dict] = {p: {} for p in range(N_PARTITIONS)}
+        partitions: dict[int, dict] = {p: {} for p in range(START_N_PARTITIONS)}
         for i, line in tqdm(enumerate(reader), desc="Populating Order"):
             # Primary Key: (O_W_ID, O_D_ID, O_ID)
             order_key = f'{line[2]}:{line[1]}:{line[0]}'
@@ -273,7 +273,7 @@ def populate_order(styx: SyncStyxClient):
 def populate_order_line(styx: SyncStyxClient):
     with open(os.path.join(script_path, "data/order_line.csv"), "r") as f:
         reader = csv.reader(f, delimiter=",")
-        partitions: dict[int, dict] = {p: {} for p in range(N_PARTITIONS)}
+        partitions: dict[int, dict] = {p: {} for p in range(START_N_PARTITIONS)}
         for i, line in tqdm(enumerate(reader), desc="Populating Order Line"):
             # Primary Key: (OL_W_ID, OL_D_ID, OL_O_ID, OL_NUMBER)
             order_line_key = f'{line[2]}:{line[1]}:{line[0]}:{line[3]}'
@@ -298,7 +298,7 @@ def populate_order_line(styx: SyncStyxClient):
 def populate_item(styx: SyncStyxClient):
     with open(os.path.join(script_path, "data/item.csv"), "r") as f:
         reader = csv.reader(f, delimiter=",")
-        partitions: dict[int, dict] = {p: {} for p in range(N_PARTITIONS)}
+        partitions: dict[int, dict] = {p: {} for p in range(START_N_PARTITIONS)}
         for i, line in tqdm(enumerate(reader), desc="Populating Item"):
             item_key = int(line[0])
             partition: int = styx.get_operator_partition(item_key, item_operator)
@@ -317,7 +317,7 @@ def populate_item(styx: SyncStyxClient):
 def populate_stock(styx: SyncStyxClient):
     with open(os.path.join(script_path, "data/stock.csv"), "r") as f:
         reader = csv.reader(f, delimiter=",")
-        partitions: dict[int, dict] = {p: {} for p in range(N_PARTITIONS)}
+        partitions: dict[int, dict] = {p: {} for p in range(START_N_PARTITIONS)}
         for i, line in tqdm(enumerate(reader), desc="Populating Stock"):
             # Primary Key: (S_W_ID, S_I_ID)
             stock_key = f'{line[1]}:{line[0]}'
@@ -482,7 +482,7 @@ def benchmark_runner(proc_num) -> dict[bytes, dict]:
     timestamp_futures: dict[bytes, dict] = {}
     time.sleep(5)
     start = timer()
-    for _ in range(seconds):
+    for cur_sec in range(seconds):
         sec_start = timer()
         for i in range(messages_per_second):
             if i % (messages_per_second // sleeps_per_second) == 0:
@@ -500,6 +500,25 @@ def benchmark_runner(proc_num) -> dict[bytes, dict]:
             time.sleep(1 - lps)
         sec_end2 = timer()
         print(f'Latency per second: {sec_end2 - sec_start}')
+        if cur_sec == SECOND_TO_TAKE_MIGRATION:
+            new_g = StateflowGraph('tpcc_benchmark', operator_state_backend=LocalStateBackend.DICT)
+            ####################################################################################################################
+            customer_operator.set_n_partitions(END_N_PARTITIONS)
+            district_operator.set_n_partitions(END_N_PARTITIONS)
+            history_operator.set_n_partitions(END_N_PARTITIONS)
+            item_operator.set_n_partitions(END_N_PARTITIONS)
+            new_order_operator.set_n_partitions(END_N_PARTITIONS)
+            order_operator.set_n_partitions(END_N_PARTITIONS)
+            order_line_operator.set_n_partitions(END_N_PARTITIONS)
+            stock_operator.set_n_partitions(END_N_PARTITIONS)
+            warehouse_operator.set_n_partitions(END_N_PARTITIONS)
+            new_order_txn_operator.set_n_partitions(END_N_PARTITIONS)
+            customer_idx_operator.set_n_partitions(END_N_PARTITIONS)
+            payment_txn_operator.set_n_partitions(END_N_PARTITIONS)
+            new_g.add_operators(customer_operator, district_operator, history_operator, item_operator, new_order_operator,
+                            order_operator, order_line_operator, stock_operator, warehouse_operator,
+                            new_order_txn_operator, customer_idx_operator, payment_txn_operator)
+            styx.submit_dataflow(new_g)
     end = timer()
     print(f'Average latency per second: {(end - start) / seconds}')
     styx.close()
@@ -524,8 +543,8 @@ def main():
     pd.DataFrame({"request_id": list(results.keys()),
                   "timestamp": [res["timestamp"] for res in results.values()],
                   "op": [res["op"] for res in results.values()]
-                  }).sort_values(by="timestamp").to_csv(f'{SAVE_DIR}/client_requests.csv',
-                                                        index=False)
+                  }).to_csv(f'{SAVE_DIR}/client_requests.csv',
+                            index=False)
 
 
 if __name__ == "__main__":

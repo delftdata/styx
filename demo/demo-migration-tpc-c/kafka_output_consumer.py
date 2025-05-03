@@ -52,8 +52,8 @@ async def consume(save_dir):
         # Will leave consumer group; perform autocommit if enabled.
         await consumer.stop()
         pd.DataFrame.from_records(records,
-                                  columns=['request_id', 'response', 'timestamp']).sort_values(by="timestamp").to_csv(f'{save_dir}/output.csv',
-                                                                                                                      index=False)
+                                  columns=['request_id', 'response', 'timestamp']).to_csv(f'{save_dir}/output.csv',
+                                                                                          index=False)
 
 def main(save_dir=None):
     if save_dir is None:

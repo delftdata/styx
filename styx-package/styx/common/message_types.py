@@ -36,5 +36,6 @@ class MessageType(IntEnum):
     SnapProcDelta = 31
     SnapTakeSnapshot = 32
     SnapNAssigned = 33
+    ResponseToRoot = 34
     AlignStart = 100
     AlignEnd = 101

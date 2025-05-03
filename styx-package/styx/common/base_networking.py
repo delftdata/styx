@@ -98,13 +98,10 @@ class BaseNetworking(ABC):
                              ack_id: int,
                              fraction_str: str,
                              chain_participants: list[int],
-                             partial_node_count: int,
-                             remote_response: str):
+                             partial_node_count: int):
         if ack_id in self.aborted_events:
             # if the transaction was aborted we can instantly return
             return
-        if remote_response is not None:
-            self.client_responses[ack_id] = remote_response
         try:
             self.add_chain_participants(ack_id, chain_participants)
             self.ack_cnts[ack_id] = (self.ack_cnts[ack_id][0],
@@ -122,14 +119,11 @@ class BaseNetworking(ABC):
 
     def add_ack_cnt(self,
                     ack_id: int,
-                    remote_response: str,
                     cnt: int = 1,
                     ):
         if ack_id in self.aborted_events:
             # if the transaction was aborted we can instantly return
             return
-        if remote_response is not None:
-            self.client_responses[ack_id] = remote_response
         try:
             self.ack_cnts[ack_id] = (self.ack_cnts[ack_id][0] + cnt,
                                      self.ack_cnts[ack_id][1])
@@ -174,6 +168,8 @@ class BaseNetworking(ABC):
             self.waited_ack_events[aborted_t_id].set()
 
     def add_response(self, t_id: int, response: str):
+        if response is None:
+            logging.error(f'Response for T_ID: {t_id} should not be None!')
         self.client_responses[t_id] = response
 
     def merge_remote_logic_aborts(self, remote_logic_aborts: set[int]):

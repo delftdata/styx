@@ -2,6 +2,7 @@ import asyncio
 import gc
 import io
 import multiprocessing
+import concurrent.futures
 import os
 import struct
 import time
@@ -9,6 +10,7 @@ from asyncio import StreamReader, StreamWriter
 from copy import deepcopy
 import socket
 from timeit import default_timer as timer
+import logging as sync_logging
 
 from minio import Minio
 import uvloop
@@ -17,6 +19,8 @@ from aiokafka.errors import UnknownTopicOrPartitionError, KafkaConnectionError
 
 from styx.common.local_state_backends import LocalStateBackend
 from styx.common.logging import logging
+from styx.common.partitioning.hash_partitioner import HashPartitioner
+from styx.common.stateflow_graph import StateflowGraph
 from styx.common.tcp_networking import NetworkingManager, MessagingMode
 from styx.common.operator import Operator
 from styx.common.protocols import Protocols
@@ -45,6 +49,7 @@ MINIO_SECRET_KEY: str = os.environ['MINIO_ROOT_PASSWORD']
 KAFKA_URL: str = os.environ['KAFKA_URL']
 HEARTBEAT_INTERVAL: int = int(os.getenv('HEARTBEAT_INTERVAL', 500))  # 500ms
 SNAPSHOT_BUCKET_NAME: str = os.getenv('SNAPSHOT_BUCKET_NAME', "styx-snapshots")
+MIGRATION_THREADS = int(os.getenv('MIGRATION_THREADS', 4))
 
 PROTOCOL = Protocols.Aria
 
@@ -119,6 +124,76 @@ class Worker(object):
         self.m_epoch_counter: int = -1
         self.m_t_counter: int = -1
 
+        self.pool: concurrent.futures.ProcessPoolExecutor | None = None
+        self.total_repartitioning: int = -1
+        self.completed_repartitioning: int = 0
+        self.completed_repartitioning_event: asyncio.Event = asyncio.Event()
+
+        self.deployed_graph: StateflowGraph | None = None
+
+    @staticmethod
+    def rehash_and_store(operator_partition: OperatorPartition,
+                         partitioner: HashPartitioner,
+                         operator_partition_data: KVPairs,
+                         worker_id: int):
+        ser_time = 0.0
+        wire_time = 0.0
+        operator_name, previous_partition = operator_partition
+        minio_client = Minio(MINIO_URL,
+                             access_key=MINIO_ACCESS_KEY,
+                             secret_key=MINIO_SECRET_KEY,
+                             secure=False)
+
+        # Start hashing
+        start_hashing = timer()
+        new_partitions: dict[OperatorPartition, KVPairs] = {
+            (operator_name, partition): {} for partition in range(partitioner.partitions)
+        }
+        for key, value in operator_partition_data.items():
+            partition = partitioner.get_partition(key)
+            new_partitions[(operator_name, partition)][key] = value
+        end_hashing = timer()
+
+        # Parallel MinIO uploads
+        def upload_partition(sn_n: str, sn_d: bytes):
+            s_wire = timer()
+            minio_client.put_object(
+                SNAPSHOT_BUCKET_NAME,
+                sn_n,
+                io.BytesIO(sn_d),
+                len(sn_d)
+            )
+            e_wire = timer()
+            return e_wire - s_wire
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+            futures = []
+            for n_op, data in new_partitions.items():
+                if not data:
+                    continue  # Skip empty partitions
+                n_o, n_p = n_op
+                snapshot_name = f"migration/{n_o}/{n_p}/{previous_partition}/{worker_id}.bin"
+                s_ser = timer()
+                sn_data: bytes = zstd_msgpack_serialization(data)
+                e_ser = timer()
+                ser_time += e_ser - s_ser
+                sync_logging.warning(f"MIGRATION | STORING {snapshot_name}")
+                futures.append(executor.submit(upload_partition, snapshot_name, sn_data))
+
+            for fut in futures:
+                wire_time += fut.result()
+
+        sync_logging.warning(f"MIGRATION of {operator_name}:{previous_partition} | "
+                             f"hashing_time: {end_hashing - start_hashing:.3f}s | "
+                             f"ser_time: {ser_time:.3f}s | "
+                             f"wire_time: {wire_time:.3f}s")
+
+    def repartitioning_callback(self, _):
+        self.completed_repartitioning += 1
+        if self.completed_repartitioning == self.total_repartitioning:
+            self.completed_repartitioning_event.set()
+            self.completed_repartitioning = 0
+
     async def worker_controller(self, data: bytes):
         message_type: int = self.networking.get_msg_type(data)
         match message_type:
@@ -127,7 +202,47 @@ class Worker(object):
                 gc.disable()
                 # This contains all the operators of a job assigned to this worker
                 message = self.networking.decode_message(data)
-                await self.handle_execution_plan(message)
+
+                self.worker_operators, self.dns, self.peers, self.operator_state_backend, self.deployed_graph = message
+                del self.peers[self.id]
+                operator: Operator
+                for operator_partition, operator in self.worker_operators.items():
+                    operator_name, partition = operator_partition
+                    self.registered_operators[(operator_name, partition)] = deepcopy(operator)
+                    if INGRESS_TYPE == 'KAFKA':
+                        self.topic_partitions.append(TopicPartition(operator_name, partition))
+                self.async_snapshots = AsyncSnapshotsMinio(self.id,
+                                                           n_assigned_partitions=len(self.registered_operators))
+                await self.networking.send_message(self.networking.host_name, self.snapshotting_port,
+                                                   msg=(list(self.registered_operators.keys()), 0),
+                                                   msg_type=MessageType.SnapNAssigned,
+                                                   serializer=Serializer.MSGPACK)
+                (data, topic_partition_offsets, topic_partition_output_offsets, epoch,
+                 t_counter) = self.async_snapshots.retrieve_snapshot(0, self.registered_operators.keys())
+                topic_partition_offsets = {k: v for k, v in topic_partition_offsets.items()
+                                           if k in self.registered_operators}
+                topic_partition_output_offsets = {k: v for k, v in topic_partition_output_offsets.items()
+                                                  if k in self.registered_operators}
+                self.attach_state_to_operators_after_snapshot(data)
+                self.function_execution_protocol = AriaProtocol(worker_id=self.id,
+                                                                peers=self.peers,
+                                                                networking=self.protocol_networking,
+                                                                registered_operators=self.registered_operators,
+                                                                topic_partitions=self.topic_partitions,
+                                                                state=self.local_state,
+                                                                snapshotting_port=self.snapshotting_port,
+                                                                topic_partition_offsets=topic_partition_offsets,
+                                                                output_offsets=topic_partition_output_offsets,
+                                                                epoch_counter=epoch,
+                                                                t_counter=t_counter)
+                self.function_execution_protocol.start()
+                self.function_execution_protocol.started.set()
+
+                logging.info(
+                    f'Registered operators: {self.registered_operators} \n'
+                    f'Peers: {self.peers} \n'
+                    f'Operator locations: {self.dns}'
+                )
             case MessageType.InitMigration:
                 try:
                     # FIXME THIS IS JUST FOR THE STOP AND RESTART need to see how to generalize
@@ -139,38 +254,31 @@ class Worker(object):
                     logging.warning(f"MIGRATION | Function Execution Protocol Stopped! |"
                                     f" @Epoch {self.function_execution_protocol.sequencer.epoch_counter} |"
                                     f" took: {t1 - start_time}")
-                    (new_graph, new_worker_operators, self.dns,
+                    (self.deployed_graph, new_worker_operators, self.dns,
                      self.peers, self.operator_state_backend) = self.networking.decode_message(data)
                     del self.peers[self.id]
                     logging.warning("MIGRATION | ARIA STOPPED")
                     # 2) Once stopped take the hashes and store stage
-                    ser_time = 0.0
-                    wire_time = 0.0
-                    repart_time = 0.0
-                    for operator in self.worker_operators.values():
-                        start_repart = timer()
-                        new_operator_partitioner = new_graph.get_operator(operator).get_partitioner()
-                        res: dict[OperatorPartition, KVPairs] = self.local_state.repartition(operator.name,
-                                                                                             new_operator_partitioner)
-                        end_repart = timer()
-                        repart_time += end_repart - start_repart
-                        for n_op, data in res.items():
-                            n_o, n_p = n_op
-                            snapshot_name = f"migration/{n_o}/{n_p}/{self.id}.bin"
-                            s_ser = timer()
-                            sn_data: bytes = zstd_msgpack_serialization(data)
-                            e_ser = timer()
-                            ser_time += e_ser - s_ser
-                            logging.warning(f"MIGRATION | STORING {snapshot_name}")
-                            s_wire = timer()
-                            self.minio_client.put_object(SNAPSHOT_BUCKET_NAME, snapshot_name,
-                                                         io.BytesIO(sn_data), len(sn_data))
-                            e_wire = timer()
-                            wire_time += e_wire - s_wire
-                    self.worker_operators = new_worker_operators
                     t2 = timer()
-                    logging.warning(f"MIGRATION | Took Hashes | took: {t2 - t1} | ser_time: {ser_time} | wire_time: {wire_time} | repart_time: {repart_time}")
+                    operator_partitions_to_repartition = self.local_state.get_operator_partitions_to_repartition()
+                    self.total_repartitioning = sum([len(operator_partitions)
+                                                     for operator_partitions in operator_partitions_to_repartition.values()])
+                    loop = asyncio.get_running_loop()
+                    for operator_name, operator_partitions in operator_partitions_to_repartition.items():
+                        for operator_partition in operator_partitions:
+                            new_operator_partitioner: HashPartitioner = self.deployed_graph.get_operator_by_name(operator_name).get_partitioner()
+                            logging.warning(f'Sending: {operator_partition} for repartitioning')
+                            loop.run_in_executor(self.pool,
+                                                 self.rehash_and_store,
+                                                 operator_partition,
+                                                 new_operator_partitioner,
+                                                 self.local_state.get_operator_data_for_repartitioning(operator_partition),
+                                                 self.id
+                                                 ).add_done_callback(self.repartitioning_callback)
+                    await self.completed_repartitioning_event.wait()
+                    self.completed_repartitioning_event.clear()
                     # 3) Coordinate: Everyone done with repartitioning
+                    self.worker_operators = new_worker_operators
                     await self.networking.send_message(DISCOVERY_HOST, DISCOVERY_PORT,
                                                        msg=(self.function_execution_protocol.sequencer.epoch_counter,
                                                             self.function_execution_protocol.sequencer.t_counter,
@@ -215,13 +323,14 @@ class Worker(object):
                                                                                     recursive=True)
                                                      if sn_file.object_name.endswith(".bin")]
                         for sn_name in snapshot_files:
+                            logging.warning(f"MIGRATION | LOADING PARTITION FILE: {sn_name}")
                             partition_data = zstd_msgpack_deserialization(
                                 self.minio_client.get_object(SNAPSHOT_BUCKET_NAME, sn_name).data
                             )
-                            if operator_partition in data and partition_data:
+                            if operator_partition not in data:
+                                data[operator_partition] = {}
+                            if partition_data:
                                 data[operator_partition].update(partition_data)
-                            else:
-                                data[operator_partition] = partition_data
                     logging.warning(f"MIGRATION | DATA: {data.keys()}")
                     self.attach_state_to_operators_after_snapshot(data)
                     t5 = timer()
@@ -269,7 +378,7 @@ class Worker(object):
                 start_time = timer()
                 message = self.networking.decode_message(data)
                 (self.id, self.worker_operators, self.dns, self.peers,
-                 self.operator_state_backend, snapshot_id) = message
+                 self.operator_state_backend, snapshot_id, self.deployed_graph) = message
                 if self.function_execution_protocol is not None:
                     # This worker did not fail and needs to clean up
                     await self.function_execution_protocol.stop()
@@ -381,55 +490,7 @@ class Worker(object):
             logging.error(f"Invalid operator state backend type: {self.operator_state_backend}")
             return
         for operator in self.registered_operators.values():
-            operator.attach_state_networking(self.local_state, self.protocol_networking, self.dns)
-
-    def attach_state_to_operators(self):
-        operator_partitions: set[OperatorPartition] = set(self.registered_operators.keys())
-        if self.operator_state_backend is LocalStateBackend.DICT:
-            self.async_snapshots = AsyncSnapshotsMinio(self.id, n_assigned_partitions=len(operator_partitions))
-            if PROTOCOL == Protocols.Aria:
-                self.local_state = InMemoryOperatorState(operator_partitions)
-            else:
-                logging.error(f"Invalid protocol: {PROTOCOL}")
-        else:
-            logging.error(f"Invalid operator state backend type: {self.operator_state_backend}")
-            return
-        for operator in self.registered_operators.values():
-            operator.attach_state_networking(self.local_state, self.protocol_networking, self.dns)
-
-    async def handle_execution_plan(self, message):
-        self.worker_operators, self.dns, self.peers, self.operator_state_backend = message
-        del self.peers[self.id]
-        operator: Operator
-        for operator_partition, operator in self.worker_operators.items():
-            operator_name, partition = operator_partition
-            self.registered_operators[(operator_name, partition)] = deepcopy(operator)
-            if INGRESS_TYPE == 'KAFKA':
-                self.topic_partitions.append(TopicPartition(operator_name, partition))
-        await self.networking.send_message(self.networking.host_name, self.snapshotting_port,
-                                           msg=(list(self.registered_operators.keys()), -1),
-                                           msg_type=MessageType.SnapNAssigned,
-                                           serializer=Serializer.MSGPACK)
-        self.attach_state_to_operators()
-        if PROTOCOL == Protocols.Aria:
-            self.function_execution_protocol = AriaProtocol(worker_id=self.id,
-                                                            peers=self.peers,
-                                                            networking=self.protocol_networking,
-                                                            registered_operators=self.registered_operators,
-                                                            topic_partitions=self.topic_partitions,
-                                                            state=self.local_state,
-                                                            snapshotting_port=self.snapshotting_port)
-        else:
-            logging.error(f"Invalid protocol: {PROTOCOL}")
-
-        self.function_execution_protocol.start()
-        self.function_execution_protocol.started.set()
-
-        logging.info(
-            f'Registered operators: {self.registered_operators} \n'
-            f'Peers: {self.peers} \n'
-            f'Operator locations: {self.dns}'
-        )
+            operator.attach_state_networking(self.local_state, self.protocol_networking, self.dns, self.deployed_graph)
 
     async def start_tcp_service(self):
 
@@ -449,9 +510,10 @@ class Worker(object):
                 writer.close()
                 await writer.wait_closed()
         logging.warning("Starting Worker TCP Service")
-        server = await asyncio.start_server(request_handler, sock=self.worker_socket, limit=2**32)
-        async with server:
-            await server.serve_forever()
+        with concurrent.futures.ProcessPoolExecutor(MIGRATION_THREADS) as self.pool:
+            server = await asyncio.start_server(request_handler, sock=self.worker_socket, limit=2**32)
+            async with server:
+                await server.serve_forever()
 
     async def start_protocol_tcp_service(self):
 

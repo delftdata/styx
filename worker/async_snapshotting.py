@@ -130,7 +130,7 @@ class AsyncSnapshottingProcess(object):
 
             await asyncio.gather(reader_task(), executor_task())
 
-        with concurrent.futures.ProcessPoolExecutor(2) as self.pool:
+        with concurrent.futures.ProcessPoolExecutor(4) as self.pool:
             server = await asyncio.start_server(request_handler, sock=self.snapshotting_socket, limit=2 ** 32)
             async with server:
                 await server.serve_forever()

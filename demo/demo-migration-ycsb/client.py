@@ -10,6 +10,7 @@ from multiprocessing import Pool
 import pandas as pd
 from timeit import default_timer as timer
 
+from minio import Minio
 from styx.client.sync_client import SyncStyxClient
 from styx.common.local_state_backends import LocalStateBackend
 from styx.common.operator import Operator
@@ -30,15 +31,16 @@ def ycsb_field(size=100, seed=0):
     return ''.join(random.choices(charset, k=size))
 
 
-N_ENTITIES = 10_000_000 # 10 million entities
+N_ENTITIES = int(sys.argv[8]) # 10 million entities
 SECOND_TO_TAKE_MIGRATION = 60
 
 threads = int(sys.argv[1])
-N_PARTITIONS = int(sys.argv[2])
-messages_per_second = int(sys.argv[3])
-seconds = int(sys.argv[4])
-SAVE_DIR: str = sys.argv[5]
-warmup_seconds: int = int(sys.argv[6])
+START_N_PARTITIONS = int(sys.argv[2])
+END_N_PARTITIONS = int(sys.argv[3])
+messages_per_second = int(sys.argv[4])
+seconds = int(sys.argv[5])
+SAVE_DIR: str = sys.argv[6]
+warmup_seconds: int = int(sys.argv[7])
 
 sleeps_per_second = 100
 sleep_time = 0.0085
@@ -48,7 +50,7 @@ KAFKA_URL = 'localhost:9092'
 YCSB_DATASET_PATH = "ycsb_dataset.pkl"
 ####################################################################################################################
 g = StateflowGraph('ycsb-benchmark', operator_state_backend=LocalStateBackend.DICT)
-ycsb_operator.set_n_partitions(N_PARTITIONS)
+ycsb_operator.set_n_partitions(START_N_PARTITIONS)
 g.add_operators(ycsb_operator)
 
 def submit_graph(styx: SyncStyxClient):
@@ -58,11 +60,9 @@ def submit_graph(styx: SyncStyxClient):
 
 
 def ycsb_init(styx: SyncStyxClient, operator: Operator):
-    submit_graph(styx)
-    print("Graph Submitted, sleeping for 5sec...")
-    time.sleep(5)
-
-    partitions: dict[int, dict] = {p: {} for p in range(N_PARTITIONS)}
+    styx.set_graph(g)
+    styx.init_metadata(g)
+    partitions: dict[int, dict] = {p: {} for p in range(START_N_PARTITIONS)}
     if os.path.exists(YCSB_DATASET_PATH):
         print("Loading YCSB dataset...")
         with open(YCSB_DATASET_PATH, 'rb') as f:
@@ -71,36 +71,19 @@ def ycsb_init(styx: SyncStyxClient, operator: Operator):
         print("Generating YCSB dataset...")
         for i in tqdm(range(N_ENTITIES)):
             partition: int = styx.get_operator_partition(i, operator)
-            partitions[partition] |= {i: (ycsb_field(), ycsb_field(),
-                                          ycsb_field(), ycsb_field(),
-                                          ycsb_field(), ycsb_field(),
-                                          ycsb_field(), ycsb_field(),
-                                          ycsb_field(), ycsb_field())}
+            partitions[partition][i] = (ycsb_field(), ycsb_field(),
+                                        ycsb_field(), ycsb_field(),
+                                        ycsb_field(), ycsb_field(),
+                                        ycsb_field(), ycsb_field(),
+                                        ycsb_field(), ycsb_field())
         with open(YCSB_DATASET_PATH, 'wb') as f:
             pickle.dump(partitions, f)
     print("Data ready")
-    i = 0
-    batch_size = 10_000
-    for partition, kv_pairs in partitions.items():
-        batch = {}
-        for key, value in tqdm(kv_pairs.items()):
-            batch[key] = value
-            i += 1
-            if i == batch_size:
-                styx.send_batch_insert(operator=operator,
-                                       partition=partition,
-                                       function='insert_batch',
-                                       key_value_pairs=batch)
-                styx.flush()
-                batch = {}
-                i = 0
-        if batch:
-            styx.send_batch_insert(operator=operator,
-                                   partition=partition,
-                                   function='insert_batch',
-                                   key_value_pairs=batch)
-            styx.flush()
-            i = 0
+    for partition, partition_data in partitions.items():
+        styx.init_data(operator, partition, partition_data)
+    print("Data loaded")
+    time.sleep(5)
+    submit_graph(styx)
 
 
 def transactional_ycsb_generator(operator: Operator):
@@ -116,6 +99,7 @@ def benchmark_runner(proc_num) -> dict[bytes, dict]:
     styx.open(consume=False)
     ycsb_generator = transactional_ycsb_generator(ycsb_operator)
     timestamp_futures: dict[bytes, dict] = {}
+    time.sleep(5)
     start = timer()
     for cur_sec in range(seconds):
         sec_start = timer()
@@ -136,7 +120,7 @@ def benchmark_runner(proc_num) -> dict[bytes, dict]:
         print(f'Latency per second: {sec_end2 - sec_start}')
         if cur_sec == SECOND_TO_TAKE_MIGRATION:
             new_g = StateflowGraph('ycsb-benchmark', operator_state_backend=LocalStateBackend.DICT)
-            ycsb_operator.set_n_partitions(N_PARTITIONS-1)
+            ycsb_operator.set_n_partitions(END_N_PARTITIONS)
             new_g.add_operators(ycsb_operator)
             styx.submit_dataflow(new_g)
     end = timer()
@@ -156,15 +140,11 @@ def main():
         print("Impossible to run this benchmark with one key")
         return
 
-    styx_client = SyncStyxClient(STYX_HOST, STYX_PORT, kafka_url=KAFKA_URL)
-
-    styx_client.open(consume=False)
-
+    minio = Minio('localhost:9000', access_key='minio', secret_key='minio123', secure=False)
+    styx_client = SyncStyxClient(STYX_HOST, STYX_PORT, kafka_url=KAFKA_URL, minio=minio)
     ycsb_init(styx_client, ycsb_operator)
-
-    styx_client.close()
-
-    time.sleep(25)
+    del styx_client
+    time.sleep(5)
 
     with Pool(threads) as p:
         results = p.map(benchmark_runner, range(threads))
@@ -189,7 +169,6 @@ if __name__ == "__main__":
 
     print()
     calculate_metrics.main(
-        N_PARTITIONS,
         messages_per_second,
         threads,
         warmup_seconds,

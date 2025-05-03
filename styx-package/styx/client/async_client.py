@@ -6,7 +6,7 @@ from typing import Type
 
 from aiokafka import AIOKafkaProducer, AIOKafkaConsumer
 from aiokafka.errors import KafkaConnectionError
-
+from minio import Minio
 
 from .base_client import BaseStyxClient
 from .styx_future import StyxAsyncFuture
@@ -24,8 +24,9 @@ class AsyncStyxClient(BaseStyxClient):
     def __init__(self,
                  styx_coordinator_adr: str,
                  styx_coordinator_port: int,
-                 kafka_url: str):
-        super().__init__(styx_coordinator_adr, styx_coordinator_port)
+                 kafka_url: str,
+                 minio: Minio | None = None):
+        super().__init__(styx_coordinator_adr, styx_coordinator_port, minio)
         self._kafka_url = kafka_url
         self._futures: dict[bytes, StyxAsyncFuture] = {}
         self._result_consumer_task: asyncio.Task = ...
@@ -154,20 +155,9 @@ class AsyncStyxClient(BaseStyxClient):
         self._futures[request_id].set_in_timestamp(msg.timestamp)
         return self._futures[request_id]
 
-    async def send_batch_insert(self, operator: BaseOperator, partition: int, function: Type | str,
-                                key_value_pairs: dict[any, any], serializer: Serializer = Serializer.MSGPACK) -> bytes:
-        request_id, serialized_value, _ = self._prepare_kafka_message(None,
-                                                                      operator,
-                                                                      function,
-                                                                      (key_value_pairs,),
-                                                                      serializer,
-                                                                      partition=partition)
-        msg = await self._kafka_producer.send_and_wait(operator.name,
-                                                       key=request_id,
-                                                       value=serialized_value,
-                                                       partition=partition)
-        self._delivery_timestamps[request_id] = msg.timestamp
-        return request_id
+    def set_graph(self, graph: StateflowGraph):
+        self._current_active_graph = graph
+        self.graph_known_event.set()
 
     async def submit_dataflow(self, stateflow_graph: StateflowGraph, external_modules: tuple = None):
         self._verify_dataflow_input(stateflow_graph, external_modules)

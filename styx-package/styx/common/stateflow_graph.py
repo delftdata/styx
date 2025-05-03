@@ -18,6 +18,9 @@ class StateflowGraph(object):
     def get_operator(self, operator: BaseOperator | Operator) -> BaseOperator | Operator:
         return self.nodes[operator.name]
 
+    def get_operator_by_name(self, operator_name: str) -> BaseOperator | Operator:
+        return self.nodes[operator_name]
+
     def add_operators(self, *operators):
         [self.add_operator(operator) for operator in operators if issubclass(type(operator), BaseOperator)]
 

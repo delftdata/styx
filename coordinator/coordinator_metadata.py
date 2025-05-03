@@ -104,7 +104,8 @@ class Coordinator(object):
                                                                  operator_partition_locations,
                                                                  self.worker_pool.get_workers(),
                                                                  self.submitted_graph.operator_state_backend,
-                                                                 snap_id),
+                                                                 snap_id,
+                                                                 self.submitted_graph),
                                                             msg_type=MessageType.InitRecovery))
         logging.info('SENT RECOVER TO PARTICIPATING WORKERS')
 
@@ -232,8 +233,10 @@ class Coordinator(object):
                                                                        worker.protocol_port)],
                                                    self.worker_pool.get_operator_partition_locations(),
                                                    self.worker_pool.get_workers(),
-                                                   stateflow_graph.operator_state_backend),
-                                              msg_type=MessageType.ReceiveExecutionPlan)
+                                                   stateflow_graph.operator_state_backend,
+                                                   stateflow_graph),
+                                              msg_type=MessageType.ReceiveExecutionPlan,
+                                              serializer=Serializer.CLOUDPICKLE)
                  for worker in self.worker_pool.get_participating_workers()]
         await asyncio.gather(*tasks)
         self.graph_submitted = True

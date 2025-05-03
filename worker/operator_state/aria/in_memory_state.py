@@ -1,7 +1,6 @@
 import traceback
 
 from msgspec import msgpack
-from styx.common.partitioning.hash_partitioner import HashPartitioner
 
 from styx.common.types import OperatorPartition, KVPairs
 from styx.common.logging import logging
@@ -26,16 +25,14 @@ class InMemoryOperatorState(BaseAriaState):
         for operator_partition, kv_pairs in data.items():
             self.data[operator_partition] = kv_pairs
 
-    def repartition(self, operator_name: str, partitioner: HashPartitioner) -> dict[OperatorPartition, KVPairs]:
-        new_partitions: dict[OperatorPartition, KVPairs] = {(operator_name, partition): {}
-                                                            for partition in range(partitioner.partitions)}
-        for operator_partition, kv_pairs in self.data.items():
-            op_name, _ = operator_partition
-            if op_name == operator_name:
-                for key, value in kv_pairs.items():
-                    partition = partitioner.get_partition(key)
-                    new_partitions[(op_name,partition)][key] = value
-        return new_partitions
+    def get_operator_partitions_to_repartition(self) -> dict[str, set[OperatorPartition]]:
+        res = {operator_name: set() for operator_name, _ in self.operator_partitions}
+        for operator_name, partition in self.operator_partitions:
+            res[operator_name].add((operator_name, partition))
+        return res
+
+    def get_operator_data_for_repartitioning(self, operator: OperatorPartition) -> KVPairs:
+        return self.data[operator]
 
     def get_data_for_snapshot(self) -> dict[OperatorPartition, KVPairs]:
         return self.delta_map

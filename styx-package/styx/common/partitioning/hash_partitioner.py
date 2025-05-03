@@ -1,6 +1,5 @@
 import cityhash
 
-
 from .base_partitioner import BasePartitioner
 from ..exceptions import NonSupportedKeyType
 

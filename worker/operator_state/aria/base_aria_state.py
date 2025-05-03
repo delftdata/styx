@@ -1,6 +1,7 @@
 import asyncio
 from abc import abstractmethod
 from collections import defaultdict
+from typing import Any
 
 from styx.common.base_state import BaseOperatorState
 from styx.common.types import OperatorPartition
@@ -8,20 +9,20 @@ from styx.common.types import OperatorPartition
 class BaseAriaState(BaseOperatorState):
     # read write sets
     # operator_name: {t_id: set(keys)}
-    read_sets: dict[OperatorPartition, dict[int, set[any]]]
-    global_read_sets: dict[OperatorPartition, dict[int, set[any]]]
+    read_sets: dict[OperatorPartition, dict[int, set[Any]]]
+    global_read_sets: dict[OperatorPartition, dict[int, set[Any]]]
     # operator_name: {t_id: {key: value}}
-    write_sets: dict[OperatorPartition, dict[int, dict[any, any]]]
-    global_write_sets: dict[OperatorPartition, dict[int, dict[any, any]]]
+    write_sets: dict[OperatorPartition, dict[int, dict[Any, Any]]]
+    global_write_sets: dict[OperatorPartition, dict[int, dict[Any, Any]]]
     # the reads and writes with the lowest t_id
     # operator_name: {key: t_id}
-    writes: dict[OperatorPartition, dict[any, list[int]]]
+    writes: dict[OperatorPartition, dict[Any, list[int]]]
     # operator_name: {key: t_id}
-    reads: dict[OperatorPartition, dict[any, list[int]]]
-    global_reads: dict[OperatorPartition, dict[any, list[int]]]
+    reads: dict[OperatorPartition, dict[Any, list[int]]]
+    global_reads: dict[OperatorPartition, dict[Any, list[int]]]
     # Calvin snapshot things
     # tid: {operator_name: {key, value}}
-    fallback_commit_buffer: dict[int, dict[OperatorPartition, dict[any, any]]]
+    fallback_commit_buffer: dict[int, dict[OperatorPartition, dict[Any, Any]]]
 
     def __init__(self, operator_partitions: set[OperatorPartition]):
         super().__init__(operator_partitions)
@@ -99,14 +100,14 @@ class BaseAriaState(BaseOperatorState):
             self.read_sets[operator_partition][t_id] = {key}
 
     @staticmethod
-    def has_conflicts(t_id: int, keys: set[any], reservations: dict[any, int]):
+    def has_conflicts(t_id: int, keys: set[Any], reservations: dict[Any, int]):
         for key in keys:
             if key in reservations and reservations[key] < t_id:
                 return True
         return False
 
     @staticmethod
-    def min_rw_reservations(reservations: dict[OperatorPartition, dict[any, list[int]]]) -> dict[OperatorPartition, dict[any, int]]:
+    def min_rw_reservations(reservations: dict[OperatorPartition, dict[Any, list[int]]]) -> dict[OperatorPartition, dict[Any, int]]:
         new__reservations = {}
         for operator_partition, reservation in reservations.items():
             new__reservations[operator_partition] = {key: min(t_ids) for key, t_ids in reservation.items() if t_ids}

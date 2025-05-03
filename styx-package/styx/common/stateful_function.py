@@ -13,7 +13,6 @@ from .base_state import BaseOperatorState as State
 from .base_protocol import BaseTransactionalProtocol
 from .message_types import MessageType
 from .run_func_payload import RunFuncPayload
-from .partitioning.base_partitioner import BasePartitioner
 
 
 class StatefulFunction(Function):
@@ -30,7 +29,8 @@ class StatefulFunction(Function):
                  request_id: bytes,
                  fallback_mode: bool,
                  use_fallback_cache: bool,
-                 partitioner: BasePartitioner,
+                 deployed_graph,
+                 operator_lock: asyncio.Lock,
                  protocol: BaseTransactionalProtocol):
         super().__init__(name=function_name)
         self.__operator_name = operator_name
@@ -45,11 +45,13 @@ class StatefulFunction(Function):
         self.__key = key
         self.__protocol = protocol
         self.__partition = partition
-        self.__partitioner = partitioner
+        self.__deployed_graph = deployed_graph
+        self.__operator_lock: asyncio.Lock = operator_lock
 
     async def __call__(self, *args, **kwargs):
         try:
-            res = await self.run(*args)
+            async with self.__operator_lock:
+                res = await self.run(*args)
             logging.info(f'Run args: {args} kwargs: {kwargs} async remote calls: {self.__async_remote_calls}')
             if self.__fallback_enabled and self.__use_fallback_cache:
                 # if the fallback is enabled, and we are using the cached functions we can just return here
@@ -74,7 +76,8 @@ class StatefulFunction(Function):
                                                                is_root=True)
             return res, n_remote_calls, partial_node_count
         except Exception as e:
-            logging.warning(traceback.format_exc())
+            logging.debug(traceback.format_exc())
+            logging.warning(f"Call @{self.__operator_name}:{self.name} failed with error: {e}")
             return e, -1, -1
 
     @property
@@ -176,6 +179,9 @@ class StatefulFunction(Function):
         await asyncio.gather(*remote_calls)
         return n_remote_calls
 
+    def __get_partition(self, operator_name: str, key):
+        return self.__deployed_graph.nodes[operator_name].which_partition(key)
+
     def call_remote_async(self,
                           operator_name: str,
                           function_name: Type | str,
@@ -183,7 +189,7 @@ class StatefulFunction(Function):
                           params: tuple = tuple()):
         if isinstance(function_name, type):
             function_name = function_name.__name__
-        partition: int = self.__partitioner.get_partition(key)
+        partition: int = self.__get_partition(operator_name, key)
         is_local: bool = self.__networking.in_the_same_network(self.__dns[operator_name][partition][0],
                                                                self.__dns[operator_name][partition][2])
         self.__async_remote_calls.append((operator_name, function_name, partition, key, params, is_local))

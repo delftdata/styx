@@ -23,7 +23,7 @@ SNAPSHOT_BUCKET_NAME: str = os.getenv('SNAPSHOT_BUCKET_NAME', "styx-snapshots")
 
 class AsyncSnapshotsMinio(BaseSnapshotter):
 
-    def __init__(self, worker_id: int, n_assigned_partitions: int = 0, snapshot_id: int = 0):
+    def __init__(self, worker_id: int, n_assigned_partitions: int = 0, snapshot_id: int = 1):
         self.worker_id: int = worker_id
         self.snapshot_id: int = snapshot_id
         self.n_assigned_partitions: int = n_assigned_partitions

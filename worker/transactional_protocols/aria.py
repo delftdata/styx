@@ -131,7 +131,8 @@ class AriaProtocol(BaseTransactionalProtocol):
             MessageType.ChainAbort: asyncio.Lock(),
             MessageType.Unlock: asyncio.Lock(),
             MessageType.DeterministicReordering: asyncio.Lock(),
-            MessageType.WrongPartitionRequest: asyncio.Lock()
+            MessageType.WrongPartitionRequest: asyncio.Lock(),
+            MessageType.ResponseToRoot: asyncio.Lock(),
         }
 
         self.remote_wants_to_proceed: bool = False
@@ -252,6 +253,7 @@ class AriaProtocol(BaseTransactionalProtocol):
                     # During migration a message might arrive from a different partition
                     (request_id, operator_name, function_name, key, partition, kafka_ingress_partition,
                      kafka_offset, params) = self.networking.decode_message(data)
+                    logging.warning(f"WrongPartitionRequest: {request_id}")
                     payload = RunFuncPayload(request_id=request_id, key=key,
                                              operator_name=operator_name, partition=partition,
                                              function_name=function_name, params=params,
@@ -281,17 +283,21 @@ class AriaProtocol(BaseTransactionalProtocol):
             case MessageType.Ack:
                 async with self.networking_locks[message_type]:
                     (ack_id, fraction_str,
-                     chain_participants, partial_node_count, resp) = self.networking.decode_message(data)
+                     chain_participants, partial_node_count, ) = self.networking.decode_message(data)
                     self.networking.add_ack_fraction_str(ack_id, fraction_str,
-                                                         chain_participants, partial_node_count, resp)
+                                                         chain_participants, partial_node_count, )
             case MessageType.AckCache:
                 async with self.networking_locks[message_type]:
-                    (ack_id, resp) = self.networking.decode_message(data)
-                    self.networking.add_ack_cnt(ack_id, resp)
+                    (ack_id, ) = self.networking.decode_message(data)
+                    self.networking.add_ack_cnt(ack_id, )
             case MessageType.ChainAbort:
                 async with self.networking_locks[message_type]:
                     (ack_id, exception_str) = self.networking.decode_message(data)
                     self.networking.abort_chain(ack_id, exception_str)
+            case MessageType.ResponseToRoot:
+                async with self.networking_locks[message_type]:
+                    (ack_id, resp) = self.networking.decode_message(data)
+                    self.networking.add_response(ack_id, resp)
             case MessageType.Unlock:
                 async with self.networking_locks[message_type]:
                     # fallback phase
