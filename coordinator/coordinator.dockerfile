@@ -25,4 +25,7 @@ RUN chmod a+x /usr/local/bin/start-coordinator.sh
 
 EXPOSE 8888
 
+ARG max_operator_parallelism=10
+ENV MAX_OPERATOR_PARALLELISM=${max_operator_parallelism}
+
 CMD ["/usr/local/bin/start-coordinator.sh"]

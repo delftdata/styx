@@ -7,7 +7,7 @@ from .base_operator import BaseOperator
 from .base_protocol import BaseTransactionalProtocol
 from .stateful_function import StatefulFunction
 from .exceptions import OperatorDoesNotContainFunction
-from .logging import logging
+# from .logging import logging
 from .partitioning.hash_partitioner import HashPartitioner
 
 
@@ -30,8 +30,11 @@ class Operator(BaseOperator):
     def get_partitioner(self) -> HashPartitioner:
         return self.__partitioner
 
-    def which_partition(self, key):
+    def which_partition(self, key) -> int:
         return self.__partitioner.get_partition(key)
+
+    def which_partition_composite_key(self, key: str, field: int, delim: str) -> int:
+        return self.__partitioner.get_partition_composite(key, field, delim)
 
     def make_shadow(self):
         self.__is_shadow = True
@@ -62,8 +65,8 @@ class Operator(BaseOperator):
         f = self.__materialize_function(function_name, partition, key, t_id, request_id,
                                         fallback_mode, use_fallback_cache, protocol)
         params = (f, ) + tuple(params)
-        logging.info(f'ack_payload: {ack_payload} RQ_ID: {request_id} TID: {t_id} '
-                     f'function: {self.name}:{function_name} fallback mode: {fallback_mode}')
+        # logging.debug(f'RQ_ID: {request_id} TID: {t_id} KEY: {key}'
+        #               f'function: {self.name}:{function_name} fallback mode: {fallback_mode}')
         success: bool = True
         if ack_payload is not None:
             # part of a chain (not root)

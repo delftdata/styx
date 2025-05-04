@@ -27,5 +27,6 @@ async def pay(ctx: StatefulFunction, frontend_key, h_amount, d_id, w_id):
         'pay',
         customer_key,
         # needed to get back the reply
-        (frontend_key, h_amount, d_id, w_id)
+        (frontend_key, h_amount, d_id, w_id),
+        composite_key_hash_params=(0, ':')
     )

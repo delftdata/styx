@@ -11,7 +11,7 @@ saving_dir=$8
 warmup_seconds=$9
 epoch_size=${10}
 
-bash scripts/start_styx_cluster.sh "$n_part" "$epoch_size"
+bash scripts/start_styx_cluster.sh "$n_part" "$epoch_size" "$n_part"
 
 sleep 10
 

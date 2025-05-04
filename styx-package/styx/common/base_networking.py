@@ -162,8 +162,9 @@ class BaseNetworking(ABC):
         self.client_responses.clear()
 
     def abort_chain(self, aborted_t_id: int, exception_str: str):
-        self.aborted_events[aborted_t_id] = exception_str
-        self.logic_aborts_everywhere.add(aborted_t_id)
+        if aborted_t_id not in self.aborted_events:
+            self.aborted_events[aborted_t_id] = exception_str
+            self.logic_aborts_everywhere.add(aborted_t_id)
         if aborted_t_id in self.waited_ack_events:
             self.waited_ack_events[aborted_t_id].set()
 

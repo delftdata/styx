@@ -1,6 +1,6 @@
 import asyncio
 
-from styx.common.logging import logging
+# from styx.common.logging import logging
 from styx.common.run_func_payload import RunFuncPayload, SequencedItem
 
 
@@ -42,7 +42,7 @@ class Sequencer(object):
             t_id = self.get_t_id()
             while t_id in self.t_ids_in_wal:
                 t_id = self.get_t_id()
-        logging.info(f'Sequencing message: {message.key} with t_id: {t_id}')
+        # logging.info(f'Sequencing message: {message.key} with t_id: {t_id}')
         self.distributed_log.append(SequencedItem(t_id, message))
 
     def get_t_id(self) -> int:

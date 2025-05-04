@@ -45,7 +45,8 @@ def pack_response(ctx, front_end_metadata):
         'history',
         'insert',
         history_key,
-        (history_params, )
+        (history_params, ),
+        composite_key_hash_params=(0, ':')
     )
 
     # TPC-C 2.5.3.3: Must display the following fields:
@@ -59,7 +60,7 @@ def pack_response(ctx, front_end_metadata):
     c_data = customer_data.get("C_DATA", "")
     c_data_str = f",C_DATA={c_data[:200]}" if customer_data["C_CREDIT"] == "BC" else ""
     return (
-        f"W_ID={w_id},D_ID={district_data['D_ID']},C_ID={customer_data['C_ID']},"
+        f"P|W_ID={w_id},D_ID={district_data['D_ID']},C_ID={customer_data['C_ID']},"
         f"C_D_ID={customer_data['C_D_ID']},C_W_ID={customer_data['C_W_ID']},"
         f"C_NAME={customer_data['C_FIRST']} {customer_data['C_MIDDLE']} {customer_data['C_LAST']},"
         f"C_BAL={customer_data['C_BALANCE']:.2f},C_DISCOUNT={customer_data['C_DISCOUNT']:.4f},"
@@ -145,7 +146,8 @@ async def payment(ctx: StatefulFunction, params: dict):
             'pay',
             customer_key,
             # needed to get back the reply
-            (ctx.key, h_amount, d_id, w_id)
+            (ctx.key, h_amount, d_id, w_id),
+            composite_key_hash_params=(0, ':')
         )
     else:
         # ----------------------------------
@@ -157,7 +159,8 @@ async def payment(ctx: StatefulFunction, params: dict):
             'pay',
             customer_idx_key,
             # needed to get back the reply
-            (ctx.key, h_amount, d_id, w_id)
+            (ctx.key, h_amount, d_id, w_id),
+            composite_key_hash_params=(0, ':')
         )
 
     # --------------------
@@ -174,5 +177,6 @@ async def payment(ctx: StatefulFunction, params: dict):
         'district',
         'pay',
         district_key,
-        (ctx.key, h_amount)
+        (ctx.key, h_amount),
+        composite_key_hash_params=(0, ':')
     )

@@ -395,7 +395,7 @@ class CoordinatorService(object):
     async def send_snapshot_marker(self):
         while True:
             await asyncio.sleep(SNAPSHOT_FREQUENCY_SEC)
-            if self.aria_metadata is not None:
+            if self.aria_metadata is not None and not self.migration_in_progress:
                 self.aria_metadata.take_snapshot_at_next_epoch()
 
     def init_snapshot_minio_bucket(self):

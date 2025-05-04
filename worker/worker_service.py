@@ -238,11 +238,11 @@ class Worker(object):
                 self.function_execution_protocol.start()
                 self.function_execution_protocol.started.set()
 
-                logging.info(
-                    f'Registered operators: {self.registered_operators} \n'
-                    f'Peers: {self.peers} \n'
-                    f'Operator locations: {self.dns}'
-                )
+                # logging.info(
+                #     f'Registered operators: {self.registered_operators} \n'
+                #     f'Peers: {self.peers} \n'
+                #     f'Operator locations: {self.dns}'
+                # )
             case MessageType.InitMigration:
                 try:
                     # FIXME THIS IS JUST FOR THE STOP AND RESTART need to see how to generalize

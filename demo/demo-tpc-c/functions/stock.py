@@ -76,5 +76,6 @@ async def update_stock(ctx: StatefulFunction,
         'order_line',
         'insert',
         order_line_key,
-        (order_line_params,)
+        (order_line_params,),
+        composite_key_hash_params=(0, ':')
     )

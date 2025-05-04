@@ -12,7 +12,13 @@ epoch_size=$9
 workload_name=${10}
 n_keys=${11}
 
-bash scripts/start_styx_cluster.sh "$n_workers" "$epoch_size"
+if (( start_n_part > end_n_part )); then
+    max_part=$start_n_part
+else
+    max_part=$end_n_part
+fi
+
+bash scripts/start_styx_cluster.sh "$n_workers" "$epoch_size" "$max_part"
 
 sleep 10
 

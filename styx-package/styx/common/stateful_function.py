@@ -1,6 +1,6 @@
 import asyncio
 import fractions
-import traceback
+# import traceback
 
 from typing import Awaitable, Type
 
@@ -52,7 +52,7 @@ class StatefulFunction(Function):
         try:
             async with self.__operator_lock:
                 res = await self.run(*args)
-            logging.info(f'Run args: {args} kwargs: {kwargs} async remote calls: {self.__async_remote_calls}')
+            # logging.info(f'Run args: {args} kwargs: {kwargs} async remote calls: {self.__async_remote_calls}')
             if self.__fallback_enabled and self.__use_fallback_cache:
                 # if the fallback is enabled, and we are using the cached functions we can just return here
                 return res, len(self.__async_remote_calls), -1
@@ -76,8 +76,9 @@ class StatefulFunction(Function):
                                                                is_root=True)
             return res, n_remote_calls, partial_node_count
         except Exception as e:
-            logging.debug(traceback.format_exc())
-            logging.warning(f"Call @{self.__operator_name}:{self.name} failed with error: {e}")
+            # logging.debug(traceback.format_exc())
+            # logging.debug(f"{self.__request_id} | {self.__t_id} | {self.__key} | "
+            #               f"Call @{self.__operator_name}:{self.name}:FB={self.__fallback_enabled} failed with error: {e}")
             return e, -1, -1
 
     @property
@@ -179,17 +180,25 @@ class StatefulFunction(Function):
         await asyncio.gather(*remote_calls)
         return n_remote_calls
 
-    def __get_partition(self, operator_name: str, key):
+    def __get_partition(self, operator_name: str, key) -> int:
         return self.__deployed_graph.nodes[operator_name].which_partition(key)
+
+    def __get_partition_composite(self, operator_name: str, key, field: int, delim: str) -> int:
+        return self.__deployed_graph.nodes[operator_name].which_partition_composite_key(key, field, delim)
 
     def call_remote_async(self,
                           operator_name: str,
                           function_name: Type | str,
                           key,
-                          params: tuple = tuple()):
+                          params: tuple = tuple(),
+                          composite_key_hash_params: tuple[int, str] | None = None):
         if isinstance(function_name, type):
             function_name = function_name.__name__
-        partition: int = self.__get_partition(operator_name, key)
+        if composite_key_hash_params is None:
+            partition = self.__get_partition(operator_name, key)
+        else:
+            field, delim = composite_key_hash_params
+            partition = self.__get_partition_composite(operator_name, key, field, delim)
         is_local: bool = self.__networking.in_the_same_network(self.__dns[operator_name][partition][0],
                                                                self.__dns[operator_name][partition][2])
         self.__async_remote_calls.append((operator_name, function_name, partition, key, params, is_local))
@@ -209,7 +218,6 @@ class StatefulFunction(Function):
                                                                                     partition,
                                                                                     params,
                                                                                     ack_payload)
-        logging.info(f"Call RunFunRemote: {payload}")
         await self.__networking.send_message(operator_host,
                                              operator_port,
                                              msg=payload,

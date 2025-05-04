@@ -113,7 +113,7 @@ def populate_district(styx: SyncStyxClient):
         for _, line in tqdm(enumerate(reader), desc="Populating District"):
             # Primary Key: (D_W_ID, D_ID)
             district_key = f'{line[1]}:{line[0]}'
-            partition: int = styx.get_operator_partition(district_key, district_operator)
+            partition: int = styx.get_operator_partition_composite_key(district_key, district_operator, 0, ":")
             district_data = {
                 "D_ID": int(line[0]),
                 "D_W_ID": int(line[1]),
@@ -141,7 +141,7 @@ def populate_customer(styx: SyncStyxClient):
         for i, line in tqdm(enumerate(reader), desc="Populating Customer"):
             # Primary Key: (C_W_ID, C_D_ID, C_ID)
             customer_key = f'{line[2]}:{line[1]}:{line[0]}'
-            partition: int = styx.get_operator_partition(customer_key, customer_operator)
+            partition: int = styx.get_operator_partition_composite_key(customer_key, customer_operator, 0, ":")
             customer_data = {
                 "C_ID": int(line[0]),
                 "C_D_ID": int(line[1]),
@@ -193,7 +193,7 @@ def populate_customer(styx: SyncStyxClient):
         index_keys = list(customer_index_data.items())
 
         for i, (customer_idx_key, customer_idx_values) in enumerate(index_keys):
-            partition: int = styx.get_operator_partition(customer_idx_key, customer_idx_operator)
+            partition: int = styx.get_operator_partition_composite_key(customer_idx_key, customer_idx_operator, 0, ":")
             sorted_customers = sorted(customer_idx_values, key=lambda x: x["C_FIRST"])
             customer_ids = [f"{cust['C_W_ID']}:{cust['C_D_ID']}:{cust['C_ID']}" for cust in sorted_customers]
             index_partitions[partition][customer_idx_key] = customer_ids
@@ -210,7 +210,7 @@ def populate_history(styx: SyncStyxClient):
         for i, line in tqdm(enumerate(reader), desc="Populating History"):
             # Primary Key: (H_W_ID, H_D_ID, H_C_ID)
             history_key = f'{line[4]}:{line[3]}:{line[0]}'
-            partition: int = styx.get_operator_partition(history_key, history_operator)
+            partition: int = styx.get_operator_partition_composite_key(history_key, history_operator, 0, ":")
             history_data = {
                 "H_C_ID": int(line[0]),
                 "H_C_D_ID": int(line[1]),
@@ -234,7 +234,7 @@ def populate_new_order(styx: SyncStyxClient):
         for i, line in tqdm(enumerate(reader), desc="Populating New Order"):
             # Primary Key: (NO_W_ID, NO_D_ID, NO_O_ID)
             new_order_key = f'{line[2]}:{line[1]}:{line[0]}'
-            partition: int = styx.get_operator_partition(new_order_key, new_order_operator)
+            partition: int = styx.get_operator_partition_composite_key(new_order_key, new_order_operator, 0, ":")
             new_order_data = {
                 "NO_O_ID": int(line[0]),
                 "NO_D_ID": int(line[1]),
@@ -253,7 +253,7 @@ def populate_order(styx: SyncStyxClient):
         for i, line in tqdm(enumerate(reader), desc="Populating Order"):
             # Primary Key: (O_W_ID, O_D_ID, O_ID)
             order_key = f'{line[2]}:{line[1]}:{line[0]}'
-            partition: int = styx.get_operator_partition(order_key, order_operator)
+            partition: int = styx.get_operator_partition_composite_key(order_key, order_operator, 0, ":")
             order_data = {
                 "O_ID": int(line[0]),
                 "O_D_ID": int(line[1]),
@@ -277,7 +277,7 @@ def populate_order_line(styx: SyncStyxClient):
         for i, line in tqdm(enumerate(reader), desc="Populating Order Line"):
             # Primary Key: (OL_W_ID, OL_D_ID, OL_O_ID, OL_NUMBER)
             order_line_key = f'{line[2]}:{line[1]}:{line[0]}:{line[3]}'
-            partition: int = styx.get_operator_partition(order_line_key, order_line_operator)
+            partition: int = styx.get_operator_partition_composite_key(order_line_key, order_line_operator, 0, ":")
             order_line_data = {
                 "OL_O_ID": int(line[0]),
                 "OL_D_ID": int(line[1]),
@@ -321,7 +321,7 @@ def populate_stock(styx: SyncStyxClient):
         for i, line in tqdm(enumerate(reader), desc="Populating Stock"):
             # Primary Key: (S_W_ID, S_I_ID)
             stock_key = f'{line[1]}:{line[0]}'
-            partition: int = styx.get_operator_partition(stock_key, stock_operator)
+            partition: int = styx.get_operator_partition_composite_key(stock_key, stock_operator, 0, ":")
             stock_data = {
                 "S_I_ID": int(line[0]),
                 "S_W_ID": int(line[1]),
@@ -378,7 +378,7 @@ def make_customer_id():
     return rand.nu_rand(1023, 1, C_Per_District)
 
 
-def get_new_order_transaction(c):
+def get_new_order_transaction(front_end_key):
     """Return parameters for NEW_ORDER"""
     params: dict[str, Any] = {
         'W_ID': random.randint(1, N_W),
@@ -419,10 +419,10 @@ def get_new_order_transaction(c):
     if not any(w_id == params['W_ID'] for w_id in params['I_W_IDS']):
         params['I_W_IDS'][random.randint(0, ol_cnt - 1)] = params['W_ID']
 
-    return new_order_txn_operator, c, 'new_order', (params,)
+    return new_order_txn_operator, front_end_key, 'new_order', (params,)
 
 
-def get_payment_transaction(c):
+def get_payment_transaction(front_end_key):
     """Return parameters for PAYMENT"""
     x = rand.number(1, 100)
     y = rand.number(1, 100)
@@ -460,17 +460,18 @@ def get_payment_transaction(c):
         'C_LAST': c_last,
         'H_DATE': h_date
     }
-    return payment_txn_operator, c, 'payment', (params,)
+    return payment_txn_operator, front_end_key, 'payment', (params,)
 
 
-def tpc_c_workload_generator():
+def tpc_c_workload_generator(proc_num):
     c = 0
     while True:
+        front_end_key = f'{proc_num}:{c}'
         coin = rand.number(1, 100)
         if coin < 52:
-            yield get_new_order_transaction(c)
+            yield get_new_order_transaction(front_end_key)
         else:
-            yield get_payment_transaction(c)
+            yield get_payment_transaction(front_end_key)
         c += 1
 
 
@@ -478,7 +479,7 @@ def benchmark_runner(proc_num) -> dict[bytes, dict]:
     print(f'Generator: {proc_num} starting')
     styx = SyncStyxClient(STYX_HOST, STYX_PORT, kafka_url=KAFKA_URL)
     styx.open(consume=False)
-    tpc_c_generator = tpc_c_workload_generator()
+    tpc_c_generator = tpc_c_workload_generator(proc_num)
     timestamp_futures: dict[bytes, dict] = {}
     time.sleep(5)
     start = timer()

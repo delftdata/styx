@@ -28,7 +28,7 @@ def pack_response(front_end_metadata):
     )
 
     return (
-        f"C_ID={customer['C_ID']},C_LAST={customer['C_LAST']},C_CREDIT={customer['C_CREDIT']},"
+        f"NO|C_ID={customer['C_ID']},C_LAST={customer['C_LAST']},C_CREDIT={customer['C_CREDIT']},"
         f"C_DISCOUNT={customer['C_DISCOUNT']:.4f},W_TAX={w_tax:.4f},D_TAX={d_tax:.4f},"
         f"O_ID={o_id},O_ENTRY_D={front_end_metadata['O_ENTRY_D']},N_ITEMS={len(items)},"
         f"TOTAL={total:.2f},ITEMS=[{item_str}]"
@@ -82,30 +82,9 @@ async def get_district(ctx: StatefulFunction, district_data: dict):
     front_end_metadata = ctx.get()
     front_end_metadata['district_data'] = district_data
     ctx.put(front_end_metadata)
-    # --------------------
-    # Ask for item data
-    # --------------------
-    w_id: int = front_end_metadata['W_ID']
-    d_id: int = front_end_metadata['D_ID']
-    o_entry_d: str = front_end_metadata['O_ENTRY_D']
-    i_w_ids: list[int] = front_end_metadata['I_W_IDS']
-    i_qtys: list[int] = front_end_metadata['I_QTYS']
-    d_next_o_id = district_data['D_NEXT_O_ID']
-    for i, i_key in enumerate(front_end_metadata['I_IDS']):
-        ctx.call_remote_async('item',
-                              'get_item',
-                              i_key,
-                              # needed to get back the reply
-                              (
-                                  ctx.key,
-                                  i,
-                                  w_id,
-                                  d_id,
-                                  o_entry_d,
-                                  i_qtys[i],
-                                  i_w_ids[i],
-                                  d_next_o_id)
-                              )
+    if send_output(front_end_metadata):
+        response = pack_response(front_end_metadata)
+        return response
 
 
 @new_order_txn_operator.register
@@ -177,7 +156,8 @@ async def new_order(ctx: StatefulFunction, params: dict):
         'district',
         'get_district',
         district_key,
-        (ctx.key, w_id, d_id, c_id, o_entry_d, len(i_ids), all_local)
+        (ctx.key, w_id, d_id, c_id, o_entry_d, i_ids, i_qtys, i_w_ids, all_local),
+        composite_key_hash_params=(0, ':')
     )
 
     customer_key = f'{w_id}:{d_id}:{c_id}'
@@ -186,5 +166,6 @@ async def new_order(ctx: StatefulFunction, params: dict):
         'get_customer',
         customer_key,
         # needed to get back the reply
-        (ctx.key, )
+        (ctx.key, ),
+        composite_key_hash_params=(0, ':')
     )

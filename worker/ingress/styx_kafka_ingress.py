@@ -60,10 +60,10 @@ class StyxKafkaIngress(BaseIngress):
         await self.kafka_consumer.stop()
 
     def handle_message_from_kafka(self, msg):
-        logging.info(
-            f"Consumed: {msg.topic} {msg.partition} {msg.offset} "
-            f"{msg.key} {msg.value} {msg.timestamp}"
-        )
+        # logging.info(
+        #     f"Consumed: {msg.topic} {msg.partition} {msg.offset} "
+        #     f"{msg.key} {msg.value} {msg.timestamp}"
+        # )
         message_type: int = self.networking.get_msg_type(msg.value)
         if message_type == MessageType.ClientMsg:
             message = self.networking.decode_message(msg.value)
@@ -74,11 +74,11 @@ class StyxKafkaIngress(BaseIngress):
                                                               params=params, kafka_ingress_partition=msg.partition)
             if key is None or self.state.exists(key, operator_name, partition):
                 # Message received in the correct partition (Normal operation)
-                logging.debug("Message received in the correct partition (Normal operation)")
+                # logging.debug("Message received in the correct partition (Normal operation)")
                 self.sequencer.sequence(run_func_payload)
             elif ((true_partition := self.registered_operators[(operator_name, msg.partition)].which_partition(key))
                   == partition):
-                logging.debug("Message received in the correct partition, but it was an insert operation")
+                # logging.debug("Message received in the correct partition, but it was an insert operation")
                 # Message received in the correct partition, but it was an insert operation (didn't exist in the state)
                 self.sequencer.sequence(run_func_payload)
             else:

@@ -178,8 +178,8 @@ class AriaProtocol(BaseTransactionalProtocol):
             internal: bool = False,
             fallback_mode: bool = False
     ) -> bool:
-        logging.info(f"Running function: {payload.function_name} with T_ID {t_id} with params {payload.params}"
-                     f" and ack payload {payload.ack_payload}")
+        # logging.info(f"Running function: {payload.function_name} with T_ID {t_id} with params {payload.params}"
+        #              f" and ack payload {payload.ack_payload}")
 
         operator_partition = self.registered_operators[(payload.operator_name, payload.partition)]
 
@@ -221,7 +221,7 @@ class AriaProtocol(BaseTransactionalProtocol):
         match message_type:
             case MessageType.RunFunRemote:
                 async with self.networking_locks[message_type]:
-                    logging.info('CALLED RUN FUN FROM PEER')
+                    # logging.info('CALLED RUN FUN FROM PEER')
                     (t_id, request_id, operator_name, function_name,
                      key, partition, fallback_enabled, params, ack) = self.networking.decode_message(data)
                     payload = RunFuncPayload(request_id=request_id, key=key,
@@ -330,7 +330,7 @@ class AriaProtocol(BaseTransactionalProtocol):
             topic='sequencer-wal'
         )
         end_wal = timer()
-        logging.info(f"Write to WAL successful at epoch: {self.sequencer.epoch_counter}")
+        # logging.info(f"Write to WAL successful at epoch: {self.sequencer.epoch_counter}")
         return start_wal, end_wal
 
     async def function_scheduler(self):
@@ -344,8 +344,8 @@ class AriaProtocol(BaseTransactionalProtocol):
                 sequence: list[SequencedItem] = self.sequencer.get_epoch()
                 if sequence or self.remote_wants_to_proceed:
                     self.currently_processing = True
-                    logging.info(f'{self.id} ||| Epoch: {self.sequencer.epoch_counter} starts '
-                                 f'running {len(sequence)} functions...')
+                    # logging.info(f'{self.id} ||| Epoch: {self.sequencer.epoch_counter} starts '
+                    #              f'running {len(sequence)} functions...')
                     # Run all the epochs functions concurrently
                     epoch_start = timer()
                     # async with self.snapshot_state_lock:
@@ -357,8 +357,8 @@ class AriaProtocol(BaseTransactionalProtocol):
                         end_func = timer()
                         # Wait for chains to finish
 
-                        logging.info(f'{self.id} ||| '
-                                     f'Waiting on chained {len(self.networking.waited_ack_events)} functions...')
+                        # logging.info(f'{self.id} ||| '
+                        #              f'Waiting on chained {len(self.networking.waited_ack_events)} functions...')
                         start_chain = timer()
                         await asyncio.gather(*[ack.wait()
                                                for ack in self.networking.waited_ack_events.values()])
@@ -374,14 +374,14 @@ class AriaProtocol(BaseTransactionalProtocol):
                     end_sync = timer()
                     sync_time = 0.0
                     sync_time += end_sync - start_sync
-                    logging.info(f'{self.id} ||| '
-                                 f'logic_aborts_everywhere: {self.networking.logic_aborts_everywhere}')
+                    # logging.info(f'{self.id} ||| '
+                    #              f'logic_aborts_everywhere: {self.networking.logic_aborts_everywhere}')
                     # HERE WE KNOW ALL THE LOGIC ABORTS
                     # removing the global logic abort transactions from the commit phase
                     conflict_resolution_start = timer()
                     self.local_state.remove_aborted_from_rw_sets(self.networking.logic_aborts_everywhere)
                     # Check for local state conflicts
-                    logging.info(f'{self.id} ||| Checking conflicts...')
+                    # logging.info(f'{self.id} ||| Checking conflicts...')
                     if CONFLICT_DETECTION_METHOD is AriaConflictDetectionType.DEFAULT_SERIALIZABLE:
                         concurrency_aborts: set[int] = self.local_state.check_conflicts()
                     elif CONFLICT_DETECTION_METHOD is AriaConflictDetectionType.DETERMINISTIC_REORDERING:
@@ -402,7 +402,7 @@ class AriaProtocol(BaseTransactionalProtocol):
                     else:
                         local_abort_rate = 0.0
                     # Notify peers that we are ready to commit
-                    logging.info(f'{self.id} ||| Notify peers...')
+                    # logging.info(f'{self.id} ||| Notify peers...')
                     start_sync = timer()
                     await self.sync_workers(msg_type=MessageType.AriaCommit,
                                             message=(concurrency_aborts,
@@ -412,7 +412,7 @@ class AriaProtocol(BaseTransactionalProtocol):
                     end_sync = timer()
                     sync_time += end_sync - start_sync
                     # HERE WE KNOW ALL THE CONCURRENCY ABORTS
-                    logging.info(f'{self.id} ||| Starting commit! {self.concurrency_aborts_everywhere}')
+                    # logging.info(f'{self.id} ||| Starting commit! {self.concurrency_aborts_everywhere}')
                     start_commit = timer()
                     self.local_state.commit(self.concurrency_aborts_everywhere)
 
@@ -431,17 +431,17 @@ class AriaProtocol(BaseTransactionalProtocol):
 
                     end_commit = timer()
 
-                    logging.info(f'{self.id} ||| Sequence committed!')
+                    # logging.info(f'{self.id} ||| Sequence committed!')
 
                     start_fallback = timer()
                     abort_rate: float = len(self.concurrency_aborts_everywhere) / self.total_processed_seq_size
 
                     if abort_rate > FALLBACK_STRATEGY_PERCENTAGE:
                         # Run Calvin
-                        logging.info(
-                            f'{self.id} ||| Epoch: {self.sequencer.epoch_counter} '
-                            f'Abort percentage: {int(abort_rate * 100)}% initiating fallback strategy...'
-                        )
+                        # logging.info(
+                        #     f'{self.id} ||| Epoch: {self.sequencer.epoch_counter} '
+                        #     f'Abort percentage: {int(abort_rate * 100)}% initiating fallback strategy...'
+                        # )
 
                         await self.run_fallback_strategy()
                         await self.send_delta_to_snapshotting_proc()
@@ -475,13 +475,13 @@ class AriaProtocol(BaseTransactionalProtocol):
                     epoch_end = timer()
                     epoch_latency = max(round((epoch_end - epoch_start) * 1000, 4), 1)
                     epoch_throughput = ((len(sequence) - len(concurrency_aborts)) * 1000) // epoch_latency # TPS
-                    logging.info(
-                        f'{self.id} ||| Epoch: {self.sequencer.epoch_counter - 1} done in '
-                        f'{epoch_latency}ms '
-                        f'global logic aborts: {len(self.networking.logic_aborts_everywhere)} '
-                        f'concurrency aborts for next epoch: {len(self.concurrency_aborts_everywhere)} '
-                        f'abort rate: {abort_rate}'
-                    )
+                    # logging.info(
+                    #     f'{self.id} ||| Epoch: {self.sequencer.epoch_counter - 1} done in '
+                    #     f'{epoch_latency}ms '
+                    #     f'global logic aborts: {len(self.networking.logic_aborts_everywhere)} '
+                    #     f'concurrency aborts for next epoch: {len(self.concurrency_aborts_everywhere)} '
+                    #     f'abort rate: {abort_rate}'
+                    # )
                     await self.sync_workers(msg_type=MessageType.SyncCleanup,
                                             message=(self.id,
                                                      epoch_throughput,
@@ -566,7 +566,7 @@ class AriaProtocol(BaseTransactionalProtocol):
                                                  partition=payload.partition)
 
     async def run_fallback_strategy(self):
-        logging.info('Starting fallback strategy...')
+        # logging.info('Starting fallback strategy...')
 
         (self.waiting_on_transactions,
          self.fallback_locking_event_map) = self.local_state.get_dep_transactions(self.t_ids_to_reschedule)
@@ -611,10 +611,10 @@ class AriaProtocol(BaseTransactionalProtocol):
         if fallback_tasks:
             await asyncio.gather(*fallback_tasks)
 
-        logging.info(
-            f'Epoch: {self.sequencer.epoch_counter} '
-            f'Fallback strategy done waiting for peers'
-        )
+        # logging.info(
+        #     f'Epoch: {self.sequencer.epoch_counter} '
+        #     f'Fallback strategy done waiting for peers'
+        # )
 
         await self.sync_workers(msg_type=MessageType.AriaFallbackDone,
                                 message=b'',

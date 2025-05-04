@@ -59,8 +59,8 @@ class Coordinator(object):
             try:
                 await self.kafka_metadata_producer.start()
             except KafkaConnectionError:
+                # Waiting for Kafka
                 await asyncio.sleep(1)
-                logging.info("Waiting for Kafka")
                 continue
             break
 
@@ -91,9 +91,9 @@ class Coordinator(object):
         worker_assignments = self.worker_pool.get_worker_assignments()
         participating_workers: list[Worker] = self.worker_pool.get_participating_workers()
         self.worker_is_healthy = {worker.worker_id: asyncio.Event() for worker in participating_workers}
-        logging.info(f"InitRecovery | Worker assignments: {worker_assignments}")
-        logging.info(f"InitRecovery | dns: {operator_partition_locations}")
-        logging.info(f"InitRecovery | peers: {self.worker_pool.get_workers()}")
+        # logging.info(f"InitRecovery | Worker assignments: {worker_assignments}")
+        # logging.info(f"InitRecovery | dns: {operator_partition_locations}")
+        # logging.info(f"InitRecovery | peers: {self.worker_pool.get_workers()}")
         async with asyncio.TaskGroup() as tg:
             for worker in participating_workers:
                 tg.create_task(self.networking.send_message(worker.worker_ip, worker.worker_port,
@@ -107,7 +107,7 @@ class Coordinator(object):
                                                                  snap_id,
                                                                  self.submitted_graph),
                                                             msg_type=MessageType.InitRecovery))
-        logging.info('SENT RECOVER TO PARTICIPATING WORKERS')
+        # logging.info('SENT RECOVER TO PARTICIPATING WORKERS')
 
     def worker_is_ready_after_recovery(self, worker_id: int):
         self.worker_is_healthy[worker_id].set()
@@ -124,7 +124,7 @@ class Coordinator(object):
                                                             msg=b'',
                                                             msg_type=MessageType.ReadyAfterRecovery,
                                                             serializer=Serializer.NONE))
-        logging.info('ReadyAfterRecovery events sent')
+        # logging.info('ReadyAfterRecovery events sent')
 
     def register_worker_heartbeat(self, worker_id: int, heartbeat_time: float):
         self.worker_pool.register_worker_heartbeat(worker_id, heartbeat_time)
@@ -273,7 +273,8 @@ class Coordinator(object):
         for topic, future in futures.items():
             try:
                 future.result()
-                logging.warning(f"Topic {topic} created")
+                logging.warning(f"Topic {topic} created with {MAX_OPERATOR_PARALLELISM} partitions "
+                                f"and replication factor of {KAFKA_REPLICATION_FACTOR}")
             except KafkaException as e:
                 logging.warning(f"Failed to create topic {topic}: {e}")
         if self.kafka_metadata_producer is None:
