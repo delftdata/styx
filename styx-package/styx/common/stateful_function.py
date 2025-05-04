@@ -183,22 +183,14 @@ class StatefulFunction(Function):
     def __get_partition(self, operator_name: str, key) -> int:
         return self.__deployed_graph.nodes[operator_name].which_partition(key)
 
-    def __get_partition_composite(self, operator_name: str, key, field: int, delim: str) -> int:
-        return self.__deployed_graph.nodes[operator_name].which_partition_composite_key(key, field, delim)
-
     def call_remote_async(self,
                           operator_name: str,
                           function_name: Type | str,
                           key,
-                          params: tuple = tuple(),
-                          composite_key_hash_params: tuple[int, str] | None = None):
+                          params: tuple = tuple()):
         if isinstance(function_name, type):
             function_name = function_name.__name__
-        if composite_key_hash_params is None:
-            partition = self.__get_partition(operator_name, key)
-        else:
-            field, delim = composite_key_hash_params
-            partition = self.__get_partition_composite(operator_name, key, field, delim)
+        partition: int = self.__get_partition(operator_name, key)
         is_local: bool = self.__networking.in_the_same_network(self.__dns[operator_name][partition][0],
                                                                self.__dns[operator_name][partition][2])
         self.__async_remote_calls.append((operator_name, function_name, partition, key, params, is_local))

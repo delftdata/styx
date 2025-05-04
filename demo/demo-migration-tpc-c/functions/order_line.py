@@ -2,8 +2,9 @@ from styx.common.operator import Operator
 from styx.common.stateful_function import StatefulFunction
 
 
-order_line_operator = Operator('order_line')
-
+order_line_operator = Operator('order_line',
+                               composite_key_hash_params=(0, ':'))
+# Key -> w_id:d_id:o_id:ol_number
 
 class OrderLineDoesNotExist(Exception):
     pass

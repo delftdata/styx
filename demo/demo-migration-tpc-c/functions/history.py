@@ -2,8 +2,9 @@ from styx.common.operator import Operator
 from styx.common.stateful_function import StatefulFunction
 
 
-history_operator = Operator('history')
-
+history_operator = Operator('history',
+                            composite_key_hash_params=(0, ':'))
+# Key -> w_id:d_id:c_id
 
 class HistoryDoesNotExist(Exception):
     pass

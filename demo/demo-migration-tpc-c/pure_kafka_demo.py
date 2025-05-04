@@ -113,7 +113,7 @@ def populate_district(styx: SyncStyxClient):
         for _, line in tqdm(enumerate(reader), desc="Populating District"):
             # Primary Key: (D_W_ID, D_ID)
             district_key = f'{line[1]}:{line[0]}'
-            partition: int = styx.get_operator_partition_composite_key(district_key, district_operator, 0, ":")
+            partition: int = styx.get_operator_partition(district_key, district_operator)
             district_data = {
                 "D_ID": int(line[0]),
                 "D_W_ID": int(line[1]),
@@ -141,7 +141,7 @@ def populate_customer(styx: SyncStyxClient):
         for i, line in tqdm(enumerate(reader), desc="Populating Customer"):
             # Primary Key: (C_W_ID, C_D_ID, C_ID)
             customer_key = f'{line[2]}:{line[1]}:{line[0]}'
-            partition: int = styx.get_operator_partition_composite_key(customer_key, customer_operator, 0, ":")
+            partition: int = styx.get_operator_partition(customer_key, customer_operator)
             customer_data = {
                 "C_ID": int(line[0]),
                 "C_D_ID": int(line[1]),
@@ -193,7 +193,7 @@ def populate_customer(styx: SyncStyxClient):
         index_keys = list(customer_index_data.items())
 
         for i, (customer_idx_key, customer_idx_values) in enumerate(index_keys):
-            partition: int = styx.get_operator_partition_composite_key(customer_idx_key, customer_idx_operator, 0, ":")
+            partition: int = styx.get_operator_partition(customer_idx_key, customer_idx_operator)
             sorted_customers = sorted(customer_idx_values, key=lambda x: x["C_FIRST"])
             customer_ids = [f"{cust['C_W_ID']}:{cust['C_D_ID']}:{cust['C_ID']}" for cust in sorted_customers]
             index_partitions[partition][customer_idx_key] = customer_ids
@@ -210,7 +210,7 @@ def populate_history(styx: SyncStyxClient):
         for i, line in tqdm(enumerate(reader), desc="Populating History"):
             # Primary Key: (H_W_ID, H_D_ID, H_C_ID)
             history_key = f'{line[4]}:{line[3]}:{line[0]}'
-            partition: int = styx.get_operator_partition_composite_key(history_key, history_operator, 0, ":")
+            partition: int = styx.get_operator_partition(history_key, history_operator)
             history_data = {
                 "H_C_ID": int(line[0]),
                 "H_C_D_ID": int(line[1]),
@@ -234,7 +234,7 @@ def populate_new_order(styx: SyncStyxClient):
         for i, line in tqdm(enumerate(reader), desc="Populating New Order"):
             # Primary Key: (NO_W_ID, NO_D_ID, NO_O_ID)
             new_order_key = f'{line[2]}:{line[1]}:{line[0]}'
-            partition: int = styx.get_operator_partition_composite_key(new_order_key, new_order_operator, 0, ":")
+            partition: int = styx.get_operator_partition(new_order_key, new_order_operator)
             new_order_data = {
                 "NO_O_ID": int(line[0]),
                 "NO_D_ID": int(line[1]),
@@ -253,7 +253,7 @@ def populate_order(styx: SyncStyxClient):
         for i, line in tqdm(enumerate(reader), desc="Populating Order"):
             # Primary Key: (O_W_ID, O_D_ID, O_ID)
             order_key = f'{line[2]}:{line[1]}:{line[0]}'
-            partition: int = styx.get_operator_partition_composite_key(order_key, order_operator, 0, ":")
+            partition: int = styx.get_operator_partition(order_key, order_operator)
             order_data = {
                 "O_ID": int(line[0]),
                 "O_D_ID": int(line[1]),
@@ -277,7 +277,7 @@ def populate_order_line(styx: SyncStyxClient):
         for i, line in tqdm(enumerate(reader), desc="Populating Order Line"):
             # Primary Key: (OL_W_ID, OL_D_ID, OL_O_ID, OL_NUMBER)
             order_line_key = f'{line[2]}:{line[1]}:{line[0]}:{line[3]}'
-            partition: int = styx.get_operator_partition_composite_key(order_line_key, order_line_operator, 0, ":")
+            partition: int = styx.get_operator_partition(order_line_key, order_line_operator)
             order_line_data = {
                 "OL_O_ID": int(line[0]),
                 "OL_D_ID": int(line[1]),
@@ -321,7 +321,7 @@ def populate_stock(styx: SyncStyxClient):
         for i, line in tqdm(enumerate(reader), desc="Populating Stock"):
             # Primary Key: (S_W_ID, S_I_ID)
             stock_key = f'{line[1]}:{line[0]}'
-            partition: int = styx.get_operator_partition_composite_key(stock_key, stock_operator, 0, ":")
+            partition: int = styx.get_operator_partition(stock_key, stock_operator)
             stock_data = {
                 "S_I_ID": int(line[0]),
                 "S_W_ID": int(line[1]),

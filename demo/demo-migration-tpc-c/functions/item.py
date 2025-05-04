@@ -3,6 +3,7 @@ from styx.common.stateful_function import StatefulFunction
 
 item_operator = Operator('item')
 
+# Key -> i_id
 
 class TPCCException(Exception):
     pass
@@ -53,6 +54,5 @@ async def get_item(ctx: StatefulFunction,
             i_name,
             i_price,
             i_brand_generic
-        ),
-        composite_key_hash_params=(0, ':')
+        )
     )

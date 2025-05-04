@@ -2,8 +2,9 @@ from styx.common.operator import Operator
 from styx.common.stateful_function import StatefulFunction
 
 
-district_operator = Operator('district')
-# Primary Key: (D_W_ID, D_ID)
+district_operator = Operator('district',
+                             composite_key_hash_params=(0, ':'))
+# Key -> w_id:d_id
 
 
 class DistrictDoesNotExist(Exception):
@@ -60,8 +61,7 @@ async def get_district(ctx: StatefulFunction, frontend_key, w_id, d_id, c_id, o_
     ctx.call_remote_async('order',
                           'insert',
                           order_key,
-                          (order_params, ),
-                          composite_key_hash_params=(0, ':'))
+                          (order_params, ))
 
     # Insert New-Order (NO_W_ID, NO_D_ID, NO_O_ID)
     new_order_key = f'{w_id}:{d_id}:{d_next_o_id}'
@@ -73,8 +73,7 @@ async def get_district(ctx: StatefulFunction, frontend_key, w_id, d_id, c_id, o_
     ctx.call_remote_async('new_order',
                           'insert',
                           new_order_key,
-                          (new_order_data, ),
-                          composite_key_hash_params=(0, ':'))
+                          (new_order_data, ))
 
     # Update D_NEXT_O_ID
     district_data['D_NEXT_O_ID'] = d_next_o_id + 1

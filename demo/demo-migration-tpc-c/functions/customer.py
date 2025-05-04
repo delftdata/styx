@@ -2,7 +2,9 @@ from styx.common.operator import Operator
 from styx.common.stateful_function import StatefulFunction
 
 
-customer_operator = Operator('customer')
+customer_operator = Operator('customer',
+                             composite_key_hash_params=(0, ':'))
+# Key -> w_id:d_id:c_id
 
 
 class InvalidItemId(Exception):

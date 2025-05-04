@@ -2,7 +2,9 @@ from styx.common.operator import Operator
 from styx.common.stateful_function import StatefulFunction
 
 
-stock_operator = Operator('stock')
+stock_operator = Operator('stock',
+                          composite_key_hash_params=(0, ':'))
+# Key -> w_id:i_if partition by w_if
 
 
 class StockDoesNotExist(Exception):
@@ -76,6 +78,5 @@ async def update_stock(ctx: StatefulFunction,
         'order_line',
         'insert',
         order_line_key,
-        (order_line_params,),
-        composite_key_hash_params=(0, ':')
+        (order_line_params,)
     )

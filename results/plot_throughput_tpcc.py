@@ -9,7 +9,7 @@ plt.rcParams.update({'font.size': 22})
 warmup_seconds = 30
 interval_size = 1
 start_migration_time = 30
-end_migration_time = 74
+end_migration_time = 88
 
 
 # Load CSVs
@@ -54,7 +54,7 @@ plt.xlabel('Time (s)')
 plt.grid(linestyle="dotted", linewidth=1.5, axis="y")
 plt.ylabel('Throughput (TPS)')
 plt.legend()
-plt.ylim([0, 3000])
+plt.ylim([0, 30000])
 plt.xlim([0, 300])
 plt.tight_layout()
 plt.savefig("throughput_tpcc.pdf")

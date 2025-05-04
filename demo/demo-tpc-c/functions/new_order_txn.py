@@ -156,8 +156,7 @@ async def new_order(ctx: StatefulFunction, params: dict):
         'district',
         'get_district',
         district_key,
-        (ctx.key, w_id, d_id, c_id, o_entry_d, i_ids, i_qtys, i_w_ids, all_local),
-        composite_key_hash_params=(0, ':')
+        (ctx.key, w_id, d_id, c_id, o_entry_d, i_ids, i_qtys, i_w_ids, all_local)
     )
 
     customer_key = f'{w_id}:{d_id}:{c_id}'
@@ -166,6 +165,5 @@ async def new_order(ctx: StatefulFunction, params: dict):
         'get_customer',
         customer_key,
         # needed to get back the reply
-        (ctx.key, ),
-        composite_key_hash_params=(0, ':')
+        (ctx.key, )
     )

@@ -15,14 +15,15 @@ class Operator(BaseOperator):
 
     def __init__(self,
                  name: str,
-                 n_partitions: int = 1):
+                 n_partitions: int = 1,
+                 composite_key_hash_params: tuple[int, str] | None = None):
         super().__init__(name, n_partitions)
         self.__state = ...
         self.__networking: NetworkingManager = ...
         # where the other functions exist
         self.__dns: dict[str, dict[int, tuple[str, int, int]]] = {}
         self.__functions: dict[str, type] = {}
-        self.__partitioner: HashPartitioner = HashPartitioner(n_partitions)
+        self.__partitioner: HashPartitioner = HashPartitioner(n_partitions, composite_key_hash_params)
         self.__is_shadow: bool = False
         self.__deployed_graph = None
         self.__run_func_lock: asyncio.Lock = asyncio.Lock()
@@ -32,9 +33,6 @@ class Operator(BaseOperator):
 
     def which_partition(self, key) -> int:
         return self.__partitioner.get_partition(key)
-
-    def which_partition_composite_key(self, key: str, field: int, delim: str) -> int:
-        return self.__partitioner.get_partition_composite(key, field, delim)
 
     def make_shadow(self):
         self.__is_shadow = True

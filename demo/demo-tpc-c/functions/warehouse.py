@@ -3,7 +3,7 @@ from styx.common.stateful_function import StatefulFunction
 
 
 warehouse_operator = Operator('warehouse')
-
+# Key -> w_id
 
 class WHDoesNotExist(Exception):
     pass

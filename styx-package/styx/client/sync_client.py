@@ -60,11 +60,6 @@ class SyncStyxClient(BaseStyxClient):
             self.graph_known_event.wait()
         return self._current_active_graph.get_operator(operator).which_partition(key)
 
-    def get_operator_partition_composite_key(self, key, operator: BaseOperator, field: int, delim: str) -> int:
-        if not self.graph_known_event.is_set():
-            self.graph_known_event.wait()
-        return self._current_active_graph.get_operator(operator).which_partition_composite_key(key, field, delim)
-
     def start_futures_consumer_thread(self):
         self.result_consumer_process = threading.Thread(target=self.start_consuming_results, daemon=True)
         self.running_result_consumer = True

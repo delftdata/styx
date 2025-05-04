@@ -8,8 +8,11 @@ from ..exceptions import NonSupportedKeyType
 
 class HashPartitioner(BasePartitioner):
 
-    def __init__(self, partitions: int):
+    def __init__(self,
+                 partitions: int,
+                 composite_key_hash_parameters: tuple[int, str] | None = None):
         self._partitions = partitions
+        self._composite_key_hash_parameters = composite_key_hash_parameters
 
     def update_partitions(self, partitions: int):
         self._partitions = partitions
@@ -22,11 +25,10 @@ class HashPartitioner(BasePartitioner):
     def get_partition(self, key) -> int | None:
         if key is None:
             return None
+        if self._composite_key_hash_parameters is not None:
+            field, delim = self._composite_key_hash_parameters
+            key = key.split(delim)[field]
         return self.make_key_hashable(key) % self._partitions
-
-    def get_partition_composite(self, key: str, field: int, delim: str) -> int:
-        parts = key.split(delim)
-        return self.get_partition(parts[field])
 
     @staticmethod
     def make_key_hashable(key) -> int:

@@ -45,8 +45,7 @@ def pack_response(ctx, front_end_metadata):
         'history',
         'insert',
         history_key,
-        (history_params, ),
-        composite_key_hash_params=(0, ':')
+        (history_params, )
     )
 
     # TPC-C 2.5.3.3: Must display the following fields:
@@ -146,8 +145,7 @@ async def payment(ctx: StatefulFunction, params: dict):
             'pay',
             customer_key,
             # needed to get back the reply
-            (ctx.key, h_amount, d_id, w_id),
-            composite_key_hash_params=(0, ':')
+            (ctx.key, h_amount, d_id, w_id)
         )
     else:
         # ----------------------------------
@@ -159,8 +157,7 @@ async def payment(ctx: StatefulFunction, params: dict):
             'pay',
             customer_idx_key,
             # needed to get back the reply
-            (ctx.key, h_amount, d_id, w_id),
-            composite_key_hash_params=(0, ':')
+            (ctx.key, h_amount, d_id, w_id)
         )
 
     # --------------------
@@ -177,6 +174,5 @@ async def payment(ctx: StatefulFunction, params: dict):
         'district',
         'pay',
         district_key,
-        (ctx.key, h_amount),
-        composite_key_hash_params=(0, ':')
+        (ctx.key, h_amount)
     )

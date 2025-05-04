@@ -2,8 +2,9 @@ from styx.common.operator import Operator
 from styx.common.stateful_function import StatefulFunction
 
 
-customer_idx_operator = Operator('customer_idx')
-# value: list of dict that contains C_FIRST, C_ID, C_W_ID, C_D_ID
+customer_idx_operator = Operator('customer_idx',
+                                 composite_key_hash_params=(0, ':'))
+# Key -> w_id:d_id:c_last
 
 
 class CustomerDoesNotExist(Exception):
@@ -27,6 +28,5 @@ async def pay(ctx: StatefulFunction, frontend_key, h_amount, d_id, w_id):
         'pay',
         customer_key,
         # needed to get back the reply
-        (frontend_key, h_amount, d_id, w_id),
-        composite_key_hash_params=(0, ':')
+        (frontend_key, h_amount, d_id, w_id)
     )
