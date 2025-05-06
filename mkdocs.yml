@@ -1,0 +1,17 @@
+site_name: Styx
+
+nav:
+  - Home: index.md
+  - Docs:
+    - Overview: styx-docs/overview.md
+    - Quickstart: styx-docs/quickstart.md
+  - Publications: publications.md
+  - People: people.md
+
+theme:
+  name: material
+  features:
+    - navigation.tabs
+
+markdown_extensions:
+  - attr_list
