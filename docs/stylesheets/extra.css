@@ -3,6 +3,43 @@
     --primary-color-hover: #b63c11;
 } */
 
+.under-construction {
+  text-align: center;
+  background: #fff3cd;
+  color: #856404;
+  border: 1px solid #ffeeba;
+  padding: 1rem;
+  margin: 1rem auto 2rem auto;
+  max-width: 600px;
+  border-radius: 6px;
+  font-weight: bold;
+  font-size: 1rem;
+}
+
+.md-typeset h1 a.headerlink,
+.md-typeset h2 a.headerlink,
+.md-typeset h3 a.headerlink,
+.md-typeset h4 a.headerlink,
+.md-typeset h5 a.headerlink,
+.md-typeset h6 a.headerlink {
+  color: inherit;
+  text-decoration: none;
+  margin-left: 0.5rem;
+  opacity: 1 !important;
+  visibility: visible !important;
+  transition: color 0.2s ease;
+}
+
+.md-typeset h1 a.headerlink:hover,
+.md-typeset h2 a.headerlink:hover,
+.md-typeset h3 a.headerlink:hover,
+.md-typeset h4 a.headerlink:hover,
+.md-typeset h5 a.headerlink:hover,
+.md-typeset h6 a.headerlink:hover {
+  color: var(--primary-color) !important;
+}
+
+
 /* Header gets top half of gradient */
 /* .md-header {
   background: linear-gradient(to bottom right, #731d16, #cc4f1e, #f3a022);
@@ -161,6 +198,12 @@ a.md-button.ghost-button {
   margin-bottom: 0.5rem;
 }
 
+.pub-thumb:hover {
+  transform: scale(1.02);
+  transition: transform 0.2s ease;
+  cursor: pointer;
+}
+
 /* People Styling */
 
 .people-grid {
@@ -183,4 +226,10 @@ a.md-button.ghost-button {
   object-fit: cover; /* Crop to fit the box */
   border-radius: 50%;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+.person:hover {
+  transform: scale(1.05);
+  transition: transform 0.2s ease;
+  cursor: pointer;
 }

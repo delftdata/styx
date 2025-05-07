@@ -8,7 +8,9 @@ hide:
 
 <div class="pub-entry">
     <div style="text-align: center;">
-        <img src="/assets/publications/styx-pub.webp" class="pub-thumb" />
+        <a href="/assets/publications/styx.pdf" target="_blank">
+            <img src="/assets/publications/styx-pub.webp" class="pub-thumb" />
+        </a>
         <div>
         <a href="/assets/publications/styx.pdf" class="md-button ghost-button" target="_blank">
             📜 PDF
@@ -43,7 +45,9 @@ hide:
 
 <div class="pub-entry">
     <div style="text-align: center;">
-        <img src="/assets/publications/styx_cidr-pub.webp" class="pub-thumb" />
+        <a href="/assets/publications/styx_cidr.pdf" target="_blank">
+            <img src="/assets/publications/styx_cidr-pub.webp" class="pub-thumb" />
+        </a>
         <div>
         <a href="/assets/publications/styx_cidr.pdf" class="md-button ghost-button" target="_blank">
             📜 PDF
@@ -71,7 +75,9 @@ model for scalable, fault-tolerant cloud applications with serializable guarante
 
 <div class="pub-entry">
     <div style="text-align: center;">
-        <img src="/assets/publications/stateflow-pub.webp" class="pub-thumb" />
+        <a href="/assets/publications/stateflow.pdf" target="_blank">
+            <img src="/assets/publications/stateflow-pub.webp" class="pub-thumb" />
+        </a>
         <div>
         <a href="/assets/publications/stateflow.pdf" class="md-button ghost-button" target="_blank">
             📜 PDF

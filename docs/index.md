@@ -4,6 +4,15 @@ hide:
   - navigation
 ---
 
+<div class="under-construction">
+  🚧 This site is under construction.<br>Stay tuned for updates!
+</div>
+<p align="center">
+  <a href="index.md">
+    <img src="/assets/styx-logo.webp" alt="Styx Logo" width="200" />
+  </a>
+</p>
+
 <div style="text-align: center; font-size: 120%; font-weight: 500; font-color: blue" markdown>
 *Next-generation serverless-application runtime, for implementing and deploying scalable Cloud services with transactional guarantees.*
 </div>

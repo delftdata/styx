@@ -16,6 +16,7 @@ theme:
     text: Quicksand
   features:
     - navigation.tabs
+    - content.heading.permalink
     - navigation.top
     - content.code.copy
     - content.tooltips
@@ -51,6 +52,8 @@ extra_javascript:
   - https://fonts.googleapis.com/css2?family=Roboto+Mono&display=swap
 
 markdown_extensions:
+  - toc:
+        permalink: true
   - attr_list
   - md_in_html
   - pymdownx.emoji:
