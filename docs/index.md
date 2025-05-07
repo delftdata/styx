@@ -1,3 +1,9 @@
+<p align="center">
+  <a href="index.md">
+    <img src="/assets/styx-logo.webp" alt="Styx Logo" width="200" />
+  </a>
+</p>
+
 # Styx
 
 Styx is a distributed streaming dataflow engine designed to bring **high-performance, serializable transactions** to the cloud.
