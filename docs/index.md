@@ -1,3 +1,6 @@
+<div class="under-construction">
+  🚧 This site is under construction.<br>Stay tuned for updates!
+</div>
 <p align="center">
   <a href="index.md">
     <img src="/assets/styx-logo.webp" alt="Styx Logo" width="200" />

@@ -3,6 +3,19 @@
     --primary-color-hover: #b63c11;
 }
 
+.under-construction {
+  text-align: center;
+  background: #fff3cd;
+  color: #856404;
+  border: 1px solid #ffeeba;
+  padding: 1rem;
+  margin: 1rem auto 2rem auto;
+  max-width: 600px;
+  border-radius: 6px;
+  font-weight: bold;
+  font-size: 1rem;
+}
+
 /* Header gets top half of gradient */
 .md-header {
   background: linear-gradient(to bottom right, #731d16, #cc4f1e, #f3a022);
