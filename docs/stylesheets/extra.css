@@ -179,6 +179,8 @@ a.md-button.ghost-button {
 
 .person img {
   width: 120px;
+  height: 120px; /* Force square */
+  object-fit: cover; /* Crop to fit the box */
   border-radius: 50%;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
 }
