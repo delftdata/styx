@@ -114,18 +114,20 @@ a.md-button.ghost-button {
 
 .pub-entry {
   display: flex;
-  gap: 1.5rem;
+  gap: 2rem;
   margin-bottom: 2rem;
+  padding: 1.5rem;
   border: 1px solid #ddd;
-  padding: 1rem;
   border-radius: 8px;
   align-items: center;
+  max-width: 100%;
 }
 
 .pub-thumb {
-  width: 130px;
-  border-radius: 6px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  width: 400px;
+  height: auto;
+  border-radius: 4px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
 }
 
 .pub-meta {
@@ -151,14 +153,8 @@ a.md-button.ghost-button {
 }
 
 .pub-abstract {
-  font-size: 0.95rem;
+  font-size: 0.7rem;
   margin-bottom: 0.5rem;
-}
-
-.pub-links a {
-  margin-right: 0.75rem;
-  font-weight: bold;
-  color: var(--primary-color);
 }
 
 /* People Styling */
