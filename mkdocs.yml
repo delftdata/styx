@@ -5,6 +5,8 @@ nav:
   - Docs:
     - Overview: styx-docs/overview.md
     - Quickstart: styx-docs/quickstart.md
+    - Operator: styx-docs/styx-operator.md
+    - Stateful Function: styx-docs/styx-stateful-function.md
   - Publications: publications.md
   - People: people.md
 
@@ -12,6 +14,44 @@ theme:
   name: material
   features:
     - navigation.tabs
+    - navigation.top
+    - content.code.copy
+    - content.tooltips
+    - content.footnotes
+    - content.tabs.link
+    - palette.toggle
+    - footer
+  icon:
+    repo: fontawesome/brands/github
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  logo: assets/styx-logo.webp
+  favicon: assets/styx-logo.webp
+
+extra_css:
+  - stylesheets/extra.css
+extra_javascript:
+  - https://fonts.googleapis.com/css2?family=Roboto&display=swap
+  - https://fonts.googleapis.com/css2?family=Roboto+Mono&display=swap
 
 markdown_extensions:
   - attr_list
+
+repo_url: https://github.com/delftdata/styx
+repo_name: delftdata/styx
+
+copyright: "© 2025 Styx Project"

@@ -1,0 +1,163 @@
+:root {
+    --primary-color: #D94D18;
+    --primary-color-hover: #b63c11;
+}
+
+/* Header gets top half of gradient */
+.md-header {
+  background: linear-gradient(to bottom right, #731d16, #cc4f1e, #f3a022);
+  color: white;
+}
+
+/* Tabs get bottom half, so they appear continuous */
+.md-tabs {
+  background: linear-gradient(to bottom right, #3a0e0c, #731d16, #cc4f1e);
+  color: white;
+}
+
+/* Ensure text remains readable */
+.md-tabs__link,
+.md-tabs__item {
+  color: white !important;
+}
+
+/* Apply Roboto to body text */
+body {
+  font-family: 'Roboto', sans-serif;
+}
+
+/* Apply Roboto Mono to code elements */
+code, pre {
+  font-family: 'Roboto Mono', monospace;
+}
+
+a.md-button.md-button--primary {
+  background: var(--primary-color);
+  color: white;
+  border: 2px solid var(--primary-color);
+}
+
+a.md-button.md-button--primary:hover {
+  background: transparent;
+  border: 2px solid var(--primary-color);
+  color: var(--primary-color);
+}
+
+a.md-button.ghost-button {
+  background: transparent;
+  border: 2px solid var(--primary-color);
+  color: var(--primary-color);
+}
+
+a.md-button.ghost-button:hover {
+  background: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
+}
+
+
+/* Change the TOC link color to your primary theme color */
+.md-nav--secondary .md-nav__link {
+  color: var(--primary-color);
+}
+
+/* Optional: Highlight active TOC item */
+.md-nav--secondary .md-nav__link--active {
+  font-weight: bold;
+  color: var(--primary-color);
+}
+
+
+/* Center home intro content */
+.home-intro {
+  text-align: center;
+  max-width: 700px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+}
+
+/* Optional: center buttons even if wrapped */
+.home-intro p {
+  margin-top: 1.5rem;
+}
+
+.md-button--primary,
+a.md-button.ghost-button {
+  transition: all 0.2s ease-in-out;
+}
+
+.md-nav--secondary .md-nav__link:hover {
+  color: var(--primary-color-hover);
+}
+
+/* Left nav links */
+.md-nav--primary .md-nav__link {
+  color: var(--primary-color);
+}
+
+/* Active item (bold or colored) */
+.md-nav--primary .md-nav__link--active {
+  color: var(--primary-color);
+  font-weight: bold;
+}
+
+/* Optional: on hover */
+.md-nav--primary .md-nav__link:hover {
+  color: var(--primary-color-hover);
+}
+
+.md-nav--primary .md-nav__item .md-nav__link:before {
+  background-color: var(--primary-color);
+}
+
+/* Publication Page Styling */
+
+.pub-entry {
+  display: flex;
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+  border: 1px solid #ddd;
+  padding: 1rem;
+  border-radius: 8px;
+  align-items: center;
+}
+
+.pub-thumb {
+  width: 130px;
+  border-radius: 6px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.pub-meta {
+  flex: 1;
+}
+
+.pub-venue {
+  font-weight: bold;
+  font-size: 0.9rem;
+  color: var(--primary-color);
+  text-transform: uppercase;
+}
+
+.pub-title {
+  font-size: 1.2rem;
+  margin: 0.2rem 0;
+}
+
+.pub-authors {
+  font-style: italic;
+  color: #444;
+  margin-bottom: 0.5rem;
+}
+
+.pub-abstract {
+  font-size: 0.95rem;
+  margin-bottom: 0.5rem;
+}
+
+.pub-links a {
+  margin-right: 0.75rem;
+  font-weight: bold;
+  color: var(--primary-color);
+}
+
