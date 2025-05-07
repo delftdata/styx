@@ -16,6 +16,30 @@
   font-size: 1rem;
 }
 
+.md-typeset h1 a.headerlink,
+.md-typeset h2 a.headerlink,
+.md-typeset h3 a.headerlink,
+.md-typeset h4 a.headerlink,
+.md-typeset h5 a.headerlink,
+.md-typeset h6 a.headerlink {
+  color: inherit;
+  text-decoration: none;
+  margin-left: 0.5rem;
+  opacity: 1 !important;
+  visibility: visible !important;
+  transition: color 0.2s ease;
+}
+
+.md-typeset h1 a.headerlink:hover,
+.md-typeset h2 a.headerlink:hover,
+.md-typeset h3 a.headerlink:hover,
+.md-typeset h4 a.headerlink:hover,
+.md-typeset h5 a.headerlink:hover,
+.md-typeset h6 a.headerlink:hover {
+  color: var(--primary-color) !important;
+}
+
+
 /* Header gets top half of gradient */
 .md-header {
   background: linear-gradient(to bottom right, #731d16, #cc4f1e, #f3a022);
