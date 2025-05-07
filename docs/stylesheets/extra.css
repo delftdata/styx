@@ -157,6 +157,12 @@ a.md-button.ghost-button {
   margin-bottom: 0.5rem;
 }
 
+.pub-thumb:hover {
+  transform: scale(1.02);
+  transition: transform 0.2s ease;
+  cursor: pointer;
+}
+
 /* People Styling */
 
 .people-grid {
