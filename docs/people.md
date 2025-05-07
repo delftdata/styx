@@ -1,4 +1,10 @@
-# People
+---
+hide:
+  - toc
+  - navigation
+---
+
+# Team
 
 <div class="people-grid">
 

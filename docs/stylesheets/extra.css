@@ -1,19 +1,19 @@
-:root {
+/* :root {
     --primary-color: #D94D18;
     --primary-color-hover: #b63c11;
-}
+} */
 
 /* Header gets top half of gradient */
-.md-header {
+/* .md-header {
   background: linear-gradient(to bottom right, #731d16, #cc4f1e, #f3a022);
   color: white;
-}
+} */
 
 /* Tabs get bottom half, so they appear continuous */
-.md-tabs {
+/* .md-tabs {
   background: linear-gradient(to bottom right, #3a0e0c, #731d16, #cc4f1e);
   color: white;
-}
+} */
 
 /* Ensure text remains readable */
 .md-tabs__link,
@@ -21,15 +21,19 @@
   color: white !important;
 }
 
-/* Apply Roboto to body text */
+/* /* Apply Roboto to body text */
 body {
-  font-family: 'Roboto', sans-serif;
+  font-weight: 400;
+}
+
+strong, b {
+  font-weight: 600; /* Adjust to your desired weight (e.g., 500, 600, 700) */
 }
 
 /* Apply Roboto Mono to code elements */
-code, pre {
+ code, pre { 
   font-family: 'Roboto Mono', monospace;
-}
+} 
 
 a.md-button.md-button--primary {
   background: var(--primary-color);

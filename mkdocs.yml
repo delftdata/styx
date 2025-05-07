@@ -8,10 +8,12 @@ nav:
     - Operator: styx-docs/styx-operator.md
     - Stateful Function: styx-docs/styx-stateful-function.md
   - Publications: publications.md
-  - People: people.md
+  - Team: people.md
 
 theme:
   name: material
+  font:
+    text: Quicksand
   features:
     - navigation.tabs
     - navigation.top
@@ -50,6 +52,10 @@ extra_javascript:
 
 markdown_extensions:
   - attr_list
+  - md_in_html
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
 
 repo_url: https://github.com/delftdata/styx
 repo_name: delftdata/styx
