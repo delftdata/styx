@@ -4,7 +4,6 @@ hide:
   - navigation
 ---
 
-
 <div style="text-align: center; font-size: 120%; font-weight: 500; font-color: blue" markdown>
 *Next-generation serverless-application runtime, for implementing and deploying scalable Cloud services with transactional guarantees.*
 </div>
