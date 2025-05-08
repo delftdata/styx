@@ -1,7 +1,7 @@
-/* :root {
+:root {
     --primary-color: #D94D18;
     --primary-color-hover: #b63c11;
-} */
+}
 
 .under-construction {
   text-align: center;
@@ -41,16 +41,16 @@
 
 
 /* Header gets top half of gradient */
-/* .md-header {
-  background: linear-gradient(to bottom right, #731d16, #cc4f1e, #f3a022);
+.md-header {
+  background: #cc4f1e;
   color: white;
-} */
+}
 
 /* Tabs get bottom half, so they appear continuous */
-/* .md-tabs {
-  background: linear-gradient(to bottom right, #3a0e0c, #731d16, #cc4f1e);
+.md-tabs {
+  background: #731d16;
   color: white;
-} */
+}
 
 /* Ensure text remains readable */
 .md-tabs__link,
@@ -58,7 +58,18 @@
   color: white !important;
 }
 
-/* /* Apply Roboto to body text */
+.md-top {
+  background-color: var(--primary-color) !important;
+  color: white !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+  transition: background 0.2s ease;
+}
+
+.md-top:hover {
+  background-color: #b63c11 !important; /* or a brighter/lighter tone */
+  color: white !important;
+}
+
 body {
   font-weight: 400;
 }
@@ -70,7 +81,7 @@ strong, b {
 /* Apply Roboto Mono to code elements */
  code, pre { 
   font-family: 'Roboto Mono', monospace;
-} 
+}
 
 a.md-button.md-button--primary {
   background: var(--primary-color);
@@ -232,4 +243,65 @@ a.md-button.ghost-button {
   transform: scale(1.05);
   transition: transform 0.2s ease;
   cursor: pointer;
+}
+
+/* Code docs */
+
+.badge-class {
+  display: inline-block;
+  background-color: var(--primary-color);
+  color: white;
+  padding: 0.2em 0.6em;
+  font-size: 0.75rem;
+  font-family: monospace;
+  border-radius: 4px;
+  text-transform: uppercase;
+  margin-bottom: 0.3rem;
+}
+
+.api-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.2rem;
+}
+
+.api-header::before {
+  content: "class";
+  background-color: var(--primary-color);
+  color: white;
+  padding: 0.2em 0.6em;
+  font-size: 0.75rem;
+  font-family: monospace;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+.doc-signature code {
+  font-size: 0.9rem;
+  font-weight: 400;
+  line-height: 1.4;
+}
+
+.doc .doc-attributes dt {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.doc .doc-heading h2,
+.doc .doc-heading h3 {
+  font-size: 1.1rem;
+  font-weight: 500;
+  margin-bottom: 0.5em;
+}
+
+.primary-link {
+  color: var(--primary-color) !important;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.primary-link:hover {
+  text-decoration: underline;
+  color: #b63c11; /* optional hover tone */
 }

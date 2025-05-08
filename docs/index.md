@@ -5,10 +5,10 @@ hide:
 ---
 
 <div class="under-construction">
-  🚧 This site is under construction.<br>Stay tuned for updates!
+  🚧 This site is under construction.<br>Stay tuned for updates! 🚧
 </div>
 <p align="center">
-  <a href="index.md">
+  <a href="">
     <img src="/assets/styx-logo.webp" alt="Styx Logo" width="200" />
   </a>
 </p>
@@ -23,10 +23,10 @@ hide:
 
     ---
 
-    Install [`Styx`](#) with [`pip`](#) and get up
+    Install `Styx` with `pip` and get up
     and running in minutes
 
-    [:octicons-arrow-right-24: Getting started](#)
+    [:octicons-arrow-right-24: Getting started](styx-docs/quickstart.md){ .primary-link }
 
 - :fontawesome-brands-docker:{ .lg .middle } __Container Friendly__
 
@@ -34,7 +34,7 @@ hide:
 
     Styx can be deployed in Docker containers and K8s.
 
-    [:octicons-arrow-right-24: Reference](#)
+    [:octicons-arrow-right-24: Reference](https://github.com/delftdata/styx/blob/main/docker-compose.yml){ .primary-link }
 
 - :fontawesome-solid-cloud:{ .lg .middle } __Made to (auto)scale in the Cloud__
 
@@ -42,15 +42,15 @@ hide:
 
     Re-scale your application with a single line of code.
 
-    [:octicons-arrow-right-24: Customization](#)
+    [:octicons-arrow-right-24: Customization](styx-docs/rescale.md){ .primary-link }
 
 - :material-scale-balance:{ .lg .middle } __Open Source, Apache 2__
 
     ---
 
-    Styx is licensed under Apache License V2 and available on [GitHub]
+    Styx is licensed under Apache License V2 and available on [GitHub](https://github.com/delftdata/styx){ .primary-link }.
 
-    [:octicons-arrow-right-24: License](#)
+    [:octicons-arrow-right-24: License](https://github.com/delftdata/styx/blob/main/LICENSE){ .primary-link }
 
 </div>
 
@@ -58,7 +58,7 @@ Styx is built with a focus on *programmability* and *serverless execution*, Styx
 
 Whether you're exploring cloud-native design patterns, evaluating transaction guarantees, or building next-generation data infrastructure — Styx provides the foundation.
 
-[Get Started →](styx-docs/quickstart.md){ .md-button }
+[Get Started →](styx-docs/quickstart.md){ .md-button .ghost-button }
 
 ## ⚡️ Why Styx?
 
