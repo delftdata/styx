@@ -17,7 +17,27 @@ hide:
 *Next-generation serverless-application runtime, for implementing and deploying scalable Cloud services with transactional guarantees.*
 </div>
 
+Styx is built with a focus on *programmability* and *serverless execution*, Styx helps researchers and developers build *modern data-intensive applications* with ease.
+
+Whether you're exploring cloud-native design patterns, evaluating transaction guarantees, or building next-generation data infrastructure — Styx provides the foundation.
+
+[Get Started →](styx-docs/quickstart.md){ .md-button .ghost-button }
+
 <div class="grid cards" markdown>
+
+- :material-speedometer:{ .lg .middle } __High Performance__
+
+    ---
+
+    Styx's streaming-first approach offers high throughput at low latency.
+
+    [:octicons-arrow-right-24: Published Results](/assets/publications/styx.pdf#page=19){ .primary-link }
+
+- :material-shield-check:{ .lg .middle } __Correctness__
+
+    ---
+
+    End-to-end exactly-once, serializable ACID transactions, automatic fault tolerance.
 
 - :material-clock-fast:{ .lg .middle } __Set up in 5 minutes__
 
@@ -53,15 +73,3 @@ hide:
     [:octicons-arrow-right-24: License](https://github.com/delftdata/styx/blob/main/LICENSE){ .primary-link }
 
 </div>
-
-Styx is built with a focus on *programmability* and *serverless execution*, Styx helps researchers and developers build *modern data-intensive applications* with ease.
-
-Whether you're exploring cloud-native design patterns, evaluating transaction guarantees, or building next-generation data infrastructure — Styx provides the foundation.
-
-[Get Started →](styx-docs/quickstart.md){ .md-button .ghost-button }
-
-## ⚡️ Why Styx?
-
-- **Streaming-first**: Native support for streaming workloads and transactional flows
-- **Serializable Transactions**: High throughput with strong guarantees
-- **Designed for Research**: Built for extensibility, transparency, and experimentation
