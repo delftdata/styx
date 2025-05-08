@@ -2,7 +2,7 @@ import asyncio
 import fractions
 import traceback
 
-from typing import Awaitable, Type
+from typing import Awaitable, Type, Any
 
 from .logging import logging
 from .tcp_networking import NetworkingManager
@@ -17,9 +17,15 @@ from .partitioning.base_partitioner import BasePartitioner
 
 
 class StatefulFunction(Function):
+    """Encapsulates a stateful function in a distributed Styx operator.
+
+    This class wraps user-defined functions with access to state, networking,
+    partitioning, and chain coordination. It supports fallback execution and
+    asynchronous remote function chaining.
+    """
 
     def __init__(self,
-                 key,
+                 key: Any,
                  function_name: str,
                  partition: int,
                  operator_name: str,
@@ -32,6 +38,23 @@ class StatefulFunction(Function):
                  use_fallback_cache: bool,
                  partitioner: BasePartitioner,
                  protocol: BaseTransactionalProtocol):
+        """Initializes a stateful function with execution context.
+
+        Args:
+            key: The key of the function.
+            function_name (str): Name of the user-defined function.
+            partition (int): Partition ID where this function will execute.
+            operator_name (str): Name of the operator this function belongs to.
+            operator_state (State): The state backend to use.
+            networking (NetworkingManager): Handles communication and coordination.
+            dns (dict): Mapping of operator partitions to worker locations.
+            t_id (int): Transaction ID.
+            request_id (bytes): Unique identifier for this function invocation.
+            fallback_mode (bool): Whether to enable fallback (recovery) logic.
+            use_fallback_cache (bool): Whether to use cached fallback results.
+            partitioner (BasePartitioner): The partitioning strategy.
+            protocol (BaseTransactionalProtocol): Protocol for function invocation.
+        """
         super().__init__(name=function_name)
         self.__operator_name = operator_name
         self.__state: State = operator_state
@@ -48,6 +71,16 @@ class StatefulFunction(Function):
         self.__partitioner = partitioner
 
     async def __call__(self, *args, **kwargs):
+        """Executes the wrapped function and triggers asynchronous remote calls if needed.
+
+        Args:
+            *args: Positional arguments for the function.
+            **kwargs: Keyword arguments for coordinating chained execution.
+
+        Returns:
+            tuple: A tuple of (result, number of remote calls, partial chain count),
+                or an exception tuple if an error occurs.
+        """
         try:
             res = await self.run(*args)
             logging.info(f'Run args: {args} kwargs: {kwargs} async remote calls: {self.__async_remote_calls}')
@@ -78,17 +111,32 @@ class StatefulFunction(Function):
             return e, -1, -1
 
     @property
-    def data(self):
+    def data(self) -> dict[Any, Any]:
+        """dict: All state associated with the current operator, and partition."""
         return self.__state.get_all(self.__t_id, self.__operator_name, self.__partition)
 
     @property
-    def key(self):
+    def key(self) -> Any:
+        """The key for this function instance."""
         return self.__key
 
     async def run(self, *args):
+        """Executes the actual function logic. Meant to be overridden by subclasses.
+
+        Args:
+            *args: Positional arguments to the function.
+
+        Raises:
+            NotImplementedError: If not overridden in subclass.
+        """
         raise NotImplementedError
 
-    def get(self):
+    def get(self) -> Any:
+        """Retrieves the value from state for the current key.
+
+        Returns:
+            object: The current value associated with the key.
+        """
         if self.__fallback_enabled:
             value = self.__state.get_immediate(self.key, self.__t_id, self.__operator_name, self.__partition)
         else:
@@ -100,7 +148,12 @@ class StatefulFunction(Function):
         #                 f'request_id: {self.__request_id} ')
         return value
 
-    def put(self, value):
+    def put(self, value: Any) -> None:
+        """Stores a value in the state for the current key.
+
+        Args:
+            value: The value to store.
+        """
         # logging.warning(f'PUT: {self.key}:{value} '
         #                 f'with t_id: {self.__t_id} '
         #                 f'operator: {self.__operator_name} '
@@ -122,6 +175,19 @@ class StatefulFunction(Function):
                                  chain_participants: list[int],
                                  partial_node_count: int,
                                  is_root: bool = False):
+        """Sends all pending asynchronous remote function calls.
+
+        Args:
+            ack_host: Host for acknowledgement callbacks.
+            ack_port: Port for acknowledgement callbacks.
+            ack_share: Fractional contribution for chain tracking.
+            chain_participants (list[int]): Workers involved in this chain.
+            partial_node_count (int): Partial chain node count.
+            is_root (bool, optional): Whether this function is the chain root.
+
+        Returns:
+            int: Number of remote function calls sent.
+        """
         n_remote_calls: int = len(self.__async_remote_calls)
         if n_remote_calls == 0:
             return n_remote_calls
@@ -179,8 +245,16 @@ class StatefulFunction(Function):
     def call_remote_async(self,
                           operator_name: str,
                           function_name: Type | str,
-                          key,
+                          key: Any,
                           params: tuple = tuple()):
+        """Queues a remote asynchronous function call.
+
+        Args:
+            operator_name (str): Name of the target operator.
+            function_name (Type | str): Function type or name to invoke.
+            key: Key for the remote call.
+            params (tuple, optional): Parameters for the remote function call.
+        """
         if isinstance(function_name, type):
             function_name = function_name.__name__
         partition: int = self.__partitioner.get_partition(key)
@@ -195,6 +269,16 @@ class StatefulFunction(Function):
                                                  partition: int,
                                                  params: tuple = tuple(),
                                                  ack_payload=None):
+        """Sends a remote function call without expecting a response.
+
+        Args:
+            operator_name (str): Target operator name.
+            function_name (Type | str): Function to call.
+            key: Key for routing.
+            partition (int): Partition ID of the target.
+            params (tuple, optional): Parameters for the function.
+            ack_payload (optional): Chain acknowledgement metadata.
+        """
         if isinstance(function_name, type):
             function_name = function_name.__name__
         payload, operator_host, operator_port = self.__prepare_message_transmission(operator_name,
@@ -212,6 +296,19 @@ class StatefulFunction(Function):
 
     def __prepare_message_transmission(self, operator_name: str, key,
                                        function_name: str, partition: int, params: tuple, ack_payload=None):
+        """Prepares the payload and routing details for a remote function call.
+
+        Args:
+            operator_name (str): Name of the target operator.
+            key: Key for partitioning.
+            function_name (str): Name of the function to invoke.
+            partition (int): Partition number.
+            params (tuple): Parameters to send.
+            ack_payload (optional): Optional acknowledgement payload.
+
+        Returns:
+            tuple: (payload, operator_host, operator_port)
+        """
         try:
 
             payload = (self.__t_id,  # __T_ID__

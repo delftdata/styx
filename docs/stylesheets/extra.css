@@ -1,0 +1,307 @@
+:root {
+    --primary-color: #D94D18;
+    --primary-color-hover: #b63c11;
+}
+
+.under-construction {
+  text-align: center;
+  background: #fff3cd;
+  color: #856404;
+  border: 1px solid #ffeeba;
+  padding: 1rem;
+  margin: 1rem auto 2rem auto;
+  max-width: 600px;
+  border-radius: 6px;
+  font-weight: bold;
+  font-size: 1rem;
+}
+
+.md-typeset h1 a.headerlink,
+.md-typeset h2 a.headerlink,
+.md-typeset h3 a.headerlink,
+.md-typeset h4 a.headerlink,
+.md-typeset h5 a.headerlink,
+.md-typeset h6 a.headerlink {
+  color: inherit;
+  text-decoration: none;
+  margin-left: 0.5rem;
+  opacity: 1 !important;
+  visibility: visible !important;
+  transition: color 0.2s ease;
+}
+
+.md-typeset h1 a.headerlink:hover,
+.md-typeset h2 a.headerlink:hover,
+.md-typeset h3 a.headerlink:hover,
+.md-typeset h4 a.headerlink:hover,
+.md-typeset h5 a.headerlink:hover,
+.md-typeset h6 a.headerlink:hover {
+  color: var(--primary-color) !important;
+}
+
+
+/* Header gets top half of gradient */
+.md-header {
+  background: #cc4f1e;
+  color: white;
+}
+
+/* Tabs get bottom half, so they appear continuous */
+.md-tabs {
+  background: #731d16;
+  color: white;
+}
+
+/* Ensure text remains readable */
+.md-tabs__link,
+.md-tabs__item {
+  color: white !important;
+}
+
+.md-top {
+  background-color: var(--primary-color) !important;
+  color: white !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+  transition: background 0.2s ease;
+}
+
+.md-top:hover {
+  background-color: #b63c11 !important; /* or a brighter/lighter tone */
+  color: white !important;
+}
+
+body {
+  font-weight: 400;
+}
+
+strong, b {
+  font-weight: 600; /* Adjust to your desired weight (e.g., 500, 600, 700) */
+}
+
+/* Apply Roboto Mono to code elements */
+ code, pre { 
+  font-family: 'Roboto Mono', monospace;
+}
+
+a.md-button.md-button--primary {
+  background: var(--primary-color);
+  color: white;
+  border: 2px solid var(--primary-color);
+}
+
+a.md-button.md-button--primary:hover {
+  background: transparent;
+  border: 2px solid var(--primary-color);
+  color: var(--primary-color);
+}
+
+a.md-button.ghost-button {
+  background: transparent;
+  border: 2px solid var(--primary-color);
+  color: var(--primary-color);
+}
+
+a.md-button.ghost-button:hover {
+  background: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
+}
+
+
+/* Change the TOC link color to your primary theme color */
+.md-nav--secondary .md-nav__link {
+  color: var(--primary-color);
+}
+
+/* Optional: Highlight active TOC item */
+.md-nav--secondary .md-nav__link--active {
+  font-weight: bold;
+  color: var(--primary-color);
+}
+
+
+/* Center home intro content */
+.home-intro {
+  text-align: center;
+  max-width: 700px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+}
+
+/* Optional: center buttons even if wrapped */
+.home-intro p {
+  margin-top: 1.5rem;
+}
+
+.md-button--primary,
+a.md-button.ghost-button {
+  transition: all 0.2s ease-in-out;
+}
+
+.md-nav--secondary .md-nav__link:hover {
+  color: var(--primary-color-hover);
+}
+
+/* Left nav links */
+.md-nav--primary .md-nav__link {
+  color: var(--primary-color);
+}
+
+/* Active item (bold or colored) */
+.md-nav--primary .md-nav__link--active {
+  color: var(--primary-color);
+  font-weight: bold;
+}
+
+/* Optional: on hover */
+.md-nav--primary .md-nav__link:hover {
+  color: var(--primary-color-hover);
+}
+
+.md-nav--primary .md-nav__item .md-nav__link:before {
+  background-color: var(--primary-color);
+}
+
+/* Publication Page Styling */
+
+.pub-entry {
+  display: flex;
+  gap: 2rem;
+  margin-bottom: 2rem;
+  padding: 1.5rem;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  align-items: center;
+  max-width: 100%;
+}
+
+.pub-thumb {
+  width: 400px;
+  height: auto;
+  border-radius: 4px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+
+.pub-meta {
+  flex: 1;
+}
+
+.pub-venue {
+  font-weight: bold;
+  font-size: 0.9rem;
+  color: var(--primary-color);
+  text-transform: uppercase;
+}
+
+.pub-title {
+  font-size: 1.2rem;
+  margin: 0.2rem 0;
+}
+
+.pub-authors {
+  font-style: italic;
+  color: #444;
+  margin-bottom: 0.5rem;
+}
+
+.pub-abstract {
+  font-size: 0.7rem;
+  margin-bottom: 0.5rem;
+}
+
+.pub-thumb:hover {
+  transform: scale(1.02);
+  transition: transform 0.2s ease;
+  cursor: pointer;
+}
+
+/* People Styling */
+
+.people-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 2rem;
+  justify-items: center;
+  align-items: start;
+  margin-top: 2rem;
+}
+
+.person {
+  text-align: center;
+  max-width: 250px;
+}
+
+.person img {
+  width: 120px;
+  height: 120px; /* Force square */
+  object-fit: cover; /* Crop to fit the box */
+  border-radius: 50%;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+.person:hover {
+  transform: scale(1.05);
+  transition: transform 0.2s ease;
+  cursor: pointer;
+}
+
+/* Code docs */
+
+.badge-class {
+  display: inline-block;
+  background-color: var(--primary-color);
+  color: white;
+  padding: 0.2em 0.6em;
+  font-size: 0.75rem;
+  font-family: monospace;
+  border-radius: 4px;
+  text-transform: uppercase;
+  margin-bottom: 0.3rem;
+}
+
+.api-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.2rem;
+}
+
+.api-header::before {
+  content: "class";
+  background-color: var(--primary-color);
+  color: white;
+  padding: 0.2em 0.6em;
+  font-size: 0.75rem;
+  font-family: monospace;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+.doc-signature code {
+  font-size: 0.9rem;
+  font-weight: 400;
+  line-height: 1.4;
+}
+
+.doc .doc-attributes dt {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.doc .doc-heading h2,
+.doc .doc-heading h3 {
+  font-size: 1.1rem;
+  font-weight: 500;
+  margin-bottom: 0.5em;
+}
+
+.primary-link {
+  color: var(--primary-color) !important;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.primary-link:hover {
+  text-decoration: underline;
+  color: #b63c11; /* optional hover tone */
+}
