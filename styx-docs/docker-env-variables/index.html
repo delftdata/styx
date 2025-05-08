@@ -75,6 +75,11 @@
     <label class="md-overlay" for="__drawer"></label>
     <div data-md-component="skip">
       
+        
+        <a href="#environment-variables" class="md-skip">
+          Skip to content
+        </a>
+      
     </div>
     <div data-md-component="announce">
       
@@ -666,6 +671,21 @@
       <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
       
       
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    Dockerfile Environment Variables
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
       
       <a href="./" class="md-nav__link md-nav__link--active">
         
@@ -678,6 +698,154 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#styx-coordinator" class="md-nav__link">
+    <span class="md-ellipsis">
+      Styx Coordinator
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Styx Coordinator">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#core-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      🧭 Core Configuration
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#snapshot-state" class="md-nav__link">
+    <span class="md-ellipsis">
+      🪣 Snapshot &amp; State
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#minio-object-storage" class="md-nav__link">
+    <span class="md-ellipsis">
+      ⚙️ MinIO / Object Storage
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fault-tolerance-restart" class="md-nav__link">
+    <span class="md-ellipsis">
+      🛡️ Fault Tolerance &amp; Restart
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#styx-worker" class="md-nav__link">
+    <span class="md-ellipsis">
+      Styx Worker
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Styx Worker">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#discovery-coordination" class="md-nav__link">
+    <span class="md-ellipsis">
+      🧭 Discovery &amp; Coordination
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kafka-heartbeat" class="md-nav__link">
+    <span class="md-ellipsis">
+      ⚙️ Kafka &amp; Heartbeat
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#parallelism-threads" class="md-nav__link">
+    <span class="md-ellipsis">
+      🧵 Parallelism &amp; Threads
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#snapshotting" class="md-nav__link">
+    <span class="md-ellipsis">
+      🪣 Snapshotting
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#object-storage-minio" class="md-nav__link">
+    <span class="md-ellipsis">
+      📦 Object Storage (MinIO)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conflict-detection-strategy" class="md-nav__link">
+    <span class="md-ellipsis">
+      📐 Conflict Detection &amp; Strategy
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#epoch-sequence-control" class="md-nav__link">
+    <span class="md-ellipsis">
+      ⏱️ Epoch &amp; Sequence Control
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
       
     </li>
   
@@ -775,6 +943,145 @@
   
   
   
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#styx-coordinator" class="md-nav__link">
+    <span class="md-ellipsis">
+      Styx Coordinator
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Styx Coordinator">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#core-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      🧭 Core Configuration
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#snapshot-state" class="md-nav__link">
+    <span class="md-ellipsis">
+      🪣 Snapshot &amp; State
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#minio-object-storage" class="md-nav__link">
+    <span class="md-ellipsis">
+      ⚙️ MinIO / Object Storage
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fault-tolerance-restart" class="md-nav__link">
+    <span class="md-ellipsis">
+      🛡️ Fault Tolerance &amp; Restart
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#styx-worker" class="md-nav__link">
+    <span class="md-ellipsis">
+      Styx Worker
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Styx Worker">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#discovery-coordination" class="md-nav__link">
+    <span class="md-ellipsis">
+      🧭 Discovery &amp; Coordination
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kafka-heartbeat" class="md-nav__link">
+    <span class="md-ellipsis">
+      ⚙️ Kafka &amp; Heartbeat
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#parallelism-threads" class="md-nav__link">
+    <span class="md-ellipsis">
+      🧵 Parallelism &amp; Threads
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#snapshotting" class="md-nav__link">
+    <span class="md-ellipsis">
+      🪣 Snapshotting
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#object-storage-minio" class="md-nav__link">
+    <span class="md-ellipsis">
+      📦 Object Storage (MinIO)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conflict-detection-strategy" class="md-nav__link">
+    <span class="md-ellipsis">
+      📐 Conflict Detection &amp; Strategy
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#epoch-sequence-control" class="md-nav__link">
+    <span class="md-ellipsis">
+      ⏱️ Epoch &amp; Sequence Control
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
   
 </nav>
                   </div>
@@ -793,9 +1100,296 @@
   
 
 
-  <h1>Dockerfile Environment Variables</h1>
-
-
+<h1 id="environment-variables">Environment Variables<a class="headerlink" href="#environment-variables" title="Permanent link">&para;</a></h1>
+<h2 id="styx-coordinator">Styx Coordinator<a class="headerlink" href="#styx-coordinator" title="Permanent link">&para;</a></h2>
+<p>The following environment variables configure the behavior of the <strong>Styx Coordinator</strong>, including heartbeats, Kafka settings, snapshotting, and object storage.</p>
+<hr />
+<h3 id="core-configuration">🧭 Core Configuration<a class="headerlink" href="#core-configuration" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Default Value</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>KAFKA_URL</code></td>
+<td><code>KAFKA_HOST:KAFKA_PORT</code></td>
+<td>Kafka bootstrap server for messaging</td>
+</tr>
+<tr>
+<td><code>HEARTBEAT_LIMIT</code></td>
+<td><code>5000</code> (ms)</td>
+<td>Max time before a worker is considered dead</td>
+</tr>
+<tr>
+<td><code>HEARTBEAT_CHECK_INTERVAL</code></td>
+<td><code>500</code> (ms)</td>
+<td>How often to check worker heartbeats</td>
+</tr>
+<tr>
+<td><code>MAX_OPERATOR_PARALLELISM</code></td>
+<td><code>10</code></td>
+<td>Max number of operator partitions</td>
+</tr>
+<tr>
+<td><code>PROTOCOL</code></td>
+<td><code>Protocols.Aria</code></td>
+<td>Transaction execution protocol used by Styx</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3 id="snapshot-state">🪣 Snapshot &amp; State<a class="headerlink" href="#snapshot-state" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Default Value</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>SNAPSHOT_BUCKET_NAME</code></td>
+<td><code>styx-snapshots</code></td>
+<td>S3/MinIO bucket for storing snapshots</td>
+</tr>
+<tr>
+<td><code>SNAPSHOT_FREQUENCY_SEC</code></td>
+<td><code>10</code> (seconds)</td>
+<td>How often to take a snapshot</td>
+</tr>
+<tr>
+<td><code>SNAPSHOT_COMPACTION_INTERVAL_SEC</code></td>
+<td><code>10</code> (seconds)</td>
+<td>Interval for compacting snapshots</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3 id="minio-object-storage">⚙️ MinIO / Object Storage<a class="headerlink" href="#minio-object-storage" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Source</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MINIO_URL</code></td>
+<td><code>MINIO_HOST:MINIO_PORT</code></td>
+<td>Full URL to connect to MinIO</td>
+</tr>
+<tr>
+<td><code>MINIO_ACCESS_KEY</code></td>
+<td>Required</td>
+<td>Access key for the MinIO user</td>
+</tr>
+<tr>
+<td><code>MINIO_SECRET_KEY</code></td>
+<td>Required</td>
+<td>Secret key for the MinIO user</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3 id="fault-tolerance-restart">🛡️ Fault Tolerance &amp; Restart<a class="headerlink" href="#fault-tolerance-restart" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Default Value</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MAX_WAIT_FOR_RESTARTS_SEC</code></td>
+<td><code>0</code> (seconds)</td>
+<td>How long to wait for the failed container(s) to restart before Styx initiates the automatic recovery</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="styx-worker">Styx Worker<a class="headerlink" href="#styx-worker" title="Permanent link">&para;</a></h2>
+<p>These environment variables configure the <strong>Styx Worker</strong>, including discovery, parallelism, heartbeat, snapshotting, and conflict resolution.</p>
+<hr />
+<h3 id="discovery-coordination">🧭 Discovery &amp; Coordination<a class="headerlink" href="#discovery-coordination" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Required / Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>DISCOVERY_HOST</code></td>
+<td>Required</td>
+<td>Hostname or IP of the Coordinator</td>
+</tr>
+<tr>
+<td><code>DISCOVERY_PORT</code></td>
+<td>Required</td>
+<td>Port used to communicate with Coordinator</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3 id="kafka-heartbeat">⚙️ Kafka &amp; Heartbeat<a class="headerlink" href="#kafka-heartbeat" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Default Value</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>KAFKA_URL</code></td>
+<td>Required</td>
+<td>Kafka broker address</td>
+</tr>
+<tr>
+<td><code>HEARTBEAT_INTERVAL</code></td>
+<td><code>500</code> (ms)</td>
+<td>Frequency at which the worker sends heartbeats</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3 id="parallelism-threads">🧵 Parallelism &amp; Threads<a class="headerlink" href="#parallelism-threads" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Default Value</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>WORKER_THREADS</code> (<code>N_THREADS</code>)</td>
+<td><code>1</code></td>
+<td>Number of Styx workers within the container</td>
+</tr>
+<tr>
+<td><code>SNAPSHOTTING_THREADS</code></td>
+<td><code>4</code></td>
+<td>Threads dedicated to snapshotting</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3 id="snapshotting">🪣 Snapshotting<a class="headerlink" href="#snapshotting" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Default Value</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>SNAPSHOT_BUCKET_NAME</code></td>
+<td><code>styx-snapshots</code></td>
+<td>Bucket where snapshots are stored</td>
+</tr>
+<tr>
+<td><code>SNAPSHOT_FREQUENCY</code></td>
+<td><code>10</code> (seconds)</td>
+<td>Snapshot frequency in epochs</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3 id="object-storage-minio">📦 Object Storage (MinIO)<a class="headerlink" href="#object-storage-minio" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Source</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MINIO_URL</code></td>
+<td><code>MINIO_HOST:MINIO_PORT</code></td>
+<td>Address of the MinIO server</td>
+</tr>
+<tr>
+<td><code>MINIO_ACCESS_KEY</code></td>
+<td>Required</td>
+<td>MinIO access key</td>
+</tr>
+<tr>
+<td><code>MINIO_SECRET_KEY</code></td>
+<td>Required</td>
+<td>MinIO secret key</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3 id="conflict-detection-strategy">📐 Conflict Detection &amp; Strategy<a class="headerlink" href="#conflict-detection-strategy" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Default Value</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>CONFLICT_DETECTION_METHOD</code></td>
+<td><code>0</code></td>
+<td>Styx's conflict detection strategy</td>
+</tr>
+<tr>
+<td><code>FALLBACK_STRATEGY_PERCENTAGE</code></td>
+<td><code>-0.1</code></td>
+<td>% aborts before fallback logic triggers (negative enables it at all times)</td>
+</tr>
+<tr>
+<td><code>USE_FALLBACK_CACHE</code></td>
+<td><code>True</code></td>
+<td>Whether to use the fallback cache mechanism</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3 id="epoch-sequence-control">⏱️ Epoch &amp; Sequence Control<a class="headerlink" href="#epoch-sequence-control" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Default Value</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>EPOCH_INTERVAL_MS</code></td>
+<td><code>1</code> (ms)</td>
+<td>Kafka polling rate</td>
+</tr>
+<tr>
+<td><code>SEQUENCE_MAX_SIZE</code></td>
+<td><code>1000</code></td>
+<td>Max size of a transactional epoch per Styx worker</td>
+</tr>
+</tbody>
+</table>
+<hr />
 
 
 
