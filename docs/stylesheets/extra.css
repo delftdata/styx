@@ -204,6 +204,13 @@ a.md-button.ghost-button {
   margin-bottom: 0.5rem;
 }
 
+/* Dark mode override */
+@media (prefers-color-scheme: dark) {
+  .pub-authors {
+    color: var(--primary-color); /* lighter color for dark background */
+  }
+}
+
 .pub-abstract {
   font-size: 0.7rem;
   margin-bottom: 0.5rem;
