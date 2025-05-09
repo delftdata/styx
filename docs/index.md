@@ -9,7 +9,7 @@ hide:
 </div>
 <p align="center">
   <a href="">
-    <img src="/assets/styx-logo.webp" alt="Styx Logo" width="200" />
+    <img src="assets/styx-logo.webp" alt="Styx Logo" width="200" />
   </a>
 </p>
 
@@ -31,7 +31,7 @@ Whether you're exploring cloud-native design patterns, evaluating transaction gu
 
     Styx's streaming-first approach offers high throughput at low latency.
 
-    [:octicons-arrow-right-24: Published Results](/assets/publications/styx.pdf#page=19){ .primary-link }
+    [:octicons-arrow-right-24: Published Results](assets/publications/styx.pdf#page=19){ .primary-link }
 
 - :material-shield-check:{ .lg .middle } __Correctness__
 

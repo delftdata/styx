@@ -57,7 +57,6 @@ theme:
 
 extra_css:
   - stylesheets/extra.css
-extra_javascript:
   - https://fonts.googleapis.com/css2?family=Roboto&display=swap
   - https://fonts.googleapis.com/css2?family=Roboto+Mono&display=swap
 
@@ -92,6 +91,12 @@ hooks:
   - docs/.hooks.py
 
 repo_url: https://github.com/delftdata/styx
+use_directory_urls: true
 repo_name: delftdata/styx
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/delftdata/styx
+  base_url: /styx/
 
 copyright: "© 2025 Styx Project"
