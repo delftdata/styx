@@ -1,16 +1,17 @@
 import asyncio
-import gc
-import io
 import multiprocessing
 import concurrent.futures
 import os
 import struct
+import threading
 import time
 from asyncio import StreamReader, StreamWriter
+from collections import defaultdict
 from copy import deepcopy
 import socket
 from timeit import default_timer as timer
 import logging as sync_logging
+from typing import Any
 
 from minio import Minio
 import uvloop
@@ -24,9 +25,9 @@ from styx.common.stateflow_graph import StateflowGraph
 from styx.common.tcp_networking import NetworkingManager, MessagingMode
 from styx.common.operator import Operator
 from styx.common.protocols import Protocols
-from styx.common.serialization import Serializer, msgpack_deserialization, zstd_msgpack_serialization, zstd_msgpack_deserialization
+from styx.common.serialization import Serializer, msgpack_deserialization
 from styx.common.message_types import MessageType
-from styx.common.types import OperatorPartition, KVPairs
+from styx.common.types import OperatorPartition
 from styx.common.util.aio_task_scheduler import AIOTaskScheduler
 
 from worker.async_snapshotting import AsyncSnapshottingProcess
@@ -131,38 +132,43 @@ class Worker(object):
 
         self.deployed_graph: StateflowGraph | None = None
 
+        self.receive_migration_hashes_lock: asyncio.Lock = asyncio.Lock()
+        self.final_keys_to_send = defaultdict(set)
+        self.results_lock = threading.Lock()
+
     @staticmethod
     def rehash_and_store(operator_partition: OperatorPartition,
                          partitioner: HashPartitioner,
-                         operator_partition_data: KVPairs,
+                         assigned_operator_partitions: set[OperatorPartition],
+                         operator_partition_keys: list[Any],
+                         dns: dict[str, dict[int, tuple[str, int, int]]],
+                         peers: dict[int, tuple[str, int, int]],
                          worker_id: int):
         ser_time = 0.0
         wire_time = 0.0
         operator_name, previous_partition = operator_partition
-        minio_client = Minio(MINIO_URL,
-                             access_key=MINIO_ACCESS_KEY,
-                             secret_key=MINIO_SECRET_KEY,
-                             secure=False)
-
         # Start hashing
         start_hashing = timer()
-        new_partitions: dict[OperatorPartition, KVPairs] = {
+        keys_to_send = defaultdict(set)
+        new_partitions: dict[OperatorPartition, dict[Any, tuple[int, int]]] = {
             (operator_name, partition): {} for partition in range(partitioner.partitions)
         }
-        for key, value in operator_partition_data.items():
-            partition = partitioner.get_partition(key)
-            new_partitions[(operator_name, partition)][key] = value
+        for key in operator_partition_keys:
+            new_partition: int = partitioner.get_partition_no_cache(key)
+            operator_partition = (operator_name, new_partition)
+            if operator_partition not in assigned_operator_partitions:
+                # If this key is already in the correct worker no need to communicate it
+                new_partitions[operator_partition][key] = (worker_id, previous_partition)
+                keys_to_send[(operator_name, previous_partition)].add(key)
         end_hashing = timer()
+        sync_logging.warning(f"Hashing time: {end_hashing - start_hashing}")
 
-        # Parallel MinIO uploads
-        def upload_partition(sn_n: str, sn_d: bytes):
+        def upload_partition(msg: bytes, worker_info: tuple[str, int, int]):
             s_wire = timer()
-            minio_client.put_object(
-                SNAPSHOT_BUCKET_NAME,
-                sn_n,
-                io.BytesIO(sn_d),
-                len(sn_d)
-            )
+            s = socket.socket()
+            s.connect((worker_info[0], worker_info[1]))
+            s.send(msg)
+            s.close()
             e_wire = timer()
             return e_wire - s_wire
 
@@ -172,13 +178,14 @@ class Worker(object):
                 if not data:
                     continue  # Skip empty partitions
                 n_o, n_p = n_op
-                snapshot_name = f"migration/{n_o}/{n_p}/{previous_partition}/{worker_id}.bin"
                 s_ser = timer()
-                sn_data: bytes = zstd_msgpack_serialization(data)
+                serialized_hashes: bytes = NetworkingManager.encode_message(msg=(n_op, data),
+                                                                            msg_type=MessageType.ReceiveMigrationHashes,
+                                                                            serializer=Serializer.MSGPACK)
                 e_ser = timer()
                 ser_time += e_ser - s_ser
-                sync_logging.warning(f"MIGRATION | STORING {snapshot_name}")
-                futures.append(executor.submit(upload_partition, snapshot_name, sn_data))
+                sync_logging.warning(f"MIGRATION | SENDING: {n_op} FROM: {worker_id}")
+                futures.append(executor.submit(upload_partition, serialized_hashes, dns[n_o][n_p]))
 
             for fut in futures:
                 wire_time += fut.result()
@@ -187,24 +194,30 @@ class Worker(object):
                              f"hashing_time: {end_hashing - start_hashing:.3f}s | "
                              f"ser_time: {ser_time:.3f}s | "
                              f"wire_time: {wire_time:.3f}s")
+        return keys_to_send
 
-    def repartitioning_callback(self, _):
-        self.completed_repartitioning += 1
-        if self.completed_repartitioning == self.total_repartitioning:
-            self.completed_repartitioning_event.set()
-            self.completed_repartitioning = 0
+    def repartitioning_callback(self, future):
+        with self.results_lock:
+            self.completed_repartitioning += 1
+            keys_to_send = future.result()
+            for op_partition, keys in keys_to_send.items():
+                self.final_keys_to_send[op_partition].update(keys)
+            if self.completed_repartitioning == self.total_repartitioning:
+                self.completed_repartitioning_event.set()
+                self.completed_repartitioning = 0
 
     async def worker_controller(self, data: bytes):
         message_type: int = self.networking.get_msg_type(data)
         match message_type:
             # RECEIVE EXECUTION PLAN OF A DATAFLOW GRAPH
             case MessageType.ReceiveExecutionPlan:
-                gc.disable()
                 # This contains all the operators of a job assigned to this worker
                 message = self.networking.decode_message(data)
 
                 self.worker_operators, self.dns, self.peers, self.operator_state_backend, self.deployed_graph = message
                 del self.peers[self.id]
+                self.networking.set_peers(self.peers)
+                self.protocol_networking.set_peers(self.peers)
                 operator: Operator
                 for operator_partition, operator in self.worker_operators.items():
                     operator_name, partition = operator_partition
@@ -245,7 +258,6 @@ class Worker(object):
                 # )
             case MessageType.InitMigration:
                 try:
-                    # FIXME THIS IS JUST FOR THE STOP AND RESTART need to see how to generalize
                     logging.warning("MIGRATION | START")
                     start_time = timer()
                     # 1) Wait for the transactional protocol to get stopped gracefully
@@ -257,6 +269,8 @@ class Worker(object):
                     (self.deployed_graph, new_worker_operators, self.dns,
                      self.peers, self.operator_state_backend) = self.networking.decode_message(data)
                     del self.peers[self.id]
+                    self.networking.set_peers(self.peers)
+                    self.protocol_networking.set_peers(self.peers)
                     logging.warning("MIGRATION | ARIA STOPPED")
                     # 2) Once stopped take the hashes and store stage
                     t2 = timer()
@@ -264,6 +278,7 @@ class Worker(object):
                     self.total_repartitioning = sum([len(operator_partitions)
                                                      for operator_partitions in operator_partitions_to_repartition.values()])
                     loop = asyncio.get_running_loop()
+                    futures = []
                     for operator_name, operator_partitions in operator_partitions_to_repartition.items():
                         for operator_partition in operator_partitions:
                             new_operator_partitioner: HashPartitioner = self.deployed_graph.get_operator_by_name(operator_name).get_partitioner()
@@ -272,11 +287,14 @@ class Worker(object):
                                                  self.rehash_and_store,
                                                  operator_partition,
                                                  new_operator_partitioner,
-                                                 self.local_state.get_operator_data_for_repartitioning(operator_partition),
-                                                 self.id
-                                                 ).add_done_callback(self.repartitioning_callback)
+                                                 set(new_worker_operators.keys()),
+                                                 list(self.local_state.get_operator_data_for_repartitioning(operator_partition).keys()),
+                                                 self.dns,
+                                                 self.peers,
+                                                 self.id).add_done_callback(self.repartitioning_callback)
                     await self.completed_repartitioning_event.wait()
                     self.completed_repartitioning_event.clear()
+                    self.local_state.add_keys_to_send(self.final_keys_to_send)
                     # 3) Coordinate: Everyone done with repartitioning
                     self.worker_operators = new_worker_operators
                     await self.networking.send_message(DISCOVERY_HOST, DISCOVERY_PORT,
@@ -292,12 +310,11 @@ class Worker(object):
                     # 4) Deploy new_graph, dns, networking, state, protocol, kafka topics
                     await self.protocol_networking.close_all_connections()
                     del (self.function_execution_protocol,
-                         self.local_state,
                          self.protocol_networking)
-                    gc.collect()
                     self.protocol_networking = NetworkingManager(self.protocol_port,
                                                                  mode=MessagingMode.PROTOCOL_PROTOCOL)
                     self.protocol_networking.set_worker_id(self.id)
+                    self.protocol_networking.set_peers(self.peers)
                     self.registered_operators = {}
                     self.topic_partitions = []
                     for operator_partition, operator in self.worker_operators.items():
@@ -313,26 +330,14 @@ class Worker(object):
                     # Read from the stored state
                     t4 = timer()
                     logging.warning(f"MIGRATION | LOADING DATA START | took: {t4 - t3}")
-                    data: dict[OperatorPartition, KVPairs] = {}
-                    for operator_partition in self.registered_operators:
-                        operator_name, partition = operator_partition
-                        snapshot_files: list[str] = [sn_file.object_name
-                                                     for sn_file in
-                                                     self.minio_client.list_objects(bucket_name=SNAPSHOT_BUCKET_NAME,
-                                                                                    prefix=f"migration/{operator_name}/{partition}/",
-                                                                                    recursive=True)
-                                                     if sn_file.object_name.endswith(".bin")]
-                        for sn_name in snapshot_files:
-                            logging.warning(f"MIGRATION | LOADING PARTITION FILE: {sn_name}")
-                            partition_data = zstd_msgpack_deserialization(
-                                self.minio_client.get_object(SNAPSHOT_BUCKET_NAME, sn_name).data
-                            )
-                            if operator_partition not in data:
-                                data[operator_partition] = {}
-                            if partition_data:
-                                data[operator_partition].update(partition_data)
-                    logging.warning(f"MIGRATION | DATA: {data.keys()}")
-                    self.attach_state_to_operators_after_snapshot(data)
+                    operator_partitions: set[OperatorPartition] = set(self.registered_operators.keys())
+                    for operator_partition in operator_partitions:
+                        if operator_partition not in self.local_state.operator_partitions:
+                            # check if operator partition is in local state, if not, set it to empty
+                            self.local_state.add_new_operator_partition(operator_partition)
+                    for operator in self.registered_operators.values():
+                        operator.attach_state_networking(self.local_state, self.protocol_networking, self.dns,
+                                                         self.deployed_graph)
                     t5 = timer()
                     logging.warning(f"MIGRATION | LOADING DATA DONE | took: {t5 - t4}")
                     topic_partition_offsets = {k: v for k, v in self.m_input_offsets.items()
@@ -363,11 +368,28 @@ class Worker(object):
                     self.function_execution_protocol.started.set()
                     self.migration_completed.clear()
                     self.migration_repartitioning_done.clear()
-                    # TODO cleanup the minio folder used for the migration
                     end_time = timer()
                     logging.warning(f'Worker: {self.id} | Migration took: {round((end_time - start_time) * 1000, 4)}ms')
                 except Exception as e:
                     logging.error(f"Uncaught exception while migrating: {e}")
+            case MessageType.ReceiveMigrationHashes:
+                (n_op, data) = self.networking.decode_message(data)
+                logging.warning(f"MIGRATION ReceiveMigrationHashes | {n_op} {len(data.keys())}")
+                async with self.receive_migration_hashes_lock:
+                    self.local_state.add_remote_keys(n_op, data)
+            case MessageType.RequestRemoteKey:
+                (operator_partition, key, old_partition, host, port) = self.networking.decode_message(data)
+                # logging.warning(f"MIGRATION RequestRemoteKey | {key}:{old_partition} to {operator_partition}")
+                data_to_send = self.local_state.get_key_to_migrate(operator_partition[0], key, old_partition)
+                await self.networking.send_message(host, port,
+                                                   msg=(operator_partition, key, data_to_send),
+                                                   msg_type=MessageType.ReceiveRemoteKey,
+                                                   serializer=Serializer.MSGPACK)
+            case MessageType.ReceiveRemoteKey:
+                (operator_partition, key, value) = self.networking.decode_message(data)
+                # logging.warning(f"MIGRATION ReceiveRemoteKey | {key} to {operator_partition}")
+                self.local_state.set_data_from_migration(operator_partition, key, value)
+                self.protocol_networking.key_received(operator_partition, key)
             case MessageType.MigrationRepartitioningDone:
                 (self.m_epoch_counter, self.m_t_counter,
                  self.m_input_offsets, self.m_output_offsets) = self.networking.decode_message(data)
@@ -386,12 +408,12 @@ class Worker(object):
                     del (self.function_execution_protocol,
                          self.local_state,
                          self.protocol_networking)
-                    gc.collect()
                     self.protocol_networking = NetworkingManager(self.protocol_port,
                                                                  mode=MessagingMode.PROTOCOL_PROTOCOL)
                     self.protocol_networking.set_worker_id(self.id)
 
                 del self.peers[self.id]
+                self.protocol_networking.set_peers(self.peers)
 
                 self.registered_operators = {}
                 self.topic_partitions = []

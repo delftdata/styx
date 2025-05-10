@@ -83,6 +83,7 @@ class StyxKafkaIngress(BaseIngress):
                 self.sequencer.sequence(run_func_payload)
             else:
                 # In flight message during migration, currently the state belongs to another partition
+                # logging.warning(f"Ingress WrongPartitionRequest: {operator_name}:{msg.partition} -> {true_partition}")
                 dns = self.registered_operators[(operator_name, msg.partition)].dns
                 operator_host = dns[operator_name][true_partition][0]
                 operator_port = dns[operator_name][true_partition][2]

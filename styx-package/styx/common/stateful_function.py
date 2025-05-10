@@ -1,6 +1,6 @@
 import asyncio
 import fractions
-# import traceback
+import traceback
 
 from typing import Awaitable, Type
 
@@ -50,6 +50,19 @@ class StatefulFunction(Function):
 
     async def __call__(self, *args, **kwargs):
         try:
+            if self.__state.in_remote_keys(self.__key, self.__operator_name, self.__partition):
+                # Migration phase, need to get the key from a remote worker first
+                async with self.__operator_lock:
+                    # Need to lock only for the message send to avoid duplicates
+                    await self.__networking.request_key(self.__operator_name,
+                                                        self.__partition,
+                                                        self.__key,
+                                                        self.__state.get_worker_id_old_partition(self.__operator_name,
+                                                                                                 self.__partition,
+                                                                                                 self.__key))
+                await self.__networking.wait_for_remote_key_event(self.__operator_name,
+                                                                  self.__partition,
+                                                                  self.__key)
             async with self.__operator_lock:
                 res = await self.run(*args)
             # logging.info(f'Run args: {args} kwargs: {kwargs} async remote calls: {self.__async_remote_calls}')
@@ -76,7 +89,7 @@ class StatefulFunction(Function):
                                                                is_root=True)
             return res, n_remote_calls, partial_node_count
         except Exception as e:
-            # logging.debug(traceback.format_exc())
+            logging.warning(traceback.format_exc())
             # logging.debug(f"{self.__request_id} | {self.__t_id} | {self.__key} | "
             #               f"Call @{self.__operator_name}:{self.name}:FB={self.__fallback_enabled} failed with error: {e}")
             return e, -1, -1

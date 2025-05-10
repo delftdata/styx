@@ -30,6 +30,14 @@ class HashPartitioner(BasePartitioner):
             key = key.split(delim)[field]
         return self.make_key_hashable(key) % self._partitions
 
+    def get_partition_no_cache(self, key) -> int | None:
+        if key is None:
+            return None
+        if self._composite_key_hash_parameters is not None:
+            field, delim = self._composite_key_hash_parameters
+            key = key.split(delim)[field]
+        return self.make_key_hashable(key) % self._partitions
+
     @staticmethod
     def make_key_hashable(key) -> int:
         if isinstance(key, int):

@@ -1,4 +1,5 @@
 import traceback
+from typing import Any
 
 from msgspec import msgpack
 
@@ -20,6 +21,42 @@ class InMemoryOperatorState(BaseAriaState):
         for operator_partition in self.operator_partitions:
             self.data[operator_partition] = {}
             self.delta_map[operator_partition] = {}
+        # State migration data structures
+        # Where do the keys belong (operator_partition: key: (worker_id, old partition))
+        self.remote_keys: dict[OperatorPartition, dict[Any, tuple[int, int]]] = {}
+        # Used to track migration progress, the async migration and whether the operator still owns the specific key
+        self.keys_to_send: dict[OperatorPartition, set[Any]] = {}
+
+    def add_keys_to_send(self, keys_to_send: dict[OperatorPartition, Any]):
+        self.keys_to_send = keys_to_send
+
+    def get_key_to_migrate(self, operator_name: str, key: Any, old_partition: int):
+        operator_partition: OperatorPartition = (operator_name, old_partition)
+        data_to_send = self.data[operator_partition].pop(key)
+        self.keys_to_send[operator_partition].remove(key)
+        # logging.warning(f"Keys left to send in partition: {operator_partition} -> {len(self.keys_to_send[operator_partition])}")
+        return data_to_send
+
+    def set_data_from_migration(self, operator_partition: OperatorPartition, key: Any, data: Any):
+        operator_partition = tuple(operator_partition)
+        self.data[operator_partition][key] = data
+
+    def get_worker_id_old_partition(self, operator_name: str, partition: int, key: Any) -> tuple[int, int]:
+        return self.remote_keys[(operator_name, partition)][key]
+
+    def add_new_operator_partition(self, operator_partition: OperatorPartition):
+        operator_partition = tuple(operator_partition)
+        if operator_partition not in self.operator_partitions:
+            self.operator_partitions.add(operator_partition)
+            self.data[operator_partition] = {}
+            self.delta_map[operator_partition] = {}
+
+    def add_remote_keys(self, operator_partition: OperatorPartition, data: dict[Any, tuple[int, int]]):
+        operator_partition = tuple(operator_partition)
+        if operator_partition in self.remote_keys:
+            self.remote_keys[operator_partition].update(data)
+        else:
+            self.remote_keys[operator_partition] = data
 
     def set_data_from_snapshot(self, data: dict[OperatorPartition, KVPairs]):
         for operator_partition, kv_pairs in data.items():
@@ -79,11 +116,15 @@ class InMemoryOperatorState(BaseAriaState):
         # Need to find a way to implement deletes
         pass
 
+    def in_remote_keys(self, key, operator_name: str, partition: int) -> bool:
+        operator_partition: OperatorPartition = (operator_name, partition)
+        return operator_partition in self.remote_keys and key in self.remote_keys[operator_partition]
+
     def exists(self, key, operator_name: str, partition: int):
         operator_partition: OperatorPartition = (operator_name, partition)
         if operator_partition not in self.data:
             return False
-        return key in self.data[operator_partition]
+        return (operator_partition in self.keys_to_send and key not in self.keys_to_send[operator_partition] and key in self.data[operator_partition]) or self.in_remote_keys(key, operator_name, partition)
 
     def commit(self, aborted_from_remote: set[int]) -> set[int]:
         committed_t_ids = set()

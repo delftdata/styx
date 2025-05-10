@@ -35,6 +35,7 @@ SNAPSHOTTING_THREADS: int = int(os.getenv('SNAPSHOTTING_THREADS', 4))
 SEQUENCE_MAX_SIZE: int = int(os.getenv('SEQUENCE_MAX_SIZE', 1_000))
 USE_FALLBACK_CACHE: bool = bool(os.getenv('USE_FALLBACK_CACHE', True))
 KAFKA_URL: str = os.environ['KAFKA_URL']
+USE_ASYNC_MIGRATION: bool = bool(os.getenv('USE_FALLBACK_CACHE', True))
 
 
 class AriaProtocol(BaseTransactionalProtocol):
@@ -253,7 +254,7 @@ class AriaProtocol(BaseTransactionalProtocol):
                     # During migration a message might arrive from a different partition
                     (request_id, operator_name, function_name, key, partition, kafka_ingress_partition,
                      kafka_offset, params) = self.networking.decode_message(data)
-                    logging.warning(f"WrongPartitionRequest: {request_id}")
+                    logging.warning(f"Aria WrongPartitionRequest: {request_id}:{operator_name}:{kafka_ingress_partition}")
                     payload = RunFuncPayload(request_id=request_id, key=key,
                                              operator_name=operator_name, partition=partition,
                                              function_name=function_name, params=params,

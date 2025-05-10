@@ -1,4 +1,5 @@
 from abc import abstractmethod, ABC
+from typing import Any
 
 from .types import OperatorPartition
 
@@ -8,11 +9,11 @@ class BaseOperatorState(ABC):
         self.operator_partitions: set[OperatorPartition] = operator_partitions
 
     @abstractmethod
-    def put(self, key, value, t_id: int, operator_name: str, partition: int):
+    def put(self, key: Any, value: Any, t_id: int, operator_name: str, partition: int):
         raise NotImplementedError
 
     @abstractmethod
-    def put_immediate(self, key, value, t_id: int, operator_name: str, partition: int):
+    def put_immediate(self, key: Any, value: Any, t_id: int, operator_name: str, partition: int):
         raise NotImplementedError
 
     @abstractmethod
@@ -24,17 +25,25 @@ class BaseOperatorState(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def get(self, key, t_id: int, operator_name: str, partition: int):
+    def get(self, key: Any, t_id: int, operator_name: str, partition: int):
         raise NotImplementedError
 
     @abstractmethod
-    def get_immediate(self, key, t_id: int, operator_name: str, partition: int):
+    def get_immediate(self, key: Any, t_id: int, operator_name: str, partition: int):
         raise NotImplementedError
 
     @abstractmethod
-    def delete(self, key, operator_name: str, partition: int):
+    def delete(self, key: Any, operator_name: str, partition: int):
         raise NotImplementedError
 
     @abstractmethod
-    def exists(self, key, operator_name: str, partition: int):
+    def in_remote_keys(self, key: Any, operator_name: str, partition: int) -> bool:
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_worker_id_old_partition(self, operator_name: str, partition: int, key: Any) -> tuple[int, int]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def exists(self, key: Any, operator_name: str, partition: int):
         raise NotImplementedError
