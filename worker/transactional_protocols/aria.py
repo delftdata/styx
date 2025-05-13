@@ -1,5 +1,6 @@
 import asyncio
 import os
+import time
 
 from timeit import default_timer as timer
 
@@ -35,7 +36,8 @@ SNAPSHOTTING_THREADS: int = int(os.getenv('SNAPSHOTTING_THREADS', 4))
 SEQUENCE_MAX_SIZE: int = int(os.getenv('SEQUENCE_MAX_SIZE', 1_000))
 USE_FALLBACK_CACHE: bool = bool(os.getenv('USE_FALLBACK_CACHE', True))
 KAFKA_URL: str = os.environ['KAFKA_URL']
-USE_ASYNC_MIGRATION: bool = bool(os.getenv('USE_FALLBACK_CACHE', True))
+USE_ASYNC_MIGRATION: bool = bool(os.getenv('USE_ASYNC_MIGRATION', True))
+ASYNC_MIGRATION_BATCH_SIZE: int = int(os.getenv('ASYNC_MIGRATION_BATCH_SIZE', 2_000))
 
 
 class AriaProtocol(BaseTransactionalProtocol):
@@ -43,6 +45,7 @@ class AriaProtocol(BaseTransactionalProtocol):
     def __init__(self,
                  worker_id,
                  peers: dict[int, tuple[str, int, int]],
+                 dns: dict[str, dict[int, tuple[str, int, int]]],
                  networking: NetworkingManager,
                  registered_operators: dict[OperatorPartition, Operator],
                  topic_partitions: list[TopicPartition],
@@ -72,6 +75,7 @@ class AriaProtocol(BaseTransactionalProtocol):
 
         # worker_id: (host, port)
         self.peers: dict[int, tuple[str, int, int]] = peers
+        self.dns: dict[str, dict[int, tuple[str, int, int]]] = dns
         self.topic_partition_offsets: dict[OperatorPartition, int] = topic_partition_offsets
         # worker_id: set of aborted t_ids
         self.concurrency_aborts_everywhere: set[int] = set()
@@ -134,6 +138,7 @@ class AriaProtocol(BaseTransactionalProtocol):
             MessageType.DeterministicReordering: asyncio.Lock(),
             MessageType.WrongPartitionRequest: asyncio.Lock(),
             MessageType.ResponseToRoot: asyncio.Lock(),
+            MessageType.AsyncMigration: asyncio.Lock()
         }
 
         self.remote_wants_to_proceed: bool = False
@@ -146,6 +151,9 @@ class AriaProtocol(BaseTransactionalProtocol):
         self.stopped: asyncio.Event = asyncio.Event()
         self.snapshot_marker_received: bool = False
         self.snapshotting_port: int = snapshotting_port
+
+        self.migration_started = False
+        self.migration_finished = False
 
     async def wait_stopped(self):
         await self.stopped.wait()
@@ -254,7 +262,7 @@ class AriaProtocol(BaseTransactionalProtocol):
                     # During migration a message might arrive from a different partition
                     (request_id, operator_name, function_name, key, partition, kafka_ingress_partition,
                      kafka_offset, params) = self.networking.decode_message(data)
-                    logging.warning(f"Aria WrongPartitionRequest: {request_id}:{operator_name}:{kafka_ingress_partition}")
+                    # logging.warning(f"Aria WrongPartitionRequest: {request_id}:{operator_name}:{kafka_ingress_partition}")
                     payload = RunFuncPayload(request_id=request_id, key=key,
                                              operator_name=operator_name, partition=partition,
                                              function_name=function_name, params=params,
@@ -319,6 +327,11 @@ class AriaProtocol(BaseTransactionalProtocol):
             case MessageType.RemoteWantsToProceed:
                 if not self.currently_processing:
                     self.remote_wants_to_proceed = True
+            case MessageType.AsyncMigration:
+                (operator_partition, batch) = self.networking.decode_message(data)
+                # logging.warning(f"MIGRATION | Received migration batch for: {operator_partition}")
+                async with self.networking_locks[message_type]:
+                    self.local_state.set_batch_data_from_migration(operator_partition, batch)
             case _:
                 logging.error(f"Aria protocol: Non supported command message type: {message_type}")
 
@@ -333,6 +346,17 @@ class AriaProtocol(BaseTransactionalProtocol):
         end_wal = timer()
         # logging.info(f"Write to WAL successful at epoch: {self.sequencer.epoch_counter}")
         return start_wal, end_wal
+
+    async def send_async_migrate_batch(self):
+        if self.local_state.has_keys_to_send:
+            batch = self.local_state.get_async_migrate_batch(ASYNC_MIGRATION_BATCH_SIZE)
+            for operator_partition, k_v_pairs in batch.items():
+                operator_name, partition = operator_partition
+                worker = self.dns[operator_name][partition]
+                await self.networking.send_message(worker[0], worker[2],
+                                                   msg=(operator_partition, k_v_pairs),
+                                                   msg_type=MessageType.AsyncMigration,
+                                                   serializer=Serializer.MSGPACK)
 
     async def function_scheduler(self):
         await self.started.wait()
@@ -405,6 +429,7 @@ class AriaProtocol(BaseTransactionalProtocol):
                     # Notify peers that we are ready to commit
                     # logging.info(f'{self.id} ||| Notify peers...')
                     start_sync = timer()
+                    await self.send_async_migrate_batch()
                     await self.sync_workers(msg_type=MessageType.AriaCommit,
                                             message=(concurrency_aborts,
                                                      self.sequencer.t_counter,
@@ -483,6 +508,13 @@ class AriaProtocol(BaseTransactionalProtocol):
                     #     f'concurrency aborts for next epoch: {len(self.concurrency_aborts_everywhere)} '
                     #     f'abort rate: {abort_rate}'
                     # )
+                    migration_progress = self.local_state.keys_remaining_to_remote()
+                    if migration_progress != 0:
+                        self.migration_started = True
+                        logging.warning(f"MIGRATION_PROGRESS: {migration_progress}")
+                    elif migration_progress == 0 and self.migration_started and not self.migration_finished:
+                        self.migration_finished = True
+                        logging.warning(f"MIGRATION_FINISHED at epoch: {self.sequencer.epoch_counter} at time: {time.time_ns() // 1_000_000}")
                     await self.sync_workers(msg_type=MessageType.SyncCleanup,
                                             message=(self.id,
                                                      epoch_throughput,
@@ -606,6 +638,7 @@ class AriaProtocol(BaseTransactionalProtocol):
                         )
                     )
 
+        await self.send_async_migrate_batch()
         await self.sync_workers(msg_type=MessageType.AriaFallbackStart,
                                 message=b'',
                                 serializer=Serializer.NONE)
@@ -617,6 +650,7 @@ class AriaProtocol(BaseTransactionalProtocol):
         #     f'Fallback strategy done waiting for peers'
         # )
 
+        await self.send_async_migrate_batch()
         await self.sync_workers(msg_type=MessageType.AriaFallbackDone,
                                 message=b'',
                                 serializer=Serializer.NONE)

@@ -145,11 +145,13 @@ class CoordinatorService(object):
                 logging.warning("MIGRATION | MigrationDone")
                 sync_complete: bool = await self.migration_metadata.set_empty_sync_done()
                 if sync_complete:
-                    self.aria_metadata = AriaSyncMetadata(len(self.coordinator.worker_pool.get_participating_workers()))
+                    n_workers = len(self.coordinator.worker_pool.get_participating_workers())
+                    self.aria_metadata = AriaSyncMetadata(n_workers)
                     await self.protocol_networking.close_all_connections()
-                    await self.finalize_migration()
-                    self.migration_in_progress = False
                     await self.migration_metadata.cleanup()
+                    await self.finalize_migration()
+                    await asyncio.sleep(1) # give a second for the workers to process that the migration phase is over
+                    self.migration_in_progress = False
             case MessageType.RegisterWorker:  # REGISTER_WORKER
                 worker_ip, worker_port, protocol_port = self.networking.decode_message(data)
                 # A worker registered to the coordinator
@@ -337,6 +339,7 @@ class CoordinatorService(object):
     async def finalize_migration(self):
         async with asyncio.TaskGroup() as tg:
             for worker in self.coordinator.worker_pool.get_participating_workers():
+                logging.warning(f"Sending MigrationDone to : {worker}")
                 tg.create_task(self.protocol_networking.send_message(worker.worker_ip, worker.worker_port,
                                                                      msg=b'',
                                                                      msg_type=MessageType.MigrationDone,

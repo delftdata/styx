@@ -159,7 +159,7 @@ class Worker(object):
             if operator_partition not in assigned_operator_partitions:
                 # If this key is already in the correct worker no need to communicate it
                 new_partitions[operator_partition][key] = (worker_id, previous_partition)
-                keys_to_send[(operator_name, previous_partition)].add(key)
+                keys_to_send[(operator_name, previous_partition)].add((key, new_partition))
         end_hashing = timer()
         sync_logging.warning(f"Hashing time: {end_hashing - start_hashing}")
 
@@ -239,6 +239,7 @@ class Worker(object):
                 self.attach_state_to_operators_after_snapshot(data)
                 self.function_execution_protocol = AriaProtocol(worker_id=self.id,
                                                                 peers=self.peers,
+                                                                dns=self.dns,
                                                                 networking=self.protocol_networking,
                                                                 registered_operators=self.registered_operators,
                                                                 topic_partitions=self.topic_partitions,
@@ -258,7 +259,7 @@ class Worker(object):
                 # )
             case MessageType.InitMigration:
                 try:
-                    logging.warning("MIGRATION | START")
+                    logging.warning(f"MIGRATION | START at {time.time_ns() // 1_000_000}")
                     start_time = timer()
                     # 1) Wait for the transactional protocol to get stopped gracefully
                     await self.function_execution_protocol.wait_stopped()
@@ -346,6 +347,7 @@ class Worker(object):
                                                if k in self.registered_operators}
                     self.function_execution_protocol = AriaProtocol(worker_id=self.id,
                                                                     peers=self.peers,
+                                                                    dns=self.dns,
                                                                     networking=self.protocol_networking,
                                                                     registered_operators=self.registered_operators,
                                                                     topic_partitions=self.topic_partitions,
@@ -380,7 +382,7 @@ class Worker(object):
             case MessageType.RequestRemoteKey:
                 (operator_partition, key, old_partition, host, port) = self.networking.decode_message(data)
                 # logging.warning(f"MIGRATION RequestRemoteKey | {key}:{old_partition} to {operator_partition}")
-                data_to_send = self.local_state.get_key_to_migrate(operator_partition[0], key, old_partition)
+                data_to_send = self.local_state.get_key_to_migrate(operator_partition, key, old_partition)
                 await self.networking.send_message(host, port,
                                                    msg=(operator_partition, key, data_to_send),
                                                    msg_type=MessageType.ReceiveRemoteKey,
@@ -441,6 +443,7 @@ class Worker(object):
 
                 self.function_execution_protocol = AriaProtocol(worker_id=self.id,
                                                                 peers=self.peers,
+                                                                dns=self.dns,
                                                                 networking=self.protocol_networking,
                                                                 registered_operators=self.registered_operators,
                                                                 topic_partitions=self.topic_partitions,

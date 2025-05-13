@@ -1,4 +1,5 @@
 import traceback
+from collections import defaultdict
 from typing import Any
 
 from msgspec import msgpack
@@ -25,24 +26,85 @@ class InMemoryOperatorState(BaseAriaState):
         # Where do the keys belong (operator_partition: key: (worker_id, old partition))
         self.remote_keys: dict[OperatorPartition, dict[Any, tuple[int, int]]] = {}
         # Used to track migration progress, the async migration and whether the operator still owns the specific key
-        self.keys_to_send: dict[OperatorPartition, set[Any]] = {}
+        # (operator_name, old_partition): set of keys with the new partition
+        self.keys_to_send: dict[OperatorPartition, set[tuple[Any, int]]] = {}
 
     def add_keys_to_send(self, keys_to_send: dict[OperatorPartition, Any]):
         self.keys_to_send = keys_to_send
 
-    def get_key_to_migrate(self, operator_name: str, key: Any, old_partition: int):
+    def has_keys_to_send(self) -> bool:
+        return bool(self.keys_to_send)
+
+    def get_key_to_migrate(self, new_operator_partition: OperatorPartition, key: Any, old_partition: int):
+        operator_name, new_partition = new_operator_partition
         operator_partition: OperatorPartition = (operator_name, old_partition)
         data_to_send = self.data[operator_partition].pop(key)
-        self.keys_to_send[operator_partition].remove(key)
+        self.keys_to_send[operator_partition].remove((key, new_partition))
         # logging.warning(f"Keys left to send in partition: {operator_partition} -> {len(self.keys_to_send[operator_partition])}")
         return data_to_send
 
     def set_data_from_migration(self, operator_partition: OperatorPartition, key: Any, data: Any):
         operator_partition = tuple(operator_partition)
         self.data[operator_partition][key] = data
+        del self.remote_keys[operator_partition][key]
+        if not self.remote_keys[operator_partition]:
+            del self.remote_keys[operator_partition]
 
-    def get_worker_id_old_partition(self, operator_name: str, partition: int, key: Any) -> tuple[int, int]:
-        return self.remote_keys[(operator_name, partition)][key]
+    def keys_remaining_to_remote(self):
+        c = 0
+        for keys in self.remote_keys.values():
+            c += len(keys)
+        return c
+
+    def get_async_migrate_batch(self, batch_size: int) -> dict[OperatorPartition, KVPairs]:
+        batch_to_send: dict[OperatorPartition, KVPairs] = defaultdict(dict)
+        c = 0
+        operator_partitions_to_clear = []
+        for operator_partition, keys in self.keys_to_send.items():
+            operator_name, old_partition = operator_partition
+            while keys and c < batch_size:
+                key, new_partition = keys.pop()
+                value = self.data[operator_partition].pop(key)
+                batch_to_send[(operator_name, new_partition)][key] = value
+                c += 1
+            if not keys:
+                operator_partitions_to_clear.append(operator_partition)
+            if c >= batch_size:
+                break
+        # Remove emptied partitions
+        for operator_partition in operator_partitions_to_clear:
+            del self.keys_to_send[operator_partition]
+        return batch_to_send
+
+    def set_batch_data_from_migration(self, operator_partition: OperatorPartition, kv_pairs: KVPairs):
+        operator_partition = tuple(operator_partition) # new partitioning
+        self.data[operator_partition].update(kv_pairs)
+        for key in kv_pairs.keys():
+            del self.remote_keys[operator_partition][key]
+        if not self.remote_keys[operator_partition]:
+            del self.remote_keys[operator_partition]
+
+    def get_worker_id_old_partition(self, operator_name: str, partition: int, key: Any) -> tuple[int, int] | None:
+        """
+        Returns the worker ID and worker index for a given key from a previously assigned operator partition.
+
+        This method is getting call only during a migration cycle. It can return None because the key could have been
+        already migrated from a previous function call.
+
+        Args:
+            operator_name (str): The name of the operator.
+            partition (int): The partition index of the operator.
+            key (Any): The key whose worker mapping is being queried.
+
+        Returns:
+            tuple[int, int] | None: A tuple of (worker_id, worker_index) if the key is found,
+            otherwise `None`.
+        """
+        operator_partition = (operator_name, partition)
+        if operator_partition in self.remote_keys and key in self.remote_keys[operator_partition]:
+            return self.remote_keys[operator_partition][key]
+        else:
+            return None
 
     def add_new_operator_partition(self, operator_partition: OperatorPartition):
         operator_partition = tuple(operator_partition)

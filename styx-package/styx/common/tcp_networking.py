@@ -204,9 +204,11 @@ class NetworkingManager(BaseNetworking):
     def set_peers(self, peers: dict[int, tuple[str, int, int]]):
         self.peers = peers
 
-    async def request_key(self, operator_name: str, partition: int, key: Any, worker_id_old_part: tuple[int, int]):
+    async def request_key(self, operator_name: str, partition: int, key: Any, worker_id_old_part: tuple[int, int] | None):
         operator_partition = (operator_name, partition)
-        if operator_partition in self.wait_remote_key_event and key in self.wait_remote_key_event[operator_partition]:
+        if (worker_id_old_part is None or
+                (operator_partition in self.wait_remote_key_event and
+                 key in self.wait_remote_key_event[operator_partition])):
             # If a request for that key is already made don't send it again
             return
         worker_id, old_partition = worker_id_old_part

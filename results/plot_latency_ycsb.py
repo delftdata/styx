@@ -7,8 +7,8 @@ rcParams['figure.figsize'] = [14, 5]
 plt.rcParams.update({'font.size': 22})
 warmup_seconds = 30
 
-start_migration_time = 31
-end_migration_time = 44
+start_migration_time_ms_epoch  = 1747174764328 - 1000
+end_migration_time_ms_epoch = 1747174771914
 
 
 # Load CSVs
@@ -29,6 +29,9 @@ merged_df['latency_ms'] = merged_df['timestamp_out'] - merged_df['timestamp_in']
 t0 = merged_df['timestamp_in'].min()
 merged_df['time_since_start_sec'] = (merged_df['timestamp_in'] - t0) / 1000
 
+end_migration_time = ((end_migration_time_ms_epoch - t0) // 1000) - warmup_seconds
+start_migration_time = ((start_migration_time_ms_epoch - t0) // 1000) - warmup_seconds
+
 # Filter to show only 5 seconds onwards
 filtered_df = merged_df[merged_df['time_since_start_sec'] >= warmup_seconds].sort_values(by='time_since_start_sec')
 
@@ -46,15 +49,15 @@ mean_latency_df['time_bucket_shifted'] = mean_latency_df['time_bucket'] - warmup
 
 # Plot mean latency
 plt.plot(mean_latency_df['time_bucket_shifted'], mean_latency_df['latency_ms'], label='Mean Latency', linewidth=3)
-# plt.axvline(x=start_migration_time, color='red', linestyle='--', label='Start Migration', linewidth=3)
-# plt.text(start_migration_time - 3, -5, f'{start_migration_time}s', color='red', fontsize=20, ha='center', va='top')
-# plt.axvline(x=end_migration_time, color='green', linestyle='--', label='End Migration', linewidth=3)
-# plt.text(end_migration_time + 3, -5, f'{end_migration_time}s', color='green', fontsize=20, ha='center', va='top')
+plt.axvline(x=start_migration_time, color='red', linestyle='--', label='Start Migration', linewidth=3)
+plt.text(start_migration_time - 3, -5, f'{start_migration_time}s', color='red', fontsize=20, ha='center', va='top')
+plt.axvline(x=end_migration_time, color='green', linestyle='--', label='End Migration', linewidth=3)
+plt.text(end_migration_time + 3, -5, f'{end_migration_time}s', color='green', fontsize=20, ha='center', va='top')
 plt.xlabel('Time (s)')
 plt.grid(linestyle="dotted", linewidth=1.5, axis="y")
 plt.ylabel('Latency (ms)')
 plt.legend()
-plt.ylim([0, 1000])
+plt.ylim([0, 1200])
 plt.xlim([0, 120])
 plt.tight_layout()
 plt.savefig("latency_ycsb.pdf")

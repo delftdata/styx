@@ -40,5 +40,6 @@ class MessageType(IntEnum):
     ReceiveMigrationHashes = 35
     RequestRemoteKey = 36
     ReceiveRemoteKey = 37
+    AsyncMigration = 38
     AlignStart = 100
     AlignEnd = 101

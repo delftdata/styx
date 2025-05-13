@@ -96,7 +96,7 @@ def main(
                         "min": min(runtime),
                         "mean": np.average(runtime)
                         },
-        "messages": missed,
+        "missed messages": missed,
         "throughput": {
             "max": max(throughput_vals),
             "avg": sum(throughput_vals) / len(throughput_vals),

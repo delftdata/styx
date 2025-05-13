@@ -118,11 +118,12 @@ def benchmark_runner(proc_num) -> dict[bytes, dict]:
             time.sleep(1 - lps)
         sec_end2 = timer()
         print(f'Latency per second: {sec_end2 - sec_start}')
-        if cur_sec == SECOND_TO_TAKE_MIGRATION:
+        if cur_sec == SECOND_TO_TAKE_MIGRATION and proc_num == 0:
             new_g = StateflowGraph('ycsb-benchmark', operator_state_backend=LocalStateBackend.DICT)
             ycsb_operator.set_n_partitions(END_N_PARTITIONS)
             new_g.add_operators(ycsb_operator)
             styx.submit_dataflow(new_g)
+            print('Migration request submitted')
     end = timer()
     print(f'Average latency per second: {(end - start) / seconds}')
 
