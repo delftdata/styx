@@ -20,4 +20,4 @@ WORKDIR /usr/local/styx/shopping-cart-demo
 
 COPY --chown=styx shopping-cart-demo .
 
-EXPOSE 8000
+EXPOSE 8001

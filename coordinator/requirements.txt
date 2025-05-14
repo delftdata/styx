@@ -2,7 +2,7 @@
 uvloop==0.21.0
 msgspec==0.19.0
 cloudpickle==3.1.1
-cityhash==0.4.7
+cityhash==0.4.8
 # monitoring service
 prometheus-client==0.21.1
 # kafka

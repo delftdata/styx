@@ -16,7 +16,7 @@ USER_STARTING_CREDIT = 1_000_000
 NUMBER_OF_ORDERS = 100_000
 N_PARTITIONS = 4
 
-ORDER_URL = PAYMENT_URL = STOCK_URL ="http://localhost:8000"
+ORDER_URL = PAYMENT_URL = STOCK_URL ="http://localhost:8001"
 
 
 async def populate_databases():
