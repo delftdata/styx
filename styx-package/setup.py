@@ -15,7 +15,7 @@ setuptools.setup(
         # async logging
         'aiologger>=0.7.0,<1.0',
         # hashing strings
-        'cityhash>=0.4.7,<1.0.0',
+        'cityhash>=0.4.8,<1.0.0',
     ],
     python_requires='>=3.13',
 )

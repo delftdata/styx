@@ -1,7 +1,9 @@
+from typing import Any
+
 from styx.common.operator import Operator
 from styx.common.stateful_function import StatefulFunction
 
-order_operator = Operator('order')
+order_operator = Operator('order', n_partitions=4)
 
 
 class OrderDoesNotExist(Exception):
@@ -22,7 +24,7 @@ async def create_order(ctx: StatefulFunction, user_id: str):
 
 
 @order_operator.register
-async def batch_create(ctx: StatefulFunction, key_value_pairs: dict[any, any]):
+async def batch_create(ctx: StatefulFunction, key_value_pairs: dict[Any, Any]):
     ctx.batch_insert(key_value_pairs)
     return "Batch insert successful"
 
