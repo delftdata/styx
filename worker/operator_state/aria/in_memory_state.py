@@ -50,6 +50,12 @@ class InMemoryOperatorState(BaseAriaState):
         if not self.remote_keys[operator_partition]:
             del self.remote_keys[operator_partition]
 
+    def migrate_within_the_same_worker(self, operator_name: str, new_partition: int, key: Any, old_partition: int):
+        new_operator_partition: OperatorPartition = (operator_name, new_partition)
+        self.set_data_from_migration(new_operator_partition,
+                                     key,
+                                     self.get_key_to_migrate(new_operator_partition, key, old_partition))
+
     def keys_remaining_to_remote(self):
         c = 0
         for keys in self.remote_keys.values():

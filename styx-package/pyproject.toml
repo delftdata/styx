@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "styx"
+version = "0.0.1"
+authors = [
+    { name = "Kyriakos Psarakis" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    # Serialization
+    "cloudpickle>=3.1.1,<4.0.0",
+    "msgspec>=0.19.0,<1.0.0",
+    # Kafka clients (async/sync)
+    "aiokafka>=0.12.0,<1.0",
+    "confluent-kafka>=2.8.0,<2.8.1",
+    # Async logging
+    "aiologger>=0.7.0,<1.0",
+    # Hashing
+    "cityhash>=0.4.8,<1.0.0",
+    # Compression
+    "zstandard>=0.23.0,<1.0.0"
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+exclude = ["tests*"]

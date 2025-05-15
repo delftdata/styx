@@ -45,5 +45,9 @@ class BaseOperatorState(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def migrate_within_the_same_worker(self, operator_name: str, new_partition: int, key: Any, old_partition: int):
+        raise NotImplementedError
+
+    @abstractmethod
     def exists(self, key: Any, operator_name: str, partition: int):
         raise NotImplementedError

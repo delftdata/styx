@@ -1,14 +1,14 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import ast
-from matplotlib import rcParams, rc
+from matplotlib import rcParams
 
 rcParams['figure.figsize'] = [14, 5]
 plt.rcParams.update({'font.size': 22})
 warmup_seconds = 30
 
-start_migration_time_ms_epoch  = 1747174764328 - 1000
-end_migration_time_ms_epoch = 1747174771914
+start_migration_time_ms_epoch  = 1747337077616 - 1000
+end_migration_time_ms_epoch = 1747337108856
 
 
 # Load CSVs
@@ -57,7 +57,7 @@ plt.xlabel('Time (s)')
 plt.grid(linestyle="dotted", linewidth=1.5, axis="y")
 plt.ylabel('Latency (ms)')
 plt.legend()
-plt.ylim([0, 1200])
+plt.ylim([0, 12000])
 plt.xlim([0, 120])
 plt.tight_layout()
 plt.savefig("latency_ycsb.pdf")

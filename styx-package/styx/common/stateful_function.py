@@ -50,19 +50,37 @@ class StatefulFunction(Function):
 
     async def __call__(self, *args, **kwargs):
         try:
+            await self.__operator_lock.acquire()
             if self.__state.in_remote_keys(self.__key, self.__operator_name, self.__partition):
-                # Migration phase, need to get the key from a remote worker first
-                async with self.__operator_lock:
-                    # Need to lock only for the message send to avoid duplicates
+
+                worker_id_old_partition = self.__state.get_worker_id_old_partition(self.__operator_name,
+                                                                                   self.__partition,
+                                                                                   self.__key)
+
+                is_local: bool = (self.__operator_name, worker_id_old_partition[1]) in self.__state.operator_partitions
+
+                if is_local:
+                    # Transfer the key from another partition within the same worker
+                    self.__state.migrate_within_the_same_worker(self.__operator_name,
+                                                                self.__partition,
+                                                                self.__key,
+                                                                worker_id_old_partition[1])
+                    self.__operator_lock.release()
+                else:
+                    # Get the key from a remote worker
+                    # logging.warning(f"{self.__request_id} | Requesting {self.__operator_name}:{self.__partition} "
+                    #                 f"-> {self.__key} from remote")
                     await self.__networking.request_key(self.__operator_name,
                                                         self.__partition,
                                                         self.__key,
-                                                        self.__state.get_worker_id_old_partition(self.__operator_name,
-                                                                                                 self.__partition,
-                                                                                                 self.__key))
-                await self.__networking.wait_for_remote_key_event(self.__operator_name,
-                                                                  self.__partition,
-                                                                  self.__key)
+                                                        worker_id_old_partition)
+                    # Need to lock only for the message send to avoid duplicates
+                    self.__operator_lock.release()
+                    await self.__networking.wait_for_remote_key_event(self.__operator_name,
+                                                                      self.__partition,
+                                                                      self.__key)
+            else:
+                self.__operator_lock.release()
             async with self.__operator_lock:
                 res = await self.run(*args)
             # logging.info(f'Run args: {args} kwargs: {kwargs} async remote calls: {self.__async_remote_calls}')
@@ -89,9 +107,10 @@ class StatefulFunction(Function):
                                                                is_root=True)
             return res, n_remote_calls, partial_node_count
         except Exception as e:
-            logging.warning(traceback.format_exc())
-            # logging.debug(f"{self.__request_id} | {self.__t_id} | {self.__key} | "
-            #               f"Call @{self.__operator_name}:{self.name}:FB={self.__fallback_enabled} failed with error: {e}")
+            # logging.warning(traceback.format_exc())
+            # logging.warning(f"{self.__request_id} | {self.__t_id} | {self.__key} | "
+            #               f"Call @{self.__operator_name}:{self.name}:FB={self.__fallback_enabled} in_remote={self.__state.in_remote_keys(self.__key, self.__operator_name, self.__partition)} "
+            #             f" in_local={self.__state.exists(self.__key, self.__operator_name, self.__partition)} failed with error: {e}")
             return e, -1, -1
 
     @property
@@ -143,7 +162,7 @@ class StatefulFunction(Function):
         if n_remote_calls == 0:
             return n_remote_calls
         # if fallback is enabled there is no need to call the functions because they are already cached
-        new_share_fraction: str = str(fractions.Fraction(f'1/{n_remote_calls}') * fractions.Fraction(ack_share))
+        new_share_fraction: str = str(fractions.Fraction(ack_share) / n_remote_calls)
         if is_root:
             # This is the root
             ack_host = self.__networking.host_name

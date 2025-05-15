@@ -147,14 +147,10 @@ class BaseNetworking(ABC):
         if ack_id in self.waited_ack_events:
             self.waited_ack_events[ack_id].clear()
             self.ack_fraction[ack_id] = fractions.Fraction(0)
-        else:
-            logging.error(f"ACK_ID: {ack_id} should exist in the reset_ack_for_fallback!")
 
     def reset_ack_for_fallback_cache(self, ack_id: int):
         if ack_id in self.waited_ack_events:
             self.waited_ack_events[ack_id].clear()
-        else:
-            logging.error(f"ACK_ID: {ack_id} should exist in the reset_ack_for_fallback_cache!")
 
     def clear_aborted_events_for_fallback(self):
         self.aborted_events.clear()

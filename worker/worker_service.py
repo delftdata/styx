@@ -132,17 +132,20 @@ class Worker(object):
 
         self.deployed_graph: StateflowGraph | None = None
 
-        self.receive_migration_hashes_lock: asyncio.Lock = asyncio.Lock()
         self.final_keys_to_send = defaultdict(set)
         self.results_lock = threading.Lock()
+
+        self.networking_locks: dict[MessageType, asyncio.Lock] = {
+            MessageType.ReceiveMigrationHashes: asyncio.Lock(),
+            MessageType.ReceiveRemoteKey: asyncio.Lock(),
+            MessageType.RequestRemoteKey: asyncio.Lock()
+        }
 
     @staticmethod
     def rehash_and_store(operator_partition: OperatorPartition,
                          partitioner: HashPartitioner,
-                         assigned_operator_partitions: set[OperatorPartition],
                          operator_partition_keys: list[Any],
                          dns: dict[str, dict[int, tuple[str, int, int]]],
-                         peers: dict[int, tuple[str, int, int]],
                          worker_id: int):
         ser_time = 0.0
         wire_time = 0.0
@@ -156,19 +159,21 @@ class Worker(object):
         for key in operator_partition_keys:
             new_partition: int = partitioner.get_partition_no_cache(key)
             operator_partition = (operator_name, new_partition)
-            if operator_partition not in assigned_operator_partitions:
-                # If this key is already in the correct worker no need to communicate it
+            if new_partition != previous_partition:
+                # If this key is already in the correct partition no need to transfer it
                 new_partitions[operator_partition][key] = (worker_id, previous_partition)
                 keys_to_send[(operator_name, previous_partition)].add((key, new_partition))
         end_hashing = timer()
-        sync_logging.warning(f"Hashing time: {end_hashing - start_hashing}")
 
         def upload_partition(msg: bytes, worker_info: tuple[str, int, int]):
             s_wire = timer()
-            s = socket.socket()
-            s.connect((worker_info[0], worker_info[1]))
-            s.send(msg)
-            s.close()
+            try:
+                s = socket.socket()
+                s.connect((worker_info[0], worker_info[1]))
+                s.send(msg)
+                s.close()
+            except Exception as e:
+                sync_logging.error(f"MIGRATION | NETWORK THREAD ERROR: {e}")
             e_wire = timer()
             return e_wire - s_wire
 
@@ -184,7 +189,7 @@ class Worker(object):
                                                                             serializer=Serializer.MSGPACK)
                 e_ser = timer()
                 ser_time += e_ser - s_ser
-                sync_logging.warning(f"MIGRATION | SENDING: {n_op} FROM: {worker_id}")
+                # sync_logging.warning(f"MIGRATION | SENDING: {n_op} FROM: {worker_id}")
                 futures.append(executor.submit(upload_partition, serialized_hashes, dns[n_o][n_p]))
 
             for fut in futures:
@@ -207,7 +212,7 @@ class Worker(object):
                 self.completed_repartitioning = 0
 
     async def worker_controller(self, data: bytes):
-        message_type: int = self.networking.get_msg_type(data)
+        message_type: MessageType = self.networking.get_msg_type(data)
         match message_type:
             # RECEIVE EXECUTION PLAN OF A DATAFLOW GRAPH
             case MessageType.ReceiveExecutionPlan:
@@ -279,7 +284,6 @@ class Worker(object):
                     self.total_repartitioning = sum([len(operator_partitions)
                                                      for operator_partitions in operator_partitions_to_repartition.values()])
                     loop = asyncio.get_running_loop()
-                    futures = []
                     for operator_name, operator_partitions in operator_partitions_to_repartition.items():
                         for operator_partition in operator_partitions:
                             new_operator_partitioner: HashPartitioner = self.deployed_graph.get_operator_by_name(operator_name).get_partitioner()
@@ -288,10 +292,8 @@ class Worker(object):
                                                  self.rehash_and_store,
                                                  operator_partition,
                                                  new_operator_partitioner,
-                                                 set(new_worker_operators.keys()),
                                                  list(self.local_state.get_operator_data_for_repartitioning(operator_partition).keys()),
                                                  self.dns,
-                                                 self.peers,
                                                  self.id).add_done_callback(self.repartitioning_callback)
                     await self.completed_repartitioning_event.wait()
                     self.completed_repartitioning_event.clear()
@@ -376,22 +378,24 @@ class Worker(object):
                     logging.error(f"Uncaught exception while migrating: {e}")
             case MessageType.ReceiveMigrationHashes:
                 (n_op, data) = self.networking.decode_message(data)
-                logging.warning(f"MIGRATION ReceiveMigrationHashes | {n_op} {len(data.keys())}")
-                async with self.receive_migration_hashes_lock:
+                # logging.warning(f"MIGRATION ReceiveMigrationHashes | {n_op} {len(data.keys())}")
+                async with self.networking_locks[message_type]:
                     self.local_state.add_remote_keys(n_op, data)
             case MessageType.RequestRemoteKey:
                 (operator_partition, key, old_partition, host, port) = self.networking.decode_message(data)
                 # logging.warning(f"MIGRATION RequestRemoteKey | {key}:{old_partition} to {operator_partition}")
-                data_to_send = self.local_state.get_key_to_migrate(operator_partition, key, old_partition)
-                await self.networking.send_message(host, port,
-                                                   msg=(operator_partition, key, data_to_send),
-                                                   msg_type=MessageType.ReceiveRemoteKey,
-                                                   serializer=Serializer.MSGPACK)
+                async with self.networking_locks[message_type]:
+                    data_to_send = self.local_state.get_key_to_migrate(operator_partition, key, old_partition)
+                    await self.networking.send_message(host, port,
+                                                       msg=(operator_partition, key, data_to_send),
+                                                       msg_type=MessageType.ReceiveRemoteKey,
+                                                       serializer=Serializer.MSGPACK)
             case MessageType.ReceiveRemoteKey:
                 (operator_partition, key, value) = self.networking.decode_message(data)
                 # logging.warning(f"MIGRATION ReceiveRemoteKey | {key} to {operator_partition}")
-                self.local_state.set_data_from_migration(operator_partition, key, value)
-                self.protocol_networking.key_received(operator_partition, key)
+                async with self.networking_locks[message_type]:
+                    self.local_state.set_data_from_migration(operator_partition, key, value)
+                    self.protocol_networking.key_received(operator_partition, key)
             case MessageType.MigrationRepartitioningDone:
                 (self.m_epoch_counter, self.m_t_counter,
                  self.m_input_offsets, self.m_output_offsets) = self.networking.decode_message(data)

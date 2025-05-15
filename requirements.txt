@@ -16,9 +16,9 @@ minio==7.2.15
 # deathstar
 geopy
 # shopping cart demo
-sanic==24.12.0
-aiohttp==3.11.12
-locust==2.32.9
+sanic==25.3.0
+# aiohttp==3.11.18
+locust==2.37.2
 # Plots and demo
 pandas==2.2.3
 tqdm==4.67.1

@@ -12,7 +12,7 @@ def main(
         warmup_seconds,
         client_threads,
         n_w):
-    exp_name = f"tpcc_W{n_w}_{input_rate * client_threads}"
+    exp_name = f"tpcc_migration_W{n_w}_{input_rate * client_threads}"
 
     origin_input_msgs = pd.read_csv(f'{save_dir}/client_requests.csv',
                                     dtype={'request_id': bytes,

@@ -348,15 +348,19 @@ class AriaProtocol(BaseTransactionalProtocol):
         return start_wal, end_wal
 
     async def send_async_migrate_batch(self):
-        if self.local_state.has_keys_to_send:
+        if USE_ASYNC_MIGRATION and self.local_state.has_keys_to_send:
             batch = self.local_state.get_async_migrate_batch(ASYNC_MIGRATION_BATCH_SIZE)
             for operator_partition, k_v_pairs in batch.items():
                 operator_name, partition = operator_partition
                 worker = self.dns[operator_name][partition]
-                await self.networking.send_message(worker[0], worker[2],
-                                                   msg=(operator_partition, k_v_pairs),
-                                                   msg_type=MessageType.AsyncMigration,
-                                                   serializer=Serializer.MSGPACK)
+                if worker == self.id:
+                    async with self.networking_locks[MessageType.AsyncMigration]:
+                        self.local_state.set_batch_data_from_migration(operator_partition, k_v_pairs)
+                else:
+                    await self.networking.send_message(worker[0], worker[2],
+                                                       msg=(operator_partition, k_v_pairs),
+                                                       msg_type=MessageType.AsyncMigration,
+                                                       serializer=Serializer.MSGPACK)
 
     async def function_scheduler(self):
         await self.started.wait()
@@ -508,13 +512,15 @@ class AriaProtocol(BaseTransactionalProtocol):
                     #     f'concurrency aborts for next epoch: {len(self.concurrency_aborts_everywhere)} '
                     #     f'abort rate: {abort_rate}'
                     # )
-                    migration_progress = self.local_state.keys_remaining_to_remote()
-                    if migration_progress != 0:
-                        self.migration_started = True
-                        logging.warning(f"MIGRATION_PROGRESS: {migration_progress}")
-                    elif migration_progress == 0 and self.migration_started and not self.migration_finished:
-                        self.migration_finished = True
-                        logging.warning(f"MIGRATION_FINISHED at epoch: {self.sequencer.epoch_counter} at time: {time.time_ns() // 1_000_000}")
+                    if USE_ASYNC_MIGRATION:
+                        migration_progress = self.local_state.keys_remaining_to_remote()
+                        if migration_progress != 0:
+                            self.migration_started = True
+                            logging.warning(f"MIGRATION_PROGRESS: {migration_progress}")
+                        elif migration_progress == 0 and self.migration_started and not self.migration_finished:
+                            self.migration_finished = True
+                            logging.warning(f"MIGRATION_FINISHED at epoch: {self.sequencer.epoch_counter}"
+                                            f" at time: {time.time_ns() // 1_000_000}")
                     await self.sync_workers(msg_type=MessageType.SyncCleanup,
                                             message=(self.id,
                                                      epoch_throughput,
