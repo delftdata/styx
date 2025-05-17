@@ -516,7 +516,7 @@ class AriaProtocol(BaseTransactionalProtocol):
                         migration_progress = self.local_state.keys_remaining_to_remote()
                         if migration_progress != 0:
                             self.migration_started = True
-                            # logging.warning(f"MIGRATION_PROGRESS: {migration_progress}")
+                            logging.warning(f"MIGRATION_PROGRESS: {migration_progress}")
                         elif migration_progress == 0 and self.migration_started and not self.migration_finished:
                             self.migration_finished = True
                             logging.warning(f"MIGRATION_FINISHED at epoch: {self.sequencer.epoch_counter}"

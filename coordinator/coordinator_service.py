@@ -110,171 +110,198 @@ class CoordinatorService(object):
 
         self.migration_in_progress: bool = False
 
+        self.networking_locks: dict[MessageType, asyncio.Lock] = {
+            MessageType.SendExecutionGraph: asyncio.Lock(),
+            MessageType.MigrationRepartitioningDone: asyncio.Lock(),
+            MessageType.MigrationDone: asyncio.Lock(),
+            MessageType.RegisterWorker: asyncio.Lock(),
+            MessageType.SnapID: asyncio.Lock(),
+            MessageType.Heartbeat: asyncio.Lock(),
+            MessageType.AriaProcessingDone: asyncio.Lock(),
+            MessageType.AriaCommit: asyncio.Lock(),
+            MessageType.AriaFallbackStart: asyncio.Lock(),
+            MessageType.AriaFallbackDone: asyncio.Lock(),
+            MessageType.SyncCleanup: asyncio.Lock(),
+            MessageType.DeterministicReordering: asyncio.Lock()
+        }
+
     # Refactoring candidate
     async def coordinator_controller(self, transport, data, pool: concurrent.futures.ProcessPoolExecutor):
-        message_type: int = self.networking.get_msg_type(data)
+        message_type: MessageType = self.networking.get_msg_type(data)
         match message_type:
             case MessageType.SendExecutionGraph:
-                # Received execution graph from a styx client
-                (graph, ) = self.networking.decode_message(data)
-                if self.coordinator.graph_submitted and not self.migration_in_progress:
-                    # Gracefully stop the transactional protocol in the next epoch
-                    self.migration_in_progress = True
-                    self.aria_metadata.stop_in_next_epoch()
-                    # Start the InitMigration phase
-                    logging.warning(f"MIGRATION | START {graph}")
-                    await self.coordinator.update_stateflow_graph(graph)
-                    self.migration_metadata = MigrationMetadata(len(self.coordinator.worker_pool.get_participating_workers()))
-                elif not self.coordinator.graph_submitted:
-                    await self.coordinator.submit_stateflow_graph(graph)
-                    self.aria_metadata = AriaSyncMetadata(len(self.coordinator.worker_pool.get_participating_workers()))
-                else:
-                    logging.warning("Another migration request is currently in progress!")
-                    return
-                logging.info("Submitted Stateflow Graph to Workers")
+                async with self.networking_locks[message_type]:
+                    # Received execution graph from a styx client
+                    (graph, ) = self.networking.decode_message(data)
+                    if self.coordinator.graph_submitted and not self.migration_in_progress:
+                        # Gracefully stop the transactional protocol in the next epoch
+                        self.migration_in_progress = True
+                        self.aria_metadata.stop_in_next_epoch()
+                        # Start the InitMigration phase
+                        logging.warning(f"MIGRATION | START {graph}")
+                        await self.coordinator.update_stateflow_graph(graph)
+                        self.migration_metadata = MigrationMetadata(len(self.coordinator.worker_pool.get_participating_workers()))
+                    elif not self.coordinator.graph_submitted:
+                        await self.coordinator.submit_stateflow_graph(graph)
+                        self.aria_metadata = AriaSyncMetadata(len(self.coordinator.worker_pool.get_participating_workers()))
+                    else:
+                        logging.warning("Another migration request is currently in progress!")
+                        return
+                    logging.info("Submitted Stateflow Graph to Workers")
             case MessageType.MigrationRepartitioningDone:
-                (epoch_counter, t_counter, input_offsets, output_offsets) = self.networking.decode_message(data)
-                sync_complete: bool = await self.migration_metadata.repartitioning_done(epoch_counter,
-                                                                                        t_counter,
-                                                                                        input_offsets,
-                                                                                        output_offsets)
-                if sync_complete:
-                    await self.finalize_migration_repartition()
-                    await self.migration_metadata.cleanup()
+                async with self.networking_locks[message_type]:
+                    (epoch_counter, t_counter, input_offsets, output_offsets) = self.networking.decode_message(data)
+                    sync_complete: bool = await self.migration_metadata.repartitioning_done(epoch_counter,
+                                                                                            t_counter,
+                                                                                            input_offsets,
+                                                                                            output_offsets)
+                    if sync_complete:
+                        await self.finalize_migration_repartition()
+                        await self.migration_metadata.cleanup(message_type)
             case MessageType.MigrationDone:
-                logging.warning("MIGRATION | MigrationDone")
-                sync_complete: bool = await self.migration_metadata.set_empty_sync_done()
-                if sync_complete:
-                    n_workers = len(self.coordinator.worker_pool.get_participating_workers())
-                    self.aria_metadata = AriaSyncMetadata(n_workers)
-                    await self.protocol_networking.close_all_connections()
-                    await self.migration_metadata.cleanup()
-                    await self.finalize_migration()
-                    await asyncio.sleep(1) # give a second for the workers to process that the migration phase is over
-                    self.migration_in_progress = False
+                async with self.networking_locks[message_type]:
+                    sync_complete: bool = await self.migration_metadata.set_empty_sync_done(message_type)
+                    logging.warning(f"MIGRATION | MigrationDone | {self.migration_metadata.sync_sum}")
+                    if sync_complete:
+                        logging.warning("MIGRATION | MigrationDone | sync_complete")
+                        n_workers = len(self.coordinator.worker_pool.get_participating_workers())
+                        self.aria_metadata = AriaSyncMetadata(n_workers)
+                        await self.protocol_networking.close_all_connections()
+                        await self.finalize_migration()
+                        await self.migration_metadata.cleanup(message_type)
+                        self.migration_in_progress = False
             case MessageType.RegisterWorker:  # REGISTER_WORKER
-                worker_ip, worker_port, protocol_port = self.networking.decode_message(data)
-                # A worker registered to the coordinator
-                worker_id, init_recovery = self.coordinator.register_worker(worker_ip, worker_port, protocol_port)
-                transport.write(self.networking.encode_message(msg=worker_id,
-                                                            msg_type=MessageType.RegisterWorker,
-                                                            serializer=Serializer.MSGPACK))
-                if init_recovery:
-                    async with self.recovery_lock:
-                        self.workers_that_re_registered.append(self.coordinator.get_worker_with_id(worker_id))
-                logging.warning(f"Worker registered {worker_ip}:{worker_port} with id {worker_id}")
+                async with self.networking_locks[message_type]:
+                    worker_ip, worker_port, protocol_port = self.networking.decode_message(data)
+                    # A worker registered to the coordinator
+                    worker_id, init_recovery = self.coordinator.register_worker(worker_ip, worker_port, protocol_port)
+                    transport.write(self.networking.encode_message(msg=worker_id,
+                                                                msg_type=MessageType.RegisterWorker,
+                                                                serializer=Serializer.MSGPACK))
+                    if init_recovery:
+                        async with self.recovery_lock:
+                            self.workers_that_re_registered.append(self.coordinator.get_worker_with_id(worker_id))
+                    logging.warning(f"Worker registered {worker_ip}:{worker_port} with id {worker_id}")
             case MessageType.SnapID:
                 # Get snap id from worker
-                (worker_id, snapshot_id, start, end,
-                 partial_input_offsets, partial_output_offsets,
-                 epoch_counter, t_counter) = self.networking.decode_message(data)
-                snapshot_time = end - start
-                self.snapshotting_gauge.labels(instance=worker_id).set(snapshot_time)
-                logging.warning(f'Worker: {worker_id} | '
-                                f'@Epoch: {epoch_counter} | '
-                                f'Completed snapshot: {snapshot_id} | '
-                                f'started at: {start} | '
-                                f'ended at: {end} | '
-                                f'took: {snapshot_time}ms')
-                self.coordinator.register_snapshot(worker_id, snapshot_id,
-                                                   partial_input_offsets, partial_output_offsets,
-                                                   epoch_counter, t_counter,
-                                                   pool)
+                async with self.networking_locks[message_type]:
+                    (worker_id, snapshot_id, start, end,
+                     partial_input_offsets, partial_output_offsets,
+                     epoch_counter, t_counter) = self.networking.decode_message(data)
+                    snapshot_time = end - start
+                    self.snapshotting_gauge.labels(instance=worker_id).set(snapshot_time)
+                    logging.warning(f'Worker: {worker_id} | '
+                                    f'@Epoch: {epoch_counter} | '
+                                    f'Completed snapshot: {snapshot_id} | '
+                                    f'started at: {start} | '
+                                    f'ended at: {end} | '
+                                    f'took: {snapshot_time}ms')
+                    self.coordinator.register_snapshot(worker_id, snapshot_id,
+                                                       partial_input_offsets, partial_output_offsets,
+                                                       epoch_counter, t_counter,
+                                                       pool)
             case MessageType.Heartbeat:
-                # HEARTBEATS
-                (worker_id, cpu_perc, mem_util, rx_net, tx_net) = self.networking.decode_message(data)
-                self.cpu_usage_gauge.labels(instance=worker_id).set(cpu_perc) # %
-                self.memory_usage_gauge.labels(instance=worker_id).set(mem_util) # MB
-                self.network_rx_gauge.labels(instance=worker_id).set(rx_net) # KB
-                self.network_tx_gauge.labels(instance=worker_id).set(tx_net) # KB
-                heartbeat_rcv_time = timer()
-                logging.info(f'Heartbeat received from: {worker_id} at time: {heartbeat_rcv_time}')
-                self.coordinator.register_worker_heartbeat(worker_id, heartbeat_rcv_time)
+                async with self.networking_locks[message_type]:
+                    # HEARTBEATS
+                    (worker_id, cpu_perc, mem_util, rx_net, tx_net) = self.networking.decode_message(data)
+                    self.cpu_usage_gauge.labels(instance=worker_id).set(cpu_perc) # %
+                    self.memory_usage_gauge.labels(instance=worker_id).set(mem_util) # MB
+                    self.network_rx_gauge.labels(instance=worker_id).set(rx_net) # KB
+                    self.network_tx_gauge.labels(instance=worker_id).set(tx_net) # KB
+                    heartbeat_rcv_time = timer()
+                    logging.info(f'Heartbeat received from: {worker_id} at time: {heartbeat_rcv_time}')
+                    self.coordinator.register_worker_heartbeat(worker_id, heartbeat_rcv_time)
             case MessageType.ReadyAfterRecovery:
-                # report ready after recovery
-                (worker_id,) = self.networking.decode_message(data)
-                self.coordinator.worker_is_ready_after_recovery(worker_id)
-                logging.info(f'ready after recovery received from: {worker_id}')
+                async with self.networking_locks[message_type]:
+                    # report ready after recovery
+                    (worker_id,) = self.networking.decode_message(data)
+                    self.coordinator.worker_is_ready_after_recovery(worker_id)
+                    logging.info(f'ready after recovery received from: {worker_id}')
             case _:
                 # Any other message type
                 logging.error(f"COORDINATOR SERVER: Non supported message type: {message_type}")
 
     async def protocol_controller(self, data):
-        message_type: int = self.protocol_networking.get_msg_type(data)
+        message_type: MessageType = self.protocol_networking.get_msg_type(data)
         match message_type:
             case MessageType.AriaProcessingDone:
-                if not self.aria_metadata.sent_proceed_msg:
-                    self.aria_metadata.sent_proceed_msg = True
-                    await self.worker_wants_to_proceed()
-                message = self.protocol_networking.decode_message(data)
-                if message == b'':
-                    remote_logic_aborts = set()
-                else:
-                    remote_logic_aborts = message[0]
-                sync_complete: bool = await self.aria_metadata.set_aria_processing_done(remote_logic_aborts)
-                if sync_complete:
-                    await self.finalize_worker_sync(MessageType(message_type),
-                                                    (self.aria_metadata.logic_aborts_everywhere,),
-                                                    Serializer.PICKLE)
-                    await self.aria_metadata.cleanup()
+                async with self.networking_locks[message_type]:
+                    if not self.aria_metadata.sent_proceed_msg:
+                        self.aria_metadata.sent_proceed_msg = True
+                        await self.worker_wants_to_proceed()
+                    message = self.protocol_networking.decode_message(data)
+                    if message == b'':
+                        remote_logic_aborts = set()
+                    else:
+                        remote_logic_aborts = message[0]
+                    sync_complete: bool = await self.aria_metadata.set_aria_processing_done(remote_logic_aborts)
+                    if sync_complete:
+                        await self.finalize_worker_sync(MessageType(message_type),
+                                                        (self.aria_metadata.logic_aborts_everywhere,),
+                                                        Serializer.PICKLE)
+                        await self.aria_metadata.cleanup()
             case MessageType.AriaCommit:
-                message = self.protocol_networking.decode_message(data)
-                aborted, remote_t_counter, processed_seq_size = message
-                sync_complete: bool = await self.aria_metadata.set_aria_commit_done(aborted,
-                                                                                    remote_t_counter,
-                                                                                    processed_seq_size)
-                if sync_complete:
-                    await self.finalize_worker_sync(MessageType(message_type),
-                                                    (self.aria_metadata.concurrency_aborts_everywhere,
-                                                     self.aria_metadata.processed_seq_size,
-                                                     self.aria_metadata.max_t_counter,
-                                                     self.aria_metadata.take_snapshot),
-                                                    Serializer.PICKLE)
-                    await self.aria_metadata.cleanup(take_snapshot=True)
+                async with self.networking_locks[message_type]:
+                    message = self.protocol_networking.decode_message(data)
+                    aborted, remote_t_counter, processed_seq_size = message
+                    sync_complete: bool = await self.aria_metadata.set_aria_commit_done(aborted,
+                                                                                        remote_t_counter,
+                                                                                        processed_seq_size)
+                    if sync_complete:
+                        await self.finalize_worker_sync(MessageType(message_type),
+                                                        (self.aria_metadata.concurrency_aborts_everywhere,
+                                                         self.aria_metadata.processed_seq_size,
+                                                         self.aria_metadata.max_t_counter,
+                                                         self.aria_metadata.take_snapshot),
+                                                        Serializer.PICKLE)
+                        await self.aria_metadata.cleanup(take_snapshot=True)
             case MessageType.AriaFallbackStart | MessageType.AriaFallbackDone:
-                sync_complete: bool = await self.aria_metadata.set_empty_sync_done()
-                if sync_complete:
-                    await self.finalize_worker_sync(MessageType(message_type),
-                                                    b'',
-                                                    Serializer.NONE)
-                    await self.aria_metadata.cleanup()
+                async with self.networking_locks[message_type]:
+                    sync_complete: bool = await self.aria_metadata.set_empty_sync_done()
+                    if sync_complete:
+                        await self.finalize_worker_sync(MessageType(message_type),
+                                                        b'',
+                                                        Serializer.NONE)
+                        await self.aria_metadata.cleanup()
             case MessageType.SyncCleanup:
-                (worker_id, epoch_throughput, epoch_latency,
-                 local_abort_rate, wal_time, func_time, chain_ack_time,
-                 sync_time, conflict_res_time, commit_time,
-                 fallback_time, snap_time) = self.protocol_networking.decode_message(data)
-                self.epoch_throughput_gauge.labels(instance=worker_id).set(epoch_throughput)
-                self.epoch_latency_gauge.labels(instance=worker_id).set(epoch_latency)
-                self.epoch_abort_gauge.labels(instance=worker_id).set(local_abort_rate)
-                self.latency_breakdown_gauge.labels(instance=worker_id, component="WAL").set(wal_time)
-                self.latency_breakdown_gauge.labels(instance=worker_id, component="1st Run").set(func_time)
-                self.latency_breakdown_gauge.labels(instance=worker_id, component="Chain Acks").set(chain_ack_time)
-                self.latency_breakdown_gauge.labels(instance=worker_id, component="SYNC").set(sync_time)
-                self.latency_breakdown_gauge.labels(instance=worker_id, component="Conflict Resolution").set(
-                    conflict_res_time)
-                self.latency_breakdown_gauge.labels(instance=worker_id, component="Commit time").set(commit_time)
-                self.latency_breakdown_gauge.labels(instance=worker_id, component="Fallback").set(fallback_time)
-                self.latency_breakdown_gauge.labels(instance=worker_id, component="Async Snapshot").set(snap_time)
-                sync_complete: bool = await self.aria_metadata.set_empty_sync_done()
-                if sync_complete:
-                    await self.finalize_worker_sync(MessageType(message_type),
-                                                    (self.aria_metadata.stop_next_epoch, ),
-                                                    Serializer.MSGPACK)
-                    await self.aria_metadata.cleanup(epoch_end=True)
+                async with self.networking_locks[message_type]:
+                    (worker_id, epoch_throughput, epoch_latency,
+                     local_abort_rate, wal_time, func_time, chain_ack_time,
+                     sync_time, conflict_res_time, commit_time,
+                     fallback_time, snap_time) = self.protocol_networking.decode_message(data)
+                    self.epoch_throughput_gauge.labels(instance=worker_id).set(epoch_throughput)
+                    self.epoch_latency_gauge.labels(instance=worker_id).set(epoch_latency)
+                    self.epoch_abort_gauge.labels(instance=worker_id).set(local_abort_rate)
+                    self.latency_breakdown_gauge.labels(instance=worker_id, component="WAL").set(wal_time)
+                    self.latency_breakdown_gauge.labels(instance=worker_id, component="1st Run").set(func_time)
+                    self.latency_breakdown_gauge.labels(instance=worker_id, component="Chain Acks").set(chain_ack_time)
+                    self.latency_breakdown_gauge.labels(instance=worker_id, component="SYNC").set(sync_time)
+                    self.latency_breakdown_gauge.labels(instance=worker_id, component="Conflict Resolution").set(
+                        conflict_res_time)
+                    self.latency_breakdown_gauge.labels(instance=worker_id, component="Commit time").set(commit_time)
+                    self.latency_breakdown_gauge.labels(instance=worker_id, component="Fallback").set(fallback_time)
+                    self.latency_breakdown_gauge.labels(instance=worker_id, component="Async Snapshot").set(snap_time)
+                    sync_complete: bool = await self.aria_metadata.set_empty_sync_done()
+                    if sync_complete:
+                        await self.finalize_worker_sync(MessageType(message_type),
+                                                        (self.aria_metadata.stop_next_epoch, ),
+                                                        Serializer.MSGPACK)
+                        await self.aria_metadata.cleanup(epoch_end=True)
             case MessageType.DeterministicReordering:
-                message = self.protocol_networking.decode_message(data)
-                remote_read_reservation, remote_write_set, remote_read_set = message
-                sync_complete: bool = await self.aria_metadata.set_deterministic_reordering_done(
-                    remote_read_reservation,
-                    remote_write_set,
-                    remote_read_set)
-                if sync_complete:
-                    await self.finalize_worker_sync(MessageType(message_type),
-                                                    (self.aria_metadata.global_read_reservations,
-                                                     self.aria_metadata.global_write_set,
-                                                     self.aria_metadata.global_read_set),
-                                                    Serializer.PICKLE)
-                    await self.aria_metadata.cleanup()
+                async with self.networking_locks[message_type]:
+                    message = self.protocol_networking.decode_message(data)
+                    remote_read_reservation, remote_write_set, remote_read_set = message
+                    sync_complete: bool = await self.aria_metadata.set_deterministic_reordering_done(
+                        remote_read_reservation,
+                        remote_write_set,
+                        remote_read_set)
+                    if sync_complete:
+                        await self.finalize_worker_sync(MessageType(message_type),
+                                                        (self.aria_metadata.global_read_reservations,
+                                                         self.aria_metadata.global_write_set,
+                                                         self.aria_metadata.global_read_set),
+                                                        Serializer.PICKLE)
+                        await self.aria_metadata.cleanup()
 
 
     async def start_puller(self):

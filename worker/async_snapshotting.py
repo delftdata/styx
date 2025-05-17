@@ -28,14 +28,12 @@ class AsyncSnapshottingProcess(object):
         self.snapshotting_socket.setblocking(False)
 
         self.aio_task_scheduler = AIOTaskScheduler()
-        self.pool:concurrent.futures.ProcessPoolExecutor | None = None
-        # snapshot_id: delta_map
+        self.pool: concurrent.futures.ProcessPoolExecutor = concurrent.futures.ProcessPoolExecutor(4)
         self.delta_maps: dict[OperatorPartition, KVPairs] = {}
         self.worker_id = worker_id
         self.async_snapshots = AsyncSnapshotsMinio(self.worker_id)
 
     def process_delta(self, delta: dict[OperatorPartition, KVPairs]):
-        # Add a delta to the snapshot
         for operator_partition, kv_pairs in delta.items():
             if kv_pairs:
                 if operator_partition not in self.delta_maps:
@@ -51,7 +49,6 @@ class AsyncSnapshottingProcess(object):
         self.delta_maps = {(op_part[0], op_part[1]): {} for op_part in assigned_partitions}
 
     def take_snapshot(self, metadata: tuple):
-        # Take a snapshot
         loop = asyncio.get_running_loop()
         (topic_partition_offsets,
          topic_partition_output_offsets,
@@ -75,9 +72,8 @@ class AsyncSnapshottingProcess(object):
     def snapshotting_controller(self, data: bytes):
         message_type: int = NetworkingManager.get_msg_type(data)
         match message_type:
-            # RECEIVE EXECUTION PLAN OF A DATAFLOW GRAPH
             case MessageType.SnapProcDelta:
-                (delta, ) = NetworkingManager.decode_message(data)
+                (delta,) = NetworkingManager.decode_message(data)
                 self.process_delta(delta)
             case MessageType.SnapTakeSnapshot:
                 metadata = NetworkingManager.decode_message(data)
@@ -92,7 +88,6 @@ class AsyncSnapshottingProcess(object):
                 logging.error(f"Worker Service: Non supported command message type: {message_type}")
 
     async def start_snapshot_tcp_service(self):
-
         async def request_handler(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
             queue = asyncio.Queue()
 
@@ -122,18 +117,29 @@ class AsyncSnapshottingProcess(object):
                     clear_queue()
 
             async def executor_task():
-                while True:
-                    message = await queue.get()
-                    # FIFO execution of messages
-                    self.snapshotting_controller(message)
-                    queue.task_done()
+                try:
+                    while True:
+                        message = await queue.get()
+                        self.snapshotting_controller(message)
+                        queue.task_done()
+                except asyncio.CancelledError:
+                    pass
 
-            await asyncio.gather(reader_task(), executor_task())
+            reader_coro = asyncio.create_task(reader_task())
+            executor_coro = asyncio.create_task(executor_task())
 
-        with concurrent.futures.ProcessPoolExecutor(4) as self.pool:
-            server = await asyncio.start_server(request_handler, sock=self.snapshotting_socket, limit=2 ** 32)
-            async with server:
-                await server.serve_forever()
+            try:
+                await asyncio.gather(reader_coro, executor_coro)
+            except Exception as e:
+                logging.exception(f"Exception during client handling: {e}")
+            finally:
+                reader_coro.cancel()
+                executor_coro.cancel()
+                await asyncio.gather(reader_coro, executor_coro, return_exceptions=True)
+
+        server = await asyncio.start_server(request_handler, sock=self.snapshotting_socket, limit=2 ** 32)
+        async with server:
+            await server.serve_forever()
 
     def start_snapshot_process(self):
         uvloop.run(self.start_snapshot_tcp_service())

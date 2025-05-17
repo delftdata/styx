@@ -343,10 +343,17 @@ class Worker(object):
                                                          self.deployed_graph)
                     t5 = timer()
                     logging.warning(f"MIGRATION | LOADING DATA DONE | took: {t5 - t4}")
-                    topic_partition_offsets = {k: v for k, v in self.m_input_offsets.items()
-                                               if k in self.registered_operators}
-                    topic_partition_output_offsets = {k: v for k, v in self.m_output_offsets.items()
-                                               if k in self.registered_operators}
+                    topic_partition_offsets = {}
+                    topic_partition_output_offsets = {}
+                    for operator_partition in self.registered_operators.keys():
+                        if operator_partition in self.m_input_offsets:
+                            topic_partition_offsets[operator_partition] = self.m_input_offsets[operator_partition]
+                        else:
+                            topic_partition_offsets[operator_partition] = - 1
+                        if operator_partition in self.m_output_offsets:
+                            topic_partition_output_offsets[operator_partition] = self.m_output_offsets[operator_partition]
+                        else:
+                            topic_partition_output_offsets[operator_partition] = - 1
                     self.function_execution_protocol = AriaProtocol(worker_id=self.id,
                                                                     peers=self.peers,
                                                                     dns=self.dns,
@@ -360,10 +367,12 @@ class Worker(object):
                                                                     epoch_counter=self.m_epoch_counter,
                                                                     t_counter=self.m_t_counter)
                     # 5) Coordinate everyone ready to resume processing
+                    logging.warning(f"MIGRATION | SENDING MigrationDone TO COORDINATOR")
                     await self.networking.send_message(DISCOVERY_HOST, DISCOVERY_PORT,
                                                        msg=b'',
                                                        msg_type=MessageType.MigrationDone,
                                                        serializer=Serializer.NONE)
+                    logging.warning(f"MIGRATION | WAITING SYNC")
                     await self.migration_completed.wait()
                     t6 = timer()
                     logging.warning(f"MIGRATION | PROCESSING CONTINUES | took: {t6 - t5}")
