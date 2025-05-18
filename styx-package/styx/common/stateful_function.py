@@ -193,12 +193,10 @@ class StatefulFunction(Function):
                 if self.__fallback_enabled:
                     # and no cache
                     remote_calls.append(self.__protocol.run_fallback_function(t_id=self.__t_id,
-                                                                              payload=payload,
-                                                                              internal=True))
+                                                                              payload=payload))
                 else:
                     remote_calls.append(self.__protocol.run_function(t_id=self.__t_id,
-                                                                     payload=payload,
-                                                                     internal=True))
+                                                                     payload=payload))
                     # add to cache
                     self.__networking.add_remote_function_call(self.__t_id, payload)
             else:

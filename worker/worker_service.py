@@ -365,14 +365,15 @@ class Worker(object):
                                                                     topic_partition_offsets=topic_partition_offsets,
                                                                     output_offsets=topic_partition_output_offsets,
                                                                     epoch_counter=self.m_epoch_counter,
-                                                                    t_counter=self.m_t_counter)
+                                                                    t_counter=self.m_t_counter,
+                                                                    restart_after_migration=True)
                     # 5) Coordinate everyone ready to resume processing
-                    logging.warning(f"MIGRATION | SENDING MigrationDone TO COORDINATOR")
+                    logging.warning("MIGRATION | SENDING MigrationInitDone TO COORDINATOR")
                     await self.networking.send_message(DISCOVERY_HOST, DISCOVERY_PORT,
                                                        msg=b'',
-                                                       msg_type=MessageType.MigrationDone,
+                                                       msg_type=MessageType.MigrationInitDone,
                                                        serializer=Serializer.NONE)
-                    logging.warning(f"MIGRATION | WAITING SYNC")
+                    logging.warning("MIGRATION | WAITING SYNC")
                     await self.migration_completed.wait()
                     t6 = timer()
                     logging.warning(f"MIGRATION | PROCESSING CONTINUES | took: {t6 - t5}")

@@ -3,6 +3,7 @@ import os
 import socket
 import concurrent.futures
 import struct
+import time
 from asyncio import StreamReader, StreamWriter
 
 from timeit import default_timer as timer
@@ -114,6 +115,7 @@ class CoordinatorService(object):
             MessageType.SendExecutionGraph: asyncio.Lock(),
             MessageType.MigrationRepartitioningDone: asyncio.Lock(),
             MessageType.MigrationDone: asyncio.Lock(),
+            MessageType.MigrationInitDone: asyncio.Lock(),
             MessageType.RegisterWorker: asyncio.Lock(),
             MessageType.SnapID: asyncio.Lock(),
             MessageType.Heartbeat: asyncio.Lock(),
@@ -124,6 +126,8 @@ class CoordinatorService(object):
             MessageType.SyncCleanup: asyncio.Lock(),
             MessageType.DeterministicReordering: asyncio.Lock()
         }
+
+        self.snapshotting_task: asyncio.Task | None = None
 
     # Refactoring candidate
     async def coordinator_controller(self, transport, data, pool: concurrent.futures.ProcessPoolExecutor):
@@ -136,6 +140,7 @@ class CoordinatorService(object):
                     if self.coordinator.graph_submitted and not self.migration_in_progress:
                         # Gracefully stop the transactional protocol in the next epoch
                         self.migration_in_progress = True
+                        await self.stop_snapshotting()
                         self.aria_metadata.stop_in_next_epoch()
                         # Start the InitMigration phase
                         logging.warning(f"MIGRATION | START {graph}")
@@ -158,18 +163,17 @@ class CoordinatorService(object):
                     if sync_complete:
                         await self.finalize_migration_repartition()
                         await self.migration_metadata.cleanup(message_type)
-            case MessageType.MigrationDone:
+            case MessageType.MigrationInitDone:
                 async with self.networking_locks[message_type]:
                     sync_complete: bool = await self.migration_metadata.set_empty_sync_done(message_type)
-                    logging.warning(f"MIGRATION | MigrationDone | {self.migration_metadata.sync_sum}")
+                    logging.warning(f"MIGRATION | MigrationInitDone | {self.migration_metadata.sync_sum}")
                     if sync_complete:
-                        logging.warning("MIGRATION | MigrationDone | sync_complete")
+                        logging.warning("MIGRATION | MigrationInitDone | sync_complete")
                         n_workers = len(self.coordinator.worker_pool.get_participating_workers())
                         self.aria_metadata = AriaSyncMetadata(n_workers)
                         await self.protocol_networking.close_all_connections()
                         await self.finalize_migration()
                         await self.migration_metadata.cleanup(message_type)
-                        self.migration_in_progress = False
             case MessageType.RegisterWorker:  # REGISTER_WORKER
                 async with self.networking_locks[message_type]:
                     worker_ip, worker_port, protocol_port = self.networking.decode_message(data)
@@ -302,7 +306,19 @@ class CoordinatorService(object):
                                                          self.aria_metadata.global_read_set),
                                                         Serializer.PICKLE)
                         await self.aria_metadata.cleanup()
-
+            case MessageType.MigrationDone:
+                async with self.networking_locks[message_type]:
+                    sync_complete: bool = await self.migration_metadata.set_empty_sync_done(message_type)
+                    logging.warning(f"MIGRATION | MigrationDone | {self.migration_metadata.sync_sum}")
+                    if sync_complete:
+                        logging.warning(f"MIGRATION_FINISHED at time: {time.time_ns() // 1_000_000}")
+                        await self.migration_metadata.cleanup(message_type)
+                        self.migration_in_progress = False
+                        logging.warning("Restarting the snapshotting mechanism")
+                        self.snapshotting_task = asyncio.create_task(self.send_snapshot_marker())
+            case _:
+                # Any other message type
+                logging.error(f"COORDINATOR PROTOCOL SERVER: Non supported message type: {message_type}")
 
     async def start_puller(self):
         async def request_handler(reader: StreamReader, writer: StreamWriter):
@@ -425,8 +441,17 @@ class CoordinatorService(object):
     async def send_snapshot_marker(self):
         while True:
             await asyncio.sleep(SNAPSHOT_FREQUENCY_SEC)
-            if self.aria_metadata is not None and not self.migration_in_progress:
+            if self.aria_metadata is not None:
                 self.aria_metadata.take_snapshot_at_next_epoch()
+
+    async def stop_snapshotting(self):
+        if self.snapshotting_task:
+            self.snapshotting_task.cancel()
+            try:
+                await self.snapshotting_task
+            except asyncio.CancelledError:
+                pass
+            self.snapshotting_task = None
 
     def init_snapshot_minio_bucket(self):
         try:
@@ -440,7 +465,7 @@ class CoordinatorService(object):
         self.init_snapshot_minio_bucket()
         self.aio_task_scheduler.create_task(self.heartbeat_monitor_coroutine())
         self.start_networking_tasks()
-        self.aio_task_scheduler.create_task(self.send_snapshot_marker())
+        self.snapshotting_task = asyncio.create_task(self.send_snapshot_marker())
         await self.tcp_service()
 
 

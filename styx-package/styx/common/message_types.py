@@ -41,5 +41,6 @@ class MessageType(IntEnum):
     RequestRemoteKey = 36
     ReceiveRemoteKey = 37
     AsyncMigration = 38
+    MigrationInitDone = 39
     AlignStart = 100
     AlignEnd = 101

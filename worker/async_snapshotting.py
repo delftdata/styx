@@ -91,51 +91,70 @@ class AsyncSnapshottingProcess(object):
         async def request_handler(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
             queue = asyncio.Queue()
 
-            def clear_queue():
-                while not queue.empty():
-                    try:
-                        queue.get_nowait()
-                        queue.task_done()
-                    except asyncio.QueueEmpty:
-                        break
-
             async def reader_task():
                 try:
                     while True:
-                        data = await reader.readexactly(8)
-                        (size,) = struct.unpack('>Q', data)
-                        message = await reader.readexactly(size)
-                        await queue.put(message)
-                except asyncio.IncompleteReadError as e:
-                    logging.info(f"Client disconnected unexpectedly: {e}")
-                except asyncio.CancelledError:
-                    pass
+                        try:
+                            data = await asyncio.wait_for(reader.readexactly(8), timeout=1)
+                            (size,) = struct.unpack('>Q', data)
+                            message = await asyncio.wait_for(reader.readexactly(size), timeout=1)
+                            await queue.put(message)
+                        except asyncio.TimeoutError:
+                            continue
+                        except (asyncio.IncompleteReadError, ConnectionResetError):
+                            logging.info("Client disconnected.")
+                            return
+                        except (asyncio.CancelledError, GeneratorExit):
+                            return
+                        except Exception:
+                            logging.exception("Unhandled exception in reader_task")
                 finally:
-                    logging.info("Closing the connection")
-                    writer.close()
-                    await writer.wait_closed()
-                    clear_queue()
+                    try:
+                        writer.close()
+                        await writer.wait_closed()
+                    except Exception:
+                        pass
 
             async def executor_task():
                 try:
                     while True:
-                        message = await queue.get()
-                        self.snapshotting_controller(message)
-                        queue.task_done()
-                except asyncio.CancelledError:
-                    pass
+                        try:
+                            message = await asyncio.wait_for(queue.get(), timeout=1)
+                        except asyncio.TimeoutError:
+                            continue  # loop again to check for cancellation
+                        except (asyncio.CancelledError, GeneratorExit):
+                            return
+                        except Exception:
+                            logging.exception("Unexpected exception during queue.get()")
+                            continue
 
-            reader_coro = asyncio.create_task(reader_task())
-            executor_coro = asyncio.create_task(executor_task())
+                        try:
+                            self.snapshotting_controller(message)
+                        except Exception:
+                            logging.exception("Error in snapshotting_controller")
+                        finally:
+                            queue.task_done()
+                except GeneratorExit:
+                    return
+                except Exception:
+                    logging.exception("Unhandled exception in executor_task")
+
+            # Launch tasks
+            reader_t = asyncio.create_task(reader_task(), name="reader_task")
+            executor_t = asyncio.create_task(executor_task(), name="executor_task")
 
             try:
-                await asyncio.gather(reader_coro, executor_coro)
-            except Exception as e:
-                logging.exception(f"Exception during client handling: {e}")
+                await asyncio.wait(
+                    [reader_t, executor_t],
+                    return_when=asyncio.FIRST_EXCEPTION
+                )
             finally:
-                reader_coro.cancel()
-                executor_coro.cancel()
-                await asyncio.gather(reader_coro, executor_coro, return_exceptions=True)
+                for t in (reader_t, executor_t):
+                    if not t.done():
+                        t.cancel()
+
+                await asyncio.gather(reader_t, executor_t, return_exceptions=True)
+                await asyncio.sleep(0)  # Let loop finalize pending callbacks
 
         server = await asyncio.start_server(request_handler, sock=self.snapshotting_socket, limit=2 ** 32)
         async with server:
