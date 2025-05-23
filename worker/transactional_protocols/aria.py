@@ -511,8 +511,8 @@ class AriaProtocol(BaseTransactionalProtocol):
                     #     f'abort rate: {abort_rate}'
                     # )
                     if self.migrating_state and USE_ASYNC_MIGRATION:
-                        migration_progress = self.local_state.keys_remaining_to_remote()
-                        # logging.warning(f"Keys to be migrated: {migration_progress}")
+                        migration_progress = self.local_state.keys_remaining_to_send()
+                        # logging.warning(f"Keys to be sent: {migration_progress}")
                         if migration_progress == 0:
                             self.migrating_state = False
                             await self.networking.send_message(DISCOVERY_HOST, DISCOVERY_PORT + 1,

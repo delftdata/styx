@@ -298,6 +298,7 @@ class Worker(object):
                     await self.completed_repartitioning_event.wait()
                     self.completed_repartitioning_event.clear()
                     self.local_state.add_keys_to_send(self.final_keys_to_send)
+                    # logging.warning(f"Keys to send: {self.local_state.keys_remaining_to_send()}")
                     # 3) Coordinate: Everyone done with repartitioning
                     self.worker_operators = new_worker_operators
                     await self.networking.send_message(DISCOVERY_HOST, DISCOVERY_PORT,

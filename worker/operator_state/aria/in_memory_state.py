@@ -62,6 +62,12 @@ class InMemoryOperatorState(BaseAriaState):
             c += len(keys)
         return c
 
+    def keys_remaining_to_send(self):
+        c = 0
+        for keys in self.keys_to_send.values():
+            c += len(keys)
+        return c
+
     def get_async_migrate_batch(self, batch_size: int) -> dict[OperatorPartition, KVPairs]:
         batch_to_send: dict[OperatorPartition, KVPairs] = defaultdict(dict)
         c = 0
