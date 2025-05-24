@@ -50,7 +50,6 @@ sleep_time = 0.0085
 STYX_HOST: str = 'localhost'
 STYX_PORT: int = 8886
 KAFKA_URL = 'localhost:9092'
-YCSB_DATASET_PATH = "ycsb_dataset.pkl"
 ####################################################################################################################
 g = StateflowGraph('ycsb-benchmark', operator_state_backend=LocalStateBackend.DICT)
 ycsb_operator.set_n_partitions(START_N_PARTITIONS)
@@ -80,9 +79,11 @@ def ycsb_init(styx: SyncStyxClient, operator: Operator, num_workers: int = None)
     styx.init_metadata(g)
     partitions = {p: {} for p in range(START_N_PARTITIONS)}
 
-    if os.path.exists(YCSB_DATASET_PATH):
+    ycsb_dataset_path = f"ycsb_dataset_{START_N_PARTITIONS}p.pkl"
+
+    if os.path.exists(ycsb_dataset_path):
         print("Loading YCSB dataset...")
-        with open(YCSB_DATASET_PATH, 'rb') as f:
+        with open(ycsb_dataset_path, 'rb') as f:
             partitions = pickle.load(f)
     else:
         print("Generating YCSB dataset...")
@@ -102,8 +103,7 @@ def ycsb_init(styx: SyncStyxClient, operator: Operator, num_workers: int = None)
 
         for local_partitions in results:
             merge_partitions(partitions, local_partitions)
-
-        with open(YCSB_DATASET_PATH, 'wb') as f:
+        with open(ycsb_dataset_path, 'wb') as f:
             pickle.dump(partitions, f)
     print("Data ready")
     for partition, partition_data in partitions.items():
