@@ -46,8 +46,9 @@ def main(
         f'Joined {len(joined)} messages from {len(input_msgs)} input messages '
         f'and {len(output_msgs)} output messages.'
     )
-
-    missed = len(joined[joined['timestamp_output'].isna()])
+    missed_requests = joined[joined['timestamp_output'].isna()]
+    print(f"missed_requests: {missed_requests}")
+    missed = len(missed_requests)
     print(
         f'Missed {missed} messages after the join for which no response '
          'was found.'

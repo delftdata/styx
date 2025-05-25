@@ -3,6 +3,7 @@ import os
 import socket
 import concurrent.futures
 import struct
+import time
 from asyncio import StreamReader, StreamWriter
 
 from timeit import default_timer as timer
@@ -148,6 +149,7 @@ class CoordinatorService(object):
                     self.aria_metadata = AriaSyncMetadata(len(self.coordinator.worker_pool.get_participating_workers()))
                     await self.protocol_networking.close_all_connections()
                     await self.finalize_migration()
+                    logging.warning(f"MIGRATION_FINISHED at time: {time.time_ns() // 1_000_000}")
                     self.migration_in_progress = False
                     await self.migration_metadata.cleanup()
             case MessageType.RegisterWorker:  # REGISTER_WORKER

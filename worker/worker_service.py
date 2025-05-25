@@ -246,7 +246,7 @@ class Worker(object):
             case MessageType.InitMigration:
                 try:
                     # FIXME THIS IS JUST FOR THE STOP AND RESTART need to see how to generalize
-                    logging.warning("MIGRATION | START")
+                    logging.warning(f"MIGRATION | START at {time.time_ns() // 1_000_000}")
                     start_time = timer()
                     # 1) Wait for the transactional protocol to get stopped gracefully
                     await self.function_execution_protocol.wait_stopped()

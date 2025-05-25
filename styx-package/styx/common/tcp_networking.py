@@ -34,7 +34,7 @@ class StyxSocketClient(object):
                                                                          limit=2 ** 32)
             except socket.error as e:
                 logging.warning(f"{host}:{port} is not up yet, sleeping for 100 msec -> {e}")
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(0.5)
             except Exception as e:
                 logging.error(f"Uncaught exception: {e}")
             else:
@@ -58,7 +58,7 @@ class StyxSocketClient(object):
                                 f"Attempt {i} at {self.target_host}:{self.target_port}")
                 # Broken connection, close the old one and retry
                 await self.close()
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(0.5)
                 await self.create_connection(self.target_host, self.target_port)
             except Exception as e:
                 logging.error(f"Uncaught exception: {e}")
@@ -88,7 +88,7 @@ class StyxSocketClient(object):
                                 f"Attempt {i} at {self.target_host}:{self.target_port}")
                 # Broken connection, close the old one and retry
                 await self.close()
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(0.5)
                 await self.create_connection(self.target_host, self.target_port)
             except Exception as e:
                 logging.error(f"Uncaught exception: {e}")
