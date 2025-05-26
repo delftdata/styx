@@ -335,10 +335,17 @@ class Worker(object):
                     self.attach_state_to_operators_after_snapshot(data)
                     t5 = timer()
                     logging.warning(f"MIGRATION | LOADING DATA DONE | took: {t5 - t4}")
-                    topic_partition_offsets = {k: v for k, v in self.m_input_offsets.items()
-                                               if k in self.registered_operators}
-                    topic_partition_output_offsets = {k: v for k, v in self.m_output_offsets.items()
-                                               if k in self.registered_operators}
+                    topic_partition_offsets = {}
+                    topic_partition_output_offsets = {}
+                    for operator_partition in self.registered_operators.keys():
+                        if operator_partition in self.m_input_offsets:
+                            topic_partition_offsets[operator_partition] = self.m_input_offsets[operator_partition]
+                        else:
+                            topic_partition_offsets[operator_partition] = - 1
+                        if operator_partition in self.m_output_offsets:
+                            topic_partition_output_offsets[operator_partition] = self.m_output_offsets[operator_partition]
+                        else:
+                            topic_partition_output_offsets[operator_partition] = - 1
                     self.function_execution_protocol = AriaProtocol(worker_id=self.id,
                                                                     peers=self.peers,
                                                                     networking=self.protocol_networking,
