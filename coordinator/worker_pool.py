@@ -32,6 +32,9 @@ class Worker(object):
     def __hash__(self):
         return hash(self.worker_id)
 
+    def to_tuple(self) -> tuple[str, int, int]:
+        return self.worker_ip, self.worker_port, self.protocol_port
+
 
 class WorkerPool(object):
 
