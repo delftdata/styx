@@ -124,8 +124,7 @@ class CoordinatorService(object):
             MessageType.AriaFallbackStart: asyncio.Lock(),
             MessageType.AriaFallbackDone: asyncio.Lock(),
             MessageType.SyncCleanup: asyncio.Lock(),
-            MessageType.DeterministicReordering: asyncio.Lock(),
-            MessageType.ReceiveMigrationHashes: asyncio.Lock(),
+            MessageType.DeterministicReordering: asyncio.Lock()
         }
 
         self.snapshotting_task: asyncio.Task | None = None
@@ -175,11 +174,6 @@ class CoordinatorService(object):
                         await self.protocol_networking.close_all_connections()
                         await self.finalize_migration()
                         await self.migration_metadata.cleanup(message_type)
-            case MessageType.ReceiveMigrationHashes:
-                async with self.networking_locks[message_type]:
-                    (new_hashes, ) = self.networking.decode_message(data)
-                    self.migration_metadata.add_hashes(new_hashes,
-                                                       self.coordinator.worker_pool.get_operator_partition_locations())
             case MessageType.RegisterWorker:  # REGISTER_WORKER
                 async with self.networking_locks[message_type]:
                     worker_ip, worker_port, protocol_port = self.networking.decode_message(data)
@@ -381,8 +375,7 @@ class CoordinatorService(object):
                                                                      msg=(self.migration_metadata.epoch_counter,
                                                                           self.migration_metadata.t_counter,
                                                                           self.migration_metadata.input_offsets,
-                                                                          self.migration_metadata.output_offsets,
-                                                                          self.migration_metadata.get_worker_hashes(worker)),
+                                                                          self.migration_metadata.output_offsets),
                                                                      msg_type=MessageType.MigrationRepartitioningDone,
                                                                      serializer=Serializer.MSGPACK))
 
@@ -390,11 +383,10 @@ class CoordinatorService(object):
         async with asyncio.TaskGroup() as tg:
             for worker in self.coordinator.worker_pool.get_participating_workers():
                 logging.warning(f"Sending MigrationDone to : {worker}")
-                tg.create_task(self.networking.send_message(worker.worker_ip,
-                                                            worker.worker_port,
-                                                            msg=b'',
-                                                            msg_type=MessageType.MigrationDone,
-                                                            serializer=Serializer.NONE))
+                tg.create_task(self.protocol_networking.send_message(worker.worker_ip, worker.worker_port,
+                                                                     msg=b'',
+                                                                     msg_type=MessageType.MigrationDone,
+                                                                     serializer=Serializer.NONE))
 
     async def finalize_worker_sync(self,
                                    msg_type: MessageType,

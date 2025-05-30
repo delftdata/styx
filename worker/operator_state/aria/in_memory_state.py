@@ -125,8 +125,12 @@ class InMemoryOperatorState(BaseAriaState):
             self.data[operator_partition] = {}
             self.delta_map[operator_partition] = {}
 
-    def add_remote_keys(self, remote_keys: dict[OperatorPartition, dict[Any, tuple[int, int]]]):
-        self.remote_keys = remote_keys
+    def add_remote_keys(self, operator_partition: OperatorPartition, data: dict[Any, tuple[int, int]]):
+        operator_partition = tuple(operator_partition)
+        if operator_partition in self.remote_keys:
+            self.remote_keys[operator_partition].update(data)
+        else:
+            self.remote_keys[operator_partition] = data
 
     def set_data_from_snapshot(self, data: dict[OperatorPartition, KVPairs]):
         for operator_partition, kv_pairs in data.items():
