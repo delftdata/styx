@@ -85,7 +85,11 @@ input_throughput = [(100, 1),
                     (10000, 12),
                     (10000, 13),
                     (10000, 14),
-                    (10000, 15)
+                    (10000, 15),
+                    (6400, 25),
+                    (6800, 25),
+                    (7200, 25),
+                    (8000, 25)
                     ]
 
 lines = []
@@ -185,7 +189,7 @@ for input_rate, n_threads in input_throughput:
 
 # tpcc
 
-n_workers = [1, 10, 100, 200]
+n_workers = [1, 10, 100]
 input_throughput = [(100, 1),
                     (200, 1),
                     (300, 1),
@@ -203,7 +207,9 @@ input_throughput = [(100, 1),
                     (2000, 1),
                     (2400, 1),
                     (3000, 1),
-                    (3500, 1)]
+                    (3500, 1),
+                    (4000, 1),
+                    (4500, 1)]
 
 for input_rate, n_threads in input_throughput:
     for n_w in n_workers:
