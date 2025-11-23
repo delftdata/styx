@@ -49,12 +49,7 @@ services:
       - DISCOVERY_PORT=8888
     env_file:
       - env/minio.env
-    deploy:
-      resources:
-        limits:
-          cpus: '1'
-        reservations:
-          cpus: '1'
+    cpus: 1
 
 volumes:
   grafana_data:
