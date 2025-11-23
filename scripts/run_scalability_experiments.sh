@@ -2,6 +2,7 @@
 
 input=$1
 saving_dir=$2
+styx_threads_per_worker=$3
 
 python scripts/create_scalability_config.py
 
@@ -17,7 +18,7 @@ do
   warmup_seconds="${ss[5]}"
   epoch_size="${ss[6]}"
 
-  bash scripts/start_styx_cluster.sh "$n_part" "$epoch_size"
+  bash scripts/start_styx_cluster.sh "$n_part" "$epoch_size" "$styx_threads_per_worker"
 
   sleep 10
 

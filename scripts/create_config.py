@@ -1,11 +1,22 @@
 import os
-
 import pandas as pd
+import argparse
 
-partitions = 100
-n_keys = 10_000
-experiment_time = 60
-warmup_time = 10
+# -----------------------------
+# Parse command-line arguments
+# -----------------------------
+parser = argparse.ArgumentParser(description="Generate Styx experiment config CSV")
+parser.add_argument("--partitions", type=int, required=True, help="Number of partitions")
+parser.add_argument("--n_keys", type=int, required=True, help="Number of keys")
+parser.add_argument("--experiment_time", type=int, required=True, help="Total experiment time (seconds)")
+parser.add_argument("--warmup_time", type=int, required=True, help="Warmup time (seconds)")
+
+args = parser.parse_args()
+partitions = args.partitions
+n_keys = args.n_keys
+experiment_time = args.experiment_time
+warmup_time = args.warmup_time
+
 script_path = os.path.dirname(os.path.realpath(__file__))
 
 results_path = "results"

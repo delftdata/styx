@@ -10,14 +10,30 @@ total_time=$7
 saving_dir=$8
 warmup_seconds=$9
 epoch_size=${10}
+styx_threads_per_worker=${11}
 
-bash scripts/start_styx_cluster.sh "$n_part" "$epoch_size" "$n_part"
+echo "============= Running Experiment ================="
+echo "workload_name: $workload_name"
+echo "input_rate: $input_rate"
+echo "n_keys: $n_keys"
+echo "n_part: $n_part"
+echo "zipf_const: $zipf_const"
+echo "client_threads: $client_threads"
+echo "total_time: $total_time"
+echo "saving_dir: $saving_dir"
+echo "warmup_seconds: $warmup_seconds"
+echo "epoch_size: $epoch_size"
+echo "styx_threads_per_worker: $styx_threads_per_worker"
+echo "=================================================="
+
+bash scripts/start_styx_cluster.sh "$n_part" "$epoch_size" "$n_part" "$styx_threads_per_worker"
 
 sleep 10
 
 if [[ $workload_name == "ycsbt" ]]; then
     # YCSB-T
-    run_with_validation=true
+    # To check if the state is correct within Styx, expensive to run together with large scale experiments, use for debug
+    run_with_validation=false
     python demo/demo-ycsb/client.py "$client_threads" "$n_keys" "$n_part" "$zipf_const" "$input_rate" "$total_time" "$saving_dir" "$warmup_seconds" "$run_with_validation"
 elif [[ $workload_name == "dhr" ]]; then
     # Deathstar Hotel Reservation
