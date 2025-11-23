@@ -24,6 +24,7 @@ docker compose -f docker-compose-kafka.yml up -d >/dev/null
 sleep 5
 docker compose -f docker-compose-minio.yml up -d >/dev/null
 sleep 10
+export STYX_WORKER_THREADS="$threads_per_worker"
 docker compose build \
     --build-arg epoch_size="$epoch_size" \
     --build-arg max_operator_parallelism="$max_operator_parallelism" \

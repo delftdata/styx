@@ -49,7 +49,7 @@ services:
       - DISCOVERY_PORT=8888
     env_file:
       - env/minio.env
-    cpus: 1
+    cpus: ${STYX_WORKER_THREADS}
 
 volumes:
   grafana_data:
