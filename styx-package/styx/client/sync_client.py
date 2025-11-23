@@ -184,11 +184,16 @@ class SyncStyxClient(BaseStyxClient):
                                                                               params,
                                                                               serializer)
         self._futures[request_id] = StyxFuture(request_id=request_id)
-        self._kafka_producer.produce(operator.name,
-                                     key=request_id,
-                                     value=serialized_value,
-                                     partition=partition,
-                                     on_delivery=self.delivery_callback)
+        while True:
+            try:
+                self._kafka_producer.produce(operator.name,
+                                             key=request_id,
+                                             value=serialized_value,
+                                             partition=partition,
+                                             on_delivery=self.delivery_callback)
+                break
+            except BufferError:
+                time.sleep(0.001)  # wait 1ms and retry
         return self._futures[request_id]
 
     def set_graph(self, graph: StateflowGraph):

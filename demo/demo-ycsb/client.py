@@ -40,7 +40,7 @@ KAFKA_URL = 'localhost:9092'
 # KAFKA_URL = '35.229.114.18:9094'
 SAVE_DIR: str = sys.argv[7]
 warmup_seconds: int = int(sys.argv[8])
-run_with_validation = bool(sys.argv[9])
+run_with_validation = sys.argv[9].lower() == "true"
 ####################################################################################################################
 g = StateflowGraph('ycsb-benchmark', operator_state_backend=LocalStateBackend.DICT)
 ycsb_operator.set_n_partitions(N_PARTITIONS)
