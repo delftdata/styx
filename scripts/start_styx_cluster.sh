@@ -24,6 +24,10 @@ docker compose -f docker-compose-kafka.yml up -d >/dev/null
 sleep 5
 docker compose -f docker-compose-minio.yml up -d >/dev/null
 sleep 10
-docker compose build --build-arg epoch_size="$epoch_size" --build-arg 'max_operator_parallelism'="$max_operator_parallelism" >/dev/null
+docker compose build \
+    --build-arg epoch_size="$epoch_size" \
+    --build-arg max_operator_parallelism="$max_operator_parallelism" \
+    --build-arg worker_threads="$threads_per_worker" \
+    > /dev/null
 docker compose up --scale worker="$threaded_scale_factor" -d >/dev/null
 sleep 5
