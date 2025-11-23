@@ -46,10 +46,12 @@ In the scripts directory, we provide a number of different scripts that can be u
 
 ### Reproduce paper results
 
-From the projects root:
+First, you have to generate the experiment config files by running `python create_config.py` and `python create_scalability_config.py` then:
+
+From the project's root:
 ```
-./scripts/run_batch_experiments.sh
-./scripts/run_scalability_experiments.sh
+./scripts/run_batch_experiments.sh [config file path] [results path]
+./scripts/run_scalability_experiments.sh [config file path] [results path]
 ```
 
 ### Run single experiment
