@@ -194,6 +194,14 @@ for input_rate, n_threads in input_throughput:
 # tpcc
 
 n_workers = [1, 10, 100]
+
+# per-worker caps
+max_rate = {
+    1: 1000,
+    10: 4000,
+    100: 6000,
+}
+
 input_throughput = [(100, 1),
                     (200, 1),
                     (300, 1),
@@ -213,10 +221,17 @@ input_throughput = [(100, 1),
                     (3000, 1),
                     (3500, 1),
                     (4000, 1),
-                    (4500, 1)]
+                    (4500, 1),
+                    (5000, 1),
+                    (5500, 1),
+                    (6000, 1)]
 
 for input_rate, n_threads in input_throughput:
     for n_w in n_workers:
+        # skip rates above the per-worker cap
+        if input_rate > max_rate[n_w]:
+            continue
+
         file_name = f"tpcc_W{n_w}_{input_rate * n_threads}.json"
         if file_name not in tpcc_results:
             lines.append(('tpcc', input_rate, n_w, partitions, 0.0,
