@@ -51,4 +51,4 @@ else
 fi
 
 
-bash scripts/stop_styx_cluster.sh
+bash scripts/stop_styx_cluster.sh "$styx_threads_per_worker"

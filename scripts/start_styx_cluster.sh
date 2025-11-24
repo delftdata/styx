@@ -28,7 +28,6 @@ export STYX_WORKER_THREADS="$threads_per_worker"
 docker compose build \
     --build-arg epoch_size="$epoch_size" \
     --build-arg max_operator_parallelism="$max_operator_parallelism" \
-    --build-arg worker_threads="$threads_per_worker" \
-    > /dev/null
+    --build-arg worker_threads="$threads_per_worker"
 docker compose up --scale worker="$threaded_scale_factor" -d >/dev/null
 sleep 5

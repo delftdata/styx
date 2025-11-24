@@ -1,5 +1,8 @@
 #!/bin/bash
 
+threads_per_worker=$1
+
+export STYX_WORKER_THREADS="$threads_per_worker"
 docker compose logs worker | sort -t '|' -k1,1 -k2,2 > worker-logs.log
 docker compose logs coordinator > coordinator-logs.log
 
