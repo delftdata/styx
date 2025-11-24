@@ -239,10 +239,6 @@ class Worker(object):
                                                    serializer=Serializer.MSGPACK)
                 (data, topic_partition_offsets, topic_partition_output_offsets, epoch,
                  t_counter) = self.async_snapshots.retrieve_snapshot(0, self.registered_operators.keys())
-                topic_partition_offsets = {k: v for k, v in topic_partition_offsets.items()
-                                           if k in self.registered_operators}
-                topic_partition_output_offsets = {k: v for k, v in topic_partition_output_offsets.items()
-                                                  if k in self.registered_operators}
                 self.attach_state_to_operators_after_snapshot(data)
                 self.function_execution_protocol = AriaProtocol(worker_id=self.id,
                                                                 peers=self.peers,
@@ -252,8 +248,6 @@ class Worker(object):
                                                                 topic_partitions=self.topic_partitions,
                                                                 state=self.local_state,
                                                                 snapshotting_port=self.snapshotting_port,
-                                                                topic_partition_offsets=topic_partition_offsets,
-                                                                output_offsets=topic_partition_output_offsets,
                                                                 epoch_counter=epoch,
                                                                 t_counter=t_counter)
                 self.function_execution_protocol.start()
