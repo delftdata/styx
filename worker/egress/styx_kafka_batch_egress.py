@@ -99,10 +99,14 @@ class StyxKafkaBatchEgress(BaseEgress):
             # send the batch and get the max offset per topic partition in that batch
             for res in await asyncio.gather(*self.batch):
                 operator_name = res.topic[:-5]
-                self.topic_partition_output_offsets[(operator_name, res.partition)] = max(
-                    self.topic_partition_output_offsets[(operator_name, res.partition)],
-                    res.offset
-                )
+                key = (operator_name, res.partition)
+                if key in self.topic_partition_output_offsets:
+                    self.topic_partition_output_offsets[key] = max(
+                        self.topic_partition_output_offsets[key],
+                        res.offset
+                    )
+                else:
+                    self.topic_partition_output_offsets[key] = res.offset
             self.batch = []
 
     async def get_messages_sent_before_recovery(self):
