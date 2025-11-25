@@ -18,12 +18,12 @@ do
   warmup_seconds="${ss[5]}"
   epoch_size="${ss[6]}"
 
-  bash scripts/start_styx_cluster.sh "$n_part" "$epoch_size" "$styx_threads_per_worker"
+  bash scripts/start_styx_cluster.sh "$n_part" "$epoch_size" "$n_part" "$styx_threads_per_worker"
 
   sleep 10
 
   python demo/demo-scalability/client.py "$client_threads" "$pm" "$n_part" "$input_rate" "$total_time" "$saving_dir" "$warmup_seconds"
 
-  bash scripts/stop_styx_cluster.sh
+  bash scripts/stop_styx_cluster.sh "$styx_threads_per_worker"
 
 done < "$input"

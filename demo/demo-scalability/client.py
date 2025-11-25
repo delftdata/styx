@@ -30,7 +30,6 @@ messages_per_second = int(sys.argv[4])
 sleeps_per_second = 100
 sleep_time = 0.0085
 seconds = int(sys.argv[5])
-key_list: list[int] = list(range(N_ENTITIES))
 STYX_HOST: str = 'localhost'
 STYX_PORT: int = 8886
 KAFKA_URL = 'localhost:9092'
@@ -49,20 +48,17 @@ def submit_graph(styx: SyncStyxClient):
 
 
 def ycsb_init(styx: SyncStyxClient, operator: Operator):
-    submit_graph(styx)
-    time.sleep(5)
-    # INSERT
+    styx.set_graph(g)
+    styx.init_metadata(g)
     partitions: dict[int, dict] = {p: {} for p in range(N_PARTITIONS)}
     for i in tqdm(range(N_ENTITIES)):
         partition: int = styx.get_operator_partition(i, operator)
-        partitions[partition] |= {i: STARTING_MONEY}
-        if i % 100_000 == 0 or i == N_ENTITIES - 1:
-            for partition, kv_pairs in partitions.items():
-                styx.send_batch_insert(operator=operator,
-                                       partition=partition,
-                                       function='insert_batch',
-                                       key_value_pairs=kv_pairs)
-            partitions: dict[int, dict] = {p: {} for p in range(N_PARTITIONS)}
+        partitions[partition][i] = STARTING_MONEY
+
+    for partition, partition_data in partitions.items():
+        styx.init_data(operator, partition, partition_data)
+    time.sleep(5)
+    submit_graph(styx)
 
 
 def transactional_ycsb_generator(operator: Operator) -> [Operator, int, str, tuple[int, ]]:
