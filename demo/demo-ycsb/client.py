@@ -1,6 +1,7 @@
 import sys
 import time
 import multiprocessing
+multiprocessing.set_start_method("fork", force=True)
 from multiprocessing import Pool
 
 import pandas as pd
@@ -20,7 +21,6 @@ from tqdm import tqdm
 from ycsb import ycsb_operator
 from zipfian_generator import ZipfGenerator
 
-multiprocessing.set_start_method('fork')
 
 threads = int(sys.argv[1])
 barrier = multiprocessing.Barrier(threads)
