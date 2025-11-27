@@ -20,7 +20,7 @@ from tqdm import tqdm
 from ycsb import ycsb_operator
 from zipfian_generator import ZipfGenerator
 
-# A run with sensible arguments: python client.py 1 10 4 0 100 10 results 0 10
+multiprocessing.set_start_method('fork')
 
 threads = int(sys.argv[1])
 barrier = multiprocessing.Barrier(threads)
@@ -179,7 +179,6 @@ def main():
 
 
 if __name__ == "__main__":
-    multiprocessing.set_start_method('fork')
     main()
 
     print()
