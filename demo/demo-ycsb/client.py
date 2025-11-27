@@ -23,6 +23,7 @@ from zipfian_generator import ZipfGenerator
 # A run with sensible arguments: python client.py 1 10 4 0 100 10 results 0 10
 
 threads = int(sys.argv[1])
+barrier = multiprocessing.Barrier(threads)
 N_ENTITIES = int(sys.argv[2])
 N_PARTITIONS = int(sys.argv[3])
 STARTING_MONEY = 1_000_000
@@ -90,10 +91,12 @@ def read_only_ycsb_generator(keys, operator: Operator, n: int, zipf_const: float
 def benchmark_runner(proc_num) -> dict[bytes, dict]:
     print(f'Generator: {proc_num} starting')
     styx = SyncStyxClient(STYX_HOST, STYX_PORT, kafka_url=KAFKA_URL)
+    time.sleep(proc_num * 0.2)
     styx.open(consume=False)
     ycsb_generator = transactional_ycsb_generator(key_list, ycsb_operator, N_ENTITIES, zipf_const=ZIPF_CONST)
     timestamp_futures: dict[bytes, dict] = {}
     time.sleep(5)
+    barrier.wait()
     start = timer()
     for _ in range(seconds):
         sec_start = timer()
