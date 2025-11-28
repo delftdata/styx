@@ -98,7 +98,7 @@ def benchmark_runner(proc_num) -> dict[bytes, dict]:
     time.sleep(5)
     barrier.wait()
     start = timer()
-    for _ in range(seconds):
+    for sec in range(seconds):
         sec_start = timer()
         for i in range(messages_per_second):
             if i % (messages_per_second // sleeps_per_second) == 0:
@@ -115,7 +115,7 @@ def benchmark_runner(proc_num) -> dict[bytes, dict]:
         if lps < 1:
             time.sleep(1 - lps)
         sec_end2 = timer()
-        print(f'Latency per second: {sec_end2 - sec_start}')
+        print(f'{sec} | Latency per second: {sec_end2 - sec_start}')
     end = timer()
     print(f'Average latency per second: {(end - start) / seconds}')
 
