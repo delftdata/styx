@@ -15,8 +15,6 @@ services:
       - HEARTBEAT_LIMIT=5000
       - HEARTBEAT_CHECK_INTERVAL=500
     depends_on:
-      - kafka1
-      - nginx
       - prometheus
       - grafana
 
