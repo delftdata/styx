@@ -233,24 +233,21 @@ class CoordinatorService(object):
                     if not self.aria_metadata.sent_proceed_msg:
                         self.aria_metadata.sent_proceed_msg = True
                         await self.worker_wants_to_proceed()
-                    message = self.protocol_networking.decode_message(data)
-                    if message == b'':
-                        remote_logic_aborts = set()
-                    else:
-                        remote_logic_aborts = message[0]
-                    sync_complete: bool = await self.aria_metadata.set_aria_processing_done(remote_logic_aborts)
+                    (worker_id, remote_logic_aborts) = self.protocol_networking.decode_message(data)
+                    sync_complete: bool = self.aria_metadata.set_aria_processing_done(worker_id, remote_logic_aborts)
                     if sync_complete:
                         await self.finalize_worker_sync(MessageType(message_type),
                                                         (self.aria_metadata.logic_aborts_everywhere,),
                                                         Serializer.PICKLE)
-                        await self.aria_metadata.cleanup()
+                        self.aria_metadata.cleanup()
             case MessageType.AriaCommit:
                 async with self.networking_locks[message_type]:
                     message = self.protocol_networking.decode_message(data)
-                    aborted, remote_t_counter, processed_seq_size = message
-                    sync_complete: bool = await self.aria_metadata.set_aria_commit_done(aborted,
-                                                                                        remote_t_counter,
-                                                                                        processed_seq_size)
+                    worker_id, aborted, remote_t_counter, processed_seq_size = message
+                    sync_complete: bool = self.aria_metadata.set_aria_commit_done(worker_id,
+                                                                                  aborted,
+                                                                                  remote_t_counter,
+                                                                                  processed_seq_size)
                     if sync_complete:
                         await self.finalize_worker_sync(MessageType(message_type),
                                                         (self.aria_metadata.concurrency_aborts_everywhere,
@@ -258,15 +255,16 @@ class CoordinatorService(object):
                                                          self.aria_metadata.max_t_counter,
                                                          self.aria_metadata.take_snapshot),
                                                         Serializer.PICKLE)
-                        await self.aria_metadata.cleanup(take_snapshot=True)
+                        self.aria_metadata.cleanup(take_snapshot=True)
             case MessageType.AriaFallbackStart | MessageType.AriaFallbackDone:
                 async with self.networking_locks[message_type]:
-                    sync_complete: bool = await self.aria_metadata.set_empty_sync_done()
+                    (worker_id, ) = self.protocol_networking.decode_message(data)
+                    sync_complete: bool = self.aria_metadata.set_empty_sync_done(worker_id)
                     if sync_complete:
                         await self.finalize_worker_sync(MessageType(message_type),
                                                         b'',
                                                         Serializer.NONE)
-                        await self.aria_metadata.cleanup()
+                        self.aria_metadata.cleanup()
             case MessageType.SyncCleanup:
                 async with self.networking_locks[message_type]:
                     (worker_id, epoch_throughput, epoch_latency,
@@ -285,17 +283,18 @@ class CoordinatorService(object):
                     self.latency_breakdown_gauge.labels(instance=worker_id, component="Commit time").set(commit_time)
                     self.latency_breakdown_gauge.labels(instance=worker_id, component="Fallback").set(fallback_time)
                     self.latency_breakdown_gauge.labels(instance=worker_id, component="Async Snapshot").set(snap_time)
-                    sync_complete: bool = await self.aria_metadata.set_empty_sync_done()
+                    sync_complete: bool = self.aria_metadata.set_empty_sync_done(worker_id)
                     if sync_complete:
                         await self.finalize_worker_sync(MessageType(message_type),
                                                         (self.aria_metadata.stop_next_epoch, ),
                                                         Serializer.MSGPACK)
-                        await self.aria_metadata.cleanup(epoch_end=True)
+                        self.aria_metadata.cleanup(epoch_end=True)
             case MessageType.DeterministicReordering:
                 async with self.networking_locks[message_type]:
                     message = self.protocol_networking.decode_message(data)
-                    remote_read_reservation, remote_write_set, remote_read_set = message
-                    sync_complete: bool = await self.aria_metadata.set_deterministic_reordering_done(
+                    worker_id, remote_read_reservation, remote_write_set, remote_read_set = message
+                    sync_complete: bool = self.aria_metadata.set_deterministic_reordering_done(
+                        worker_id,
                         remote_read_reservation,
                         remote_write_set,
                         remote_read_set)
@@ -305,7 +304,7 @@ class CoordinatorService(object):
                                                          self.aria_metadata.global_write_set,
                                                          self.aria_metadata.global_read_set),
                                                         Serializer.PICKLE)
-                        await self.aria_metadata.cleanup()
+                        self.aria_metadata.cleanup()
             case MessageType.MigrationDone:
                 async with self.networking_locks[message_type]:
                     sync_complete: bool = await self.migration_metadata.set_empty_sync_done(message_type)

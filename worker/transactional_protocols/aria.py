@@ -396,7 +396,7 @@ class AriaProtocol(BaseTransactionalProtocol):
                     start_sync = timer()
                     # wait for all peers to be done processing (needed to know the aborts)
                     await self.sync_workers(msg_type=MessageType.AriaProcessingDone,
-                                            message=(self.networking.logic_aborts_everywhere, ),
+                                            message=(self.id, self.networking.logic_aborts_everywhere),
                                             serializer=Serializer.PICKLE)
                     end_sync = timer()
                     sync_time = 0.0
@@ -413,7 +413,8 @@ class AriaProtocol(BaseTransactionalProtocol):
                         concurrency_aborts: set[int] = self.local_state.check_conflicts()
                     elif CONFLICT_DETECTION_METHOD is AriaConflictDetectionType.DETERMINISTIC_REORDERING:
                         await self.sync_workers(msg_type=MessageType.DeterministicReordering,
-                                                message=(self.local_state.reads,
+                                                message=(self.id,
+                                                         self.local_state.reads,
                                                          self.local_state.write_sets,
                                                          self.local_state.read_sets),
                                                 serializer=Serializer.PICKLE)
@@ -429,10 +430,11 @@ class AriaProtocol(BaseTransactionalProtocol):
                     else:
                         local_abort_rate = 0.0
                     # Notify peers that we are ready to commit
-                    # logging.info(f'{self.id} ||| Notify peers...')
+                    logging.warning(f'{self.id} ||| Notify peers...')
                     start_sync = timer()
                     await self.sync_workers(msg_type=MessageType.AriaCommit,
-                                            message=(concurrency_aborts,
+                                            message=(self.id,
+                                                     concurrency_aborts,
                                                      self.sequencer.t_counter,
                                                      len(sequence)),
                                             serializer=Serializer.PICKLE,
@@ -440,7 +442,7 @@ class AriaProtocol(BaseTransactionalProtocol):
                     end_sync = timer()
                     sync_time += end_sync - start_sync
                     # HERE WE KNOW ALL THE CONCURRENCY ABORTS
-                    # logging.info(f'{self.id} ||| Starting commit! {self.concurrency_aborts_everywhere}')
+                    logging.warning(f'{self.id} ||| Starting commit! {self.concurrency_aborts_everywhere}')
                     start_commit = timer()
                     self.local_state.commit(self.concurrency_aborts_everywhere)
 
@@ -459,17 +461,17 @@ class AriaProtocol(BaseTransactionalProtocol):
 
                     end_commit = timer()
 
-                    # logging.info(f'{self.id} ||| Sequence committed!')
+                    logging.warning(f'{self.id} ||| Sequence committed! | {len(self.concurrency_aborts_everywhere)} / {self.total_processed_seq_size}')
 
                     start_fallback = timer()
                     abort_rate: float = len(self.concurrency_aborts_everywhere) / self.total_processed_seq_size
 
                     if abort_rate > FALLBACK_STRATEGY_PERCENTAGE:
                         # Run Calvin
-                        # logging.info(
-                        #     f'{self.id} ||| Epoch: {self.sequencer.epoch_counter} '
-                        #     f'Abort percentage: {int(abort_rate * 100)}% initiating fallback strategy...'
-                        # )
+                        logging.warning(
+                            f'{self.id} ||| Epoch: {self.sequencer.epoch_counter} '
+                            f'Abort percentage: {int(abort_rate * 100)}% initiating fallback strategy...'
+                        )
 
                         await self.run_fallback_strategy()
                         await self.send_delta_to_snapshotting_proc()
@@ -644,8 +646,8 @@ class AriaProtocol(BaseTransactionalProtocol):
                     )
 
         await self.sync_workers(msg_type=MessageType.AriaFallbackStart,
-                                message=b'',
-                                serializer=Serializer.NONE,
+                                message=(self.id, ),
+                                serializer=Serializer.MSGPACK,
                                 send_async_migration_message=True)
         if fallback_tasks:
             await asyncio.gather(*fallback_tasks)
@@ -656,8 +658,8 @@ class AriaProtocol(BaseTransactionalProtocol):
         # )
 
         await self.sync_workers(msg_type=MessageType.AriaFallbackDone,
-                                message=b'',
-                                serializer=Serializer.NONE,
+                                message=(self.id, ),
+                                serializer=Serializer.MSGPACK,
                                 send_async_migration_message=True)
 
     async def unlock_tid(self, t_id_to_unlock: int):
