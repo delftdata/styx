@@ -667,7 +667,7 @@ class AriaProtocol(BaseTransactionalProtocol):
             async with self.fallback_locking_event_map_lock:
                 self.fallback_locking_event_map[t_id_to_unlock].set()
         else:
-            logging.error(f"Unlock tid {t_id_to_unlock} not found. But should exist!")
+            logging.error(f"{self.sequencer.epoch_counter} | Unlock tid {t_id_to_unlock} not found. But should exist!")
 
     async def send_responses(
             self,
