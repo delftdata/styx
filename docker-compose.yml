@@ -52,7 +52,7 @@ services:
       - DISCOVERY_PORT=8888
     env_file:
       - env/minio.env
-    cpus: ${STYX_WORKER_THREADS}
+#    cpus: ${STYX_WORKER_THREADS}
     depends_on:
       - coordinator
 

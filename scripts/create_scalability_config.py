@@ -1,290 +1,90 @@
 import os
-
 import pandas as pd
-
 
 experiment_time = 60
 warmup_time = 10
 script_path = os.path.dirname(os.path.realpath(__file__))
 
-results_path = "../results"
+results_path = "results"
 
-file_names = [f for f in os.listdir(results_path) if os.path.isfile(os.path.join(results_path, f))]
+file_names = [
+    f for f in os.listdir(results_path)
+    if os.path.isfile(os.path.join(results_path, f))
+]
+ycsbt_results = [file_name for file_name in file_names
+                 if file_name.startswith("ycsbt")]
 
-ycsbt_results = [file_name for file_name in file_names if file_name.startswith("ycsbt")]
+# ============================================================
+#                  INPUT THROUGHPUT GENERATION
+# ============================================================
 
-input_throughput = [(5000, 1),
-                    (6000, 1),
-                    (7000, 1),
-                    (8000, 1),
-                    (4500, 2),
-                    (5000, 2),
-                    (5500, 2),
-                    (4000, 3),
-                    (6500, 2),
-                    (7000, 2),
-                    (5000, 3),
-                    (4000, 4),
-                    (4250, 4),
-                    (4500, 4),
-                    (4750, 4),
-                    (5000, 4),
-                    (4400, 5),
-                    (4600, 5),
-                    (4800, 5),
-                    (5200, 5),
-                    (5600, 5),
-                    (5000, 6),
-                    (3100, 10),
-                    (3200, 10),
-                    (5500, 6),
-                    (6800, 5),
-                    (7000, 5),
-                    (6000, 6),
-                    (3700, 10),
-                    (3800, 10),
-                    (3900, 10),
-                    (4000, 10),
-                    (4100, 10),
-                    (4200, 10),
-                    (4300, 10),
-                    (4400, 10),
-                    (4500, 10),
-                    (4600, 10),
-                    (4700, 10),
-                    (4800, 10),
-                    (4900, 10),
-                    (5000, 10),
-                    (5100, 10),
-                    (5200, 10),
-                    (5300, 10),
-                    (5400, 10),
-                    (5500, 10),
-                    (5600, 10),
-                    (5700, 10),
-                    (5800, 10),
-                    (5900, 10),
-                    (6000, 10),
-                    (6100, 10),
-                    (6200, 10),
-                    (6300, 10),
-                    (6400, 10),
-                    (6500, 10),
-                    (6600, 10),
-                    (6700, 10),
-                    (6800, 10),
-                    (6900, 10),
-                    (7000, 10),
-                    (7100, 10),
-                    (7200, 10),
-                    (7300, 10),
-                    (7400, 10),
-                    (7500, 10),
-                    (7600, 10),
-                    (7700, 10),
-                    (7800, 10),
-                    (7900, 10),
-                    (8000, 10),
-                    (8100, 10),
-                    (8200, 10),
-                    (8300, 10),
-                    (8400, 10),
-                    (8500, 10),
-                    (8600, 10),
-                    (8700, 10),
-                    (8800, 10),
-                    (8900, 10),
-                    (9000, 10),
-                    (10000, 10),
-                    (10100, 10),
-                    (10200, 10),
-                    (10300, 10),
-                    (10400, 10),
-                    (10500, 10),
-                    (5500, 20),
-                    (5600, 20),
-                    (5700, 20),
-                    (5800, 20),
-                    (5900, 20),
-                    (6000, 20),
-                    (8000, 20),
-                    (8100, 20),
-                    (8200, 20),
-                    (8300, 20),
-                    (8400, 20),
-                    (8500, 20),
-                    (8600, 20),
-                    (8700, 20),
-                    (8800, 20),
-                    (8900, 20),
-                    (9000, 20),
-                    (6000, 30),
-                    (6100, 30),
-                    (6200, 30),
-                    (6300, 30),
-                    (6400, 30),
-                    (7000, 30),
-                    (7100, 30),
-                    (7200, 30),
-                    (7300, 30),
-                    (7400, 30),
-                    (8000, 50),
-                    (8100, 50),
-                    (8200, 50),
-                    (8300, 50),
-                    (8400, 50),
-                    (8500, 50),
-                    (8600, 50),
-                    (6000, 50),
-                    (6100, 50),
-                    (6200, 50),
-                    (6300, 50),
-                    (6400, 50),
-                    (6500, 50),
-                    (6600, 50),
-                    (6700, 50),
-                    (6800, 50),
-                    (10_000, 19),
-                    (9_550, 20),
-                    (9_600, 20),
-                    (9_700, 20),
-                    (9_800, 20),
-                    (9_900, 20),
-                    (10_000, 20),
-                    (8_375, 24),
-                    (8080, 25),
-                    (8160, 25),
-                    (8240, 25),
-                    (8320, 25),
-                    (10_000, 14),
-                    (9400, 15),
-                    (9600, 15),
-                    (9800, 15),
-                    (10_000, 15),
-                    (10_000, 9),
-                    (10_000, 10),
-                    (10_000, 38),
-                    (10_000, 39),
-                    (10_000, 32),
-                    (10_000, 33),
-                    (10_000, 28),
-                    (10_000, 29),
-                    (10_000, 18),
-                    (10_000, 19),
-                    (10_000, 11),
-                    (10_000, 12),
-                    (10_000, 6),
-                    (10_000, 7),
-                    (10_000, 9),
-                    (10_000, 30),
-                    (10_000, 31),
-                    (10_000, 34),
-                    (10_000, 35),
-                    (10_000, 36),
-                    (10_000, 26),
-                    (10_000, 16),
-                    (10_000, 17),
-                    (10_000, 18),
-                    (10_000, 22),
-                    (10_000, 23),
-                    (10_000, 24),
-                    (10_000, 25),
-                    (10_000, 27),
-                    (10_000, 28),
-                    (10_000, 29),
-                    (5250, 20),
-                    (5300, 20),
-                    (5350, 20),
-                    (5400, 20),
-                    (5450, 20),
-                    (5500, 20),
-                    (6000, 20),
-                    (6050, 20),
-                    (6100, 20),
-                    (6150, 20),
-                    (6200, 20),
-                    (6250, 20),
-                    (6300, 20),
-                    (6350, 20),
-                    (6400, 20),
-                    (6450, 20),
-                    (6500, 20),
-                    (6550, 20),
-                    (6600, 20),
-                    (6650, 20),
-                    (6700, 20),
-                    (6750, 20),
-                    (6800, 20),
-                    (6850, 20),
-                    (6900, 20),
-                    (6950, 20),
-                    (7000, 20),
-                    (7050, 20),
-                    (7100, 20),
-                    (7150, 20),
-                    (7200, 20),
-                    (7250, 20),
-                    (7300, 20),
-                    (7350, 20),
-                    (7400, 20),
-                    (7450, 20),
-                    (7500, 20),
-                    (7550, 20),
-                    (7600, 20),
-                    (7650, 20),
-                    (7700, 20),
-                    (7750, 20),
-                    (7800, 20),
-                    (7850, 20),
-                    (7900, 20),
-                    (7950, 20),
-                    (8000, 20)]
+# Workers we want to test
+workers = [2, 4, 6, 8, 10, 12, 14, 16, 24, 32, 64]
+multipartitions = [0.0, 0.2, 0.5, 1.0]
 
-# 32 0.2 150_000 - 160_000 c
-# 32 0.5 120_000 - 140_000 c
-# 24 0.0 140_000 - 160_000 c
-# 24 0.2 120_000 - 130_000 c
-# 24 0.5 105_000 - 110_000
+input_throughput = []
 
+for w in workers:
+    min_total = 4000 * w
+    max_total = 10000 * w
 
+    # rates from 4000 to 10000 inclusive, step 250 (tune as desired)
+    for rate in range(4000, 10001, 250):
+        total = rate * w
+        if min_total <= total <= max_total:
+            input_throughput.append((rate, w))
+
+# Remove duplicates by total throughput (keep first occurrence)
 new_input_throughput = []
-total_throughput = set()
+total_seen = set()
 
-for rate, clients in input_throughput:
-    total = rate * clients
-    if total in total_throughput:
-        continue
-    total_throughput.add(total)
-    new_input_throughput.append((rate, clients))
+for rate, w in input_throughput:
+    total = rate * w
+    if total not in total_seen:
+        total_seen.add(total)
+        new_input_throughput.append((rate, w))
 
 input_throughput = new_input_throughput
 
+per_worker_target = {
+    0.0: 6200,
+    0.2: 4900,
+    0.5: 4100,
+    1.0: 3200,
+}
 
-# 32 0.2 150_000 - 160_000
-# 32 0.5 120_000 - 140_000
-# 24 0.0 140_000 - 160_000
-# 24 0.2 120_000 - 130_000
-# 24 0.5 105_000 - 110_000
+band = 0.10  # 10% band around the target line
 
-viable_ranges = {(24, 0.0): (140_000, 160_000),
-                 (24, 0.2): (100_000, 140_000),
-                 (24, 0.5): (80_000, 120_000),
-                 (24, 1.0): (60_000, 100_000),
-                 (32, 0.0): (185_000, 210_000),
-                 (32, 0.2): (140_000, 160_000),
-                 (32, 0.5): (120_000, 140_000),
-                 (32, 1.0): (90_000, 110_000)}
+viable_ranges = {}
+for w in workers:
+    for pm in multipartitions:
+        target_total = per_worker_target[pm] * w
+        r1 = int(target_total * (1.0 - band))
+        r2 = int(target_total * (1.0 + band))
+        viable_ranges[(w, pm)] = (r1, r2)
+
+# ============================================================
+#                  MATCH TO EXPERIMENTS
+# ============================================================
 
 lines = []
+
 for input_rate, n_threads in input_throughput:
     total_rate = input_rate * n_threads
-    for k, v in viable_ranges.items():
-        part, pm = k
-        r1, r2 = v
+    for (part_workers, pm), (r1, r2) in viable_ranges.items():
         if r1 <= total_rate <= r2:
-            file_name = f"ycsbt_scale_{part}_{pm}_{total_rate}.json"
+            file_name = f"ycsbt_scale_{part_workers}_{pm}_{total_rate}.json"
             if file_name not in ycsbt_results:
-                lines.append((input_rate, part, pm,  n_threads, experiment_time, warmup_time, 1000))
+                # fields: rate, #workers, pm, client-threads,
+                #         experiment_time, warmup_time
+                lines.append(
+                    (input_rate, part_workers, pm,
+                     n_threads, experiment_time, warmup_time, 1000)
+                )
 
 df = pd.DataFrame(lines)
-df.to_csv(os.path.join(script_path, 'styx_scalability_experiments_config.csv'), index=False, header=False)
+df.to_csv(
+    os.path.join(script_path, "styx_scalability_experiments_config.csv"),
+    index=False,
+    header=False,
+)

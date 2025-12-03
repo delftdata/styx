@@ -6,15 +6,16 @@ max_operator_parallelism=$3
 threads_per_worker=$4
 minimum_amount_of_workers=1
 
-threaded_scale_factor=$(( "$scale_factor" / "$threads_per_worker" ))
-threaded_scale_factor=$(( "$minimum_amount_of_workers" > "$threaded_scale_factor" ? "$minimum_amount_of_workers" : "$threaded_scale_factor" ))
-
 echo "============== Starting Styx Cluster ================"
 echo "scale_factor: $scale_factor"
 echo "epoch_size: $epoch_size"
 echo "max_operator_parallelism: $max_operator_parallelism"
 echo "threads_per_worker: $threads_per_worker"
 echo "minimum_amount_of_workers: $minimum_amount_of_workers"
+# Ceiling division
+threaded_scale_factor=$(( (scale_factor + threads_per_worker - 1) / threads_per_worker ))
+# Enforce minimum
+(( threaded_scale_factor < minimum_amount_of_workers )) && threaded_scale_factor=$minimum_amount_of_workers
 echo "threaded_scale_factor: $threaded_scale_factor"
 echo "====================================================="
 
