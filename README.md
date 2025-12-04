@@ -4,7 +4,7 @@ This repository contains the codebase of Styx described in: https://arxiv.org/ab
 
 ## Preliminaries
 
-This project requires an environment with *python 3.12* installed. 
+This project requires an environment with *python 3.13* installed. 
 Please install the styx-package and all the requirements of the coordinator
 and the worker modules as well as pandas, numpy and matplotlib. 
 
@@ -12,9 +12,7 @@ You can use the following commands:
 
 ```
 pip install styx-package/.  
-pip install -r coordinator/requirements.txt
-pip install -r worker/requirements.txt
-pip install pandas numpy matplotlib
+pip install -r requirements.txt
 ```
 
 ## Folder structure
@@ -42,15 +40,66 @@ pip install pandas numpy matplotlib
 
 ## Running experiments
 
-In the scripts directory, we provide a number of different scripts that can be used to run the experiments of Styx.
+The `scripts/` directory contains automation scripts for running the Styx benchmarks.
+You can reproduce the paper experiments or run individual tests using the commands below.
 
 ### Reproduce paper results
 
-From the projects root:
+Both batch and scalability experiments can be launched from the project root.
+
+#### Batch Experiments (YCSB-T, DHR, DMR, TPC-C)
 ```
-./scripts/run_batch_experiments.sh
-./scripts/run_scalability_experiments.sh
+./scripts/run_batch_experiments.sh <CONFIG_FILE> <SAVE_DIR> <STYX_THREADS_PER_WORKER> <N_PARTITIONS> <N_KEYS> <TOTAL_TIME> <WARMUP_TIME>
 ```
+
+Where:
+
+| Argument               | Meaning                                                        |
+|------------------------|----------------------------------------------------------------|
+| `CONFIG_FILE`          | CSV file listing batch experiments, generated via `create_config.py` |
+| `SAVE_DIR`             | Directory where results will be stored                         |
+| `STYX_THREADS_PER_WORKER` | Number of worker threads per Styx worker (paper uses **8**) |
+| `N_PARTITIONS`         | Number of workers                                               |
+| `N_KEYS`               | Number of keys in the workload                                  |
+| `TOTAL_TIME`           | Duration of experiment in seconds                               |
+| `WARMUP_TIME`          | Warmup duration in seconds                                      |
+
+
+Before going forward you might want to run the experiment with less resources, change the number of partitions to 4 and the number of threads per worker to 1 this will create 4 Styx 1CPU workers, also change the generated experiments in the `create_config.py` file.
+
+To do so, you can change the WORKER_THREADS value in the docker-compose.yml file in the root of the project.
+
+In the paper we used the following command to run the batch experiments:
+```
+./scripts/run_batch_experiments.sh scripts/styx_experiments_config.csv results 10 80 10000 60 10
+```
+This will create a results folder with the results of the experiments. 
+
+:warning: The experiments will take a long time to complete. And require either a beefy machine or to configure the docker compose files to work with docker swarm.
+Later we will provide k8s config files for the experiments.
+
+
+#### Scalability Experiments
+
+To reproduce the scalability figures (varying workers and multipartition configurations):
+
+```
+./scripts/run_scalability_experiments.sh <CONFIG_FILE> <SAVE_DIR> <STYX_THREADS_PER_WORKER>
+```
+
+| Argument                 | Meaning                                             |
+|--------------------------|-----------------------------------------------------|
+| `CONFIG_FILE`            | CSV file produced by `create_scalability_config.py` |
+| `SAVE_DIR`               | Directory where results will be stored              |
+| `STYX_THREADS_PER_WORKER` | Worker thread count per Styx worker                |
+
+
+In the paper we used the following command to run the batch experiments:
+```
+./scripts/run_scalability_experiments.sh scripts/styx_scalability_experiments_config.csv results 8
+```
+:warning: The experiments will take a long time to complete. And require either a beefy machine or to configure the docker compose files to work with docker swarm.
+Later we will provide k8s config files for the experiments.
 
 ### Run single experiment
 
