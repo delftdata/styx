@@ -53,14 +53,16 @@ per_worker_target = {
     1.0: 3200,
 }
 
-band = 0.10  # 10% band around the target line
+band = 0.10           # same ±10% band
+shift = 1.10          # SHIFT EVERYTHING +10%
 
 viable_ranges = {}
+
 for w in workers:
     for pm in multipartitions:
-        target_total = per_worker_target[pm] * w
-        r1 = int(target_total * (1.0 - band))
-        r2 = int(target_total * (1.0 + band))
+        base = per_worker_target[pm] * w
+        r1 = int((base * (1.0 - band)) * shift)
+        r2 = int((base * (1.0 + band)) * shift)
         viable_ranges[(w, pm)] = (r1, r2)
 
 # ============================================================
