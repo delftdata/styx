@@ -4,7 +4,7 @@ import io
 import os
 import time
 from copy import deepcopy
-from distutils.util import strtobool
+from setuptools._distutils.util import strtobool
 
 from aiokafka import AIOKafkaProducer
 from aiokafka.errors import KafkaConnectionError

@@ -1,6 +1,7 @@
 import asyncio
 import os
-from distutils.util import strtobool
+
+from setuptools._distutils.util import strtobool
 
 from .message_types import MessageType
 from .tcp_networking import NetworkingManager

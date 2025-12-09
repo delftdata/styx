@@ -6,7 +6,7 @@ import struct
 
 import uvloop
 
-from distutils.util import strtobool
+from setuptools._distutils.util import strtobool
 
 from styx.common.logging import logging
 from styx.common.message_types import MessageType

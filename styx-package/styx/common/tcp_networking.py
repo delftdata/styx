@@ -3,7 +3,7 @@ import os
 import socket
 import struct
 import sys
-from distutils.util import strtobool
+from setuptools._distutils.util import strtobool
 from struct import unpack
 from timeit import default_timer as timer
 from typing import Any

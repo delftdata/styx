@@ -2,7 +2,7 @@ import asyncio
 import os
 import time
 
-from distutils.util import strtobool
+from setuptools._distutils.util import strtobool
 from timeit import default_timer as timer
 
 from aiokafka import TopicPartition

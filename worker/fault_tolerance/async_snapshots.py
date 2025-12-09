@@ -2,7 +2,7 @@ import os
 import socket
 import time
 import io
-from distutils.util import strtobool
+from setuptools._distutils.util import strtobool
 from typing import Iterable
 
 from minio import Minio
