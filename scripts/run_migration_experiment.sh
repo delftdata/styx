@@ -27,7 +27,7 @@ else
 fi
 
 # Start the Styx cluster
-bash "$ROOT_DIR/scripts/start_styx_cluster.sh" "$n_workers" "$epoch_size" "$max_part"
+bash "$ROOT_DIR/scripts/start_styx_cluster.sh" "$n_workers" "$epoch_size" "$max_part" "true" "true" "true"
 sleep 10
 
 # Run workload

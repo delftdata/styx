@@ -11,6 +11,9 @@ saving_dir=$8
 warmup_seconds=$9
 epoch_size=${10}
 styx_threads_per_worker=${11}
+enable_compression=${12}
+use_composite_keys=${13}
+use_fallback_cache=${14}
 
 echo "============= Running Experiment ================="
 echo "workload_name: $workload_name"
@@ -24,9 +27,12 @@ echo "saving_dir: $saving_dir"
 echo "warmup_seconds: $warmup_seconds"
 echo "epoch_size: $epoch_size"
 echo "styx_threads_per_worker: $styx_threads_per_worker"
+echo "enable_compression: $enable_compression"
+echo "use_composite_keys: $use_composite_keys"
+echo "use_fallback_cache: $use_fallback_cache"
 echo "=================================================="
 
-bash scripts/start_styx_cluster.sh "$n_part" "$epoch_size" "$n_part" "$styx_threads_per_worker"
+bash scripts/start_styx_cluster.sh "$n_part" "$epoch_size" "$n_part" "$styx_threads_per_worker" "$enable_compression" "$use_composite_keys" "$use_fallback_cache"
 
 sleep 10
 

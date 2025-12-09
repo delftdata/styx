@@ -5,7 +5,7 @@ experiment_time = 60
 warmup_time = 10
 script_path = os.path.dirname(os.path.realpath(__file__))
 
-results_path = "results"
+results_path = "../s_results/s_results"
 
 file_names = [
     f for f in os.listdir(results_path)
@@ -28,7 +28,7 @@ for w in workers:
     min_total = 4000 * w
     max_total = 10000 * w
 
-    # rates from 4000 to 10000 inclusive, step 250 (tune as desired)
+    # rates from 4000 to 10000 inclusive, step 250
     for rate in range(4000, 10001, 250):
         total = rate * w
         if min_total <= total <= max_total:
@@ -53,16 +53,35 @@ per_worker_target = {
     1.0: 3200,
 }
 
-band = 0.10           # same ±10% band
-shift = 1.10          # SHIFT EVERYTHING +10%
+band = 0.10               # ±10% band around target
+shift = 1.21              # 10% shift twice → +21%
 
 viable_ranges = {}
 
 for w in workers:
+    min_total = 4000 * w
+    max_total = 10000 * w
+
     for pm in multipartitions:
         base = per_worker_target[pm] * w
-        r1 = int((base * (1.0 - band)) * shift)
-        r2 = int((base * (1.0 + band)) * shift)
+
+        # base band:
+        raw_r1 = base * (1.0 - band)
+        raw_r2 = base * (1.0 + band)
+
+        # shift everything to the right again (now total shift is +21%)
+        raw_r1 *= shift
+        raw_r2 *= shift
+
+        # clamp to system limits
+        r1 = int(max(raw_r1, min_total))
+        r2 = int(min(raw_r2, max_total))
+
+        # ensure valid interval even for small worker counts
+        if r1 > r2:
+            r1 = min_total
+            r2 = int(min(max_total, min_total * (1.0 + 2 * band)))
+
         viable_ranges[(w, pm)] = (r1, r2)
 
 # ============================================================
@@ -78,7 +97,7 @@ for input_rate, n_threads in input_throughput:
             file_name = f"ycsbt_scale_{part_workers}_{pm}_{total_rate}.json"
             if file_name not in ycsbt_results:
                 # fields: rate, #workers, pm, client-threads,
-                #         experiment_time, warmup_time
+                #         experiment_time, warmup_time, 1000 (keys/whatever)
                 lines.append(
                     (input_rate, part_workers, pm,
                      n_threads, experiment_time, warmup_time, 1000)

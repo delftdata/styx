@@ -28,7 +28,7 @@ do
   echo "threads_per_worker:       $styx_threads_per_worker"
   echo "=========================================================="
 
-  bash scripts/start_styx_cluster.sh "$n_part" "$epoch_size" "$n_part" "$styx_threads_per_worker"
+  bash scripts/start_styx_cluster.sh "$n_part" "$epoch_size" "$n_part" "$styx_threads_per_worker" "true" "true" "true"
 
   sleep 10
 
