@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Any
 
 from minio import Minio
+from setuptools._distutils.util import strtobool
 from tqdm import tqdm
 
 from timeit import default_timer as timer
@@ -55,6 +56,9 @@ MAX_OL_CNT: int = 15
 MAX_OL_QUANTITY: int = 10
 MIN_PAYMENT = 1.0
 MAX_PAYMENT = 5000.0
+enable_compression: bool = bool(strtobool(sys.argv[8]))
+use_composite_keys: bool = bool(strtobool(sys.argv[9]))
+use_fallback_cache: bool = bool(strtobool(sys.argv[10]))
 
 customers_per_district: dict[tuple, list] = {}
 
@@ -542,5 +546,8 @@ if __name__ == "__main__":
         messages_per_second,
         warmup_seconds,
         threads,
-        N_W
+        N_W,
+        enable_compression,
+        use_composite_keys,
+        use_fallback_cache
     )
