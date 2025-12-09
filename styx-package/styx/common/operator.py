@@ -1,4 +1,6 @@
 import asyncio
+import os
+from distutils.util import strtobool
 
 from .message_types import MessageType
 from .tcp_networking import NetworkingManager
@@ -11,12 +13,16 @@ from .exceptions import OperatorDoesNotContainFunction
 from .partitioning.hash_partitioner import HashPartitioner
 
 
+USE_COMPOSITE_KEYS: bool = bool(strtobool(os.getenv("USE_COMPOSITE_KEYS", "true")))
+
 class Operator(BaseOperator):
 
     def __init__(self,
                  name: str,
                  n_partitions: int = 1,
                  composite_key_hash_params: tuple[int, str] | None = None):
+        if not USE_COMPOSITE_KEYS:
+            composite_key_hash_params = None
         super().__init__(name, n_partitions)
         self.__state = ...
         self.__networking: NetworkingManager = ...

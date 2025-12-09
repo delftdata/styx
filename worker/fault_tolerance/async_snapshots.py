@@ -132,8 +132,6 @@ class AsyncSnapshotsMinio(BaseSnapshotter):
                 # recover only from a stable snapshot
                 continue
             (topic_partition_offsets, topic_partition_output_offsets,
-             epoch, t_counter) = zstd_msgpack_deserialization(
-                minio_client.get_object(SNAPSHOT_BUCKET_NAME, sn_name).data) if ENABLE_COMPRESSION \
-                else msgpack_deserialization(minio_client.get_object(SNAPSHOT_BUCKET_NAME, sn_name).data)
+             epoch, t_counter) = zstd_msgpack_deserialization(minio_client.get_object(SNAPSHOT_BUCKET_NAME, sn_name).data)
         # The recovered snapshot will have the latest metadata and merged operator state
         return data, topic_partition_offsets, topic_partition_output_offsets, epoch, t_counter

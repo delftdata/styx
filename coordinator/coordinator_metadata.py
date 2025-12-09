@@ -4,6 +4,7 @@ import io
 import os
 import time
 from copy import deepcopy
+from distutils.util import strtobool
 
 from aiokafka import AIOKafkaProducer
 from aiokafka.errors import KafkaConnectionError
@@ -26,6 +27,7 @@ from worker_pool import WorkerPool, Worker
 MAX_OPERATOR_PARALLELISM = int(os.getenv('MAX_OPERATOR_PARALLELISM', 10))
 KAFKA_REPLICATION_FACTOR = int(os.getenv('KAFKA_REPLICATION_FACTOR', 3))
 SNAPSHOT_BUCKET_NAME: str = os.getenv('SNAPSHOT_BUCKET_NAME', "styx-snapshots")
+COMPACT_SNAPSHOTS: bool = bool(strtobool(os.getenv("COMPACT_SNAPSHOTS", "false")))
 KAFKA_URL: str = os.getenv('KAFKA_URL', None)
 
 
@@ -166,10 +168,11 @@ class Coordinator(object):
                                          io.BytesIO(sn_data),
                                          len(sn_data))
             self.prev_completed_snapshot_id = current_completed_snapshot
-            loop = asyncio.get_running_loop()
-            loop.run_in_executor(pool,
-                                 start_snapshot_compaction,
-                                 current_completed_snapshot)
+            if COMPACT_SNAPSHOTS:
+                loop = asyncio.get_running_loop()
+                loop.run_in_executor(pool,
+                                     start_snapshot_compaction,
+                                     current_completed_snapshot)
 
     def get_current_completed_snapshot_id(self) -> int:
         if self.worker_snapshot_ids:
