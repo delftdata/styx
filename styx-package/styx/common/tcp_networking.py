@@ -1,7 +1,9 @@
 import asyncio
+import os
 import socket
 import struct
 import sys
+from distutils.util import strtobool
 from struct import unpack
 from timeit import default_timer as timer
 from typing import Any
@@ -16,6 +18,7 @@ from .serialization import Serializer, cloudpickle_serialization, msgpack_serial
     zstd_msgpack_serialization
 from .util.aio_task_scheduler import AIOTaskScheduler
 
+ENABLE_COMPRESSION: bool = bool(strtobool(os.getenv('ENABLE_COMPRESSION', "true")))
 
 class StyxSocketClient(object):
 
@@ -274,8 +277,8 @@ class NetworkingManager(BaseNetworking):
         elif serializer == Serializer.MSGPACK:
             ser_msg: bytes = msgpack_serialization(msg)
             ser_id = 1
-            if len(ser_msg) > 1_048_576:
-                # If it's more than 1MB compress by default
+            if ENABLE_COMPRESSION and len(ser_msg) > 10_240:
+                # If it's more than 10KB compress
                 ser_msg = zstd_msgpack_serialization(ser_msg, already_ser=True)
                 ser_id = 4
             msg = struct.pack('>B', msg_type) + struct.pack('>B', ser_id) + ser_msg

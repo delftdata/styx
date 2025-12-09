@@ -2,6 +2,7 @@ import asyncio
 import os
 import time
 
+from distutils.util import strtobool
 from timeit import default_timer as timer
 
 from aiokafka import TopicPartition
@@ -34,9 +35,9 @@ CONFLICT_DETECTION_METHOD: AriaConflictDetectionType = AriaConflictDetectionType
 FALLBACK_STRATEGY_PERCENTAGE: float = float(os.getenv('FALLBACK_STRATEGY_PERCENTAGE', -0.1))
 SNAPSHOTTING_THREADS: int = int(os.getenv('SNAPSHOTTING_THREADS', 4))
 SEQUENCE_MAX_SIZE: int = int(os.getenv('SEQUENCE_MAX_SIZE', 1_000))
-USE_FALLBACK_CACHE: bool = bool(os.getenv('USE_FALLBACK_CACHE', True))
+USE_FALLBACK_CACHE: bool = bool(strtobool(os.getenv("USE_FALLBACK_CACHE", "true")))
 KAFKA_URL: str = os.environ['KAFKA_URL']
-USE_ASYNC_MIGRATION: bool = bool(os.getenv('USE_ASYNC_MIGRATION', True))
+USE_ASYNC_MIGRATION: bool = bool(strtobool(os.getenv('USE_ASYNC_MIGRATION', "true")))
 ASYNC_MIGRATION_BATCH_SIZE: int = int(os.getenv('ASYNC_MIGRATION_BATCH_SIZE', 2_000))
 
 

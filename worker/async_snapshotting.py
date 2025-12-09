@@ -1,19 +1,23 @@
 import asyncio
+import os
 import concurrent.futures
 import socket
 import struct
 
 import uvloop
 
+from distutils.util import strtobool
+
 from styx.common.logging import logging
 from styx.common.message_types import MessageType
-from styx.common.serialization import zstd_msgpack_serialization
+from styx.common.serialization import zstd_msgpack_serialization, msgpack_serialization
 from styx.common.tcp_networking import NetworkingManager
 from styx.common.types import OperatorPartition, KVPairs
 from styx.common.util.aio_task_scheduler import AIOTaskScheduler
 
 from worker.fault_tolerance.async_snapshots import AsyncSnapshotsMinio
 
+ENABLE_COMPRESSION: bool = bool(strtobool(os.getenv('ENABLE_COMPRESSION', "true")))
 
 class AsyncSnapshottingProcess(object):
 
@@ -65,7 +69,7 @@ class AsyncSnapshottingProcess(object):
                                  self.async_snapshots.store_snapshot,
                                  self.async_snapshots.snapshot_id,
                                  f"data/{operator_name}/{partition}/{self.async_snapshots.snapshot_id}.bin",
-                                 zstd_msgpack_serialization(delta_map)
+                                 zstd_msgpack_serialization(delta_map) if ENABLE_COMPRESSION else msgpack_serialization(delta_map)
                                  ).add_done_callback(self.async_snapshots.snapshot_completed_callback)
         self.clear_delta_maps()
 
