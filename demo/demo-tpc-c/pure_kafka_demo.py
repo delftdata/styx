@@ -59,6 +59,10 @@ MAX_PAYMENT = 5000.0
 enable_compression: bool = bool(strtobool(sys.argv[8]))
 use_composite_keys: bool = bool(strtobool(sys.argv[9]))
 use_fallback_cache: bool = bool(strtobool(sys.argv[10]))
+os.environ["ENABLE_COMPRESSION"] = str(enable_compression)
+os.environ["USE_COMPOSITE_KEYS"] = str(use_composite_keys)
+os.environ["USE_FALLBACK_CACHE"] = str(use_fallback_cache)
+
 
 customers_per_district: dict[tuple, list] = {}
 
