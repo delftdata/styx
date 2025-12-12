@@ -484,7 +484,8 @@ def tpc_c_workload_generator(proc_num):
 
 
 def benchmark_runner(proc_num) -> dict[bytes, dict]:
-    print(f'Generator: {proc_num} starting')
+    print(f'Generator: {proc_num} starting with: EC={os.environ["ENABLE_COMPRESSION"]} '
+          f'CK={os.environ["USE_COMPOSITE_KEYS"]} FC={os.environ["USE_FALLBACK_CACHE"]}')
     styx = SyncStyxClient(STYX_HOST, STYX_PORT, kafka_url=KAFKA_URL)
     styx.open(consume=False)
     tpc_c_generator = tpc_c_workload_generator(proc_num)

@@ -1,11 +1,14 @@
 import asyncio
 import fractions
+import os
 import socket
 import struct
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from enum import IntEnum
 from pickle import UnpicklingError
+
+from setuptools._distutils.util import strtobool
 
 from .exceptions import SerializerNotSupported
 from .logging import logging
@@ -14,6 +17,7 @@ from .serialization import Serializer, cloudpickle_serialization, msgpack_serial
     pickle_serialization, cloudpickle_deserialization, msgpack_deserialization, pickle_deserialization, \
     zstd_msgpack_deserialization, zstd_msgpack_serialization
 
+USE_COMPRESSION: bool = bool(strtobool(os.getenv("ENABLE_COMPRESSION", "true")))
 
 class MessagingMode(IntEnum):
     WORKER_COR = 0
@@ -180,7 +184,7 @@ class BaseNetworking(ABC):
         elif serializer == Serializer.MSGPACK:
             ser_msg: bytes = msgpack_serialization(msg)
             ser_id = 1
-            if len(ser_msg) > 1_048_576:
+            if USE_COMPRESSION and len(ser_msg) > 10_240:
                 # If it's more than 1MB compress by default
                 ser_msg = zstd_msgpack_serialization(ser_msg, already_ser=True)
                 ser_id = 4

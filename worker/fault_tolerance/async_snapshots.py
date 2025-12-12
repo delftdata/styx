@@ -2,7 +2,6 @@ import os
 import socket
 import time
 import io
-from setuptools._distutils.util import strtobool
 from typing import Iterable
 
 from minio import Minio
@@ -10,7 +9,7 @@ from styx.common.message_types import MessageType
 from styx.common.types import OperatorPartition, KVPairs
 from styx.common.tcp_networking import NetworkingManager
 
-from styx.common.serialization import Serializer, zstd_msgpack_deserialization, msgpack_deserialization
+from styx.common.serialization import Serializer, zstd_msgpack_deserialization
 
 from worker.fault_tolerance.base_snapshoter import BaseSnapshotter
 
@@ -20,7 +19,6 @@ MINIO_URL: str = f"{os.environ['MINIO_HOST']}:{os.environ['MINIO_PORT']}"
 MINIO_ACCESS_KEY: str = os.environ['MINIO_ROOT_USER']
 MINIO_SECRET_KEY: str = os.environ['MINIO_ROOT_PASSWORD']
 SNAPSHOT_BUCKET_NAME: str = os.getenv('SNAPSHOT_BUCKET_NAME', "styx-snapshots")
-ENABLE_COMPRESSION: bool = bool(strtobool(os.getenv('ENABLE_COMPRESSION', "true")))
 
 
 class AsyncSnapshotsMinio(BaseSnapshotter):
@@ -106,9 +104,7 @@ class AsyncSnapshotsMinio(BaseSnapshotter):
                 if sn_id > snapshot_id:
                     # recover only from a stable snapshot
                     continue
-                partition_data = zstd_msgpack_deserialization(
-                    minio_client.get_object(SNAPSHOT_BUCKET_NAME, sn_name).data) if ENABLE_COMPRESSION \
-                    else msgpack_deserialization(minio_client.get_object(SNAPSHOT_BUCKET_NAME, sn_name).data)
+                partition_data = zstd_msgpack_deserialization(minio_client.get_object(SNAPSHOT_BUCKET_NAME, sn_name).data)
                 if operator_partition in data and partition_data:
                     data[operator_partition].update(partition_data)
                 else:

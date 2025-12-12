@@ -4,12 +4,12 @@ import io
 import os
 import time
 from copy import deepcopy
-from setuptools._distutils.util import strtobool
 
 from aiokafka import AIOKafkaProducer
 from aiokafka.errors import KafkaConnectionError
 from confluent_kafka.admin import AdminClient, NewTopic, KafkaException
 from minio import Minio
+from setuptools._distutils.util import strtobool
 
 from styx.common.message_types import MessageType
 from styx.common.serialization import Serializer, msgpack_serialization, cloudpickle_serialization, \
