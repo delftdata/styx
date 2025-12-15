@@ -14,6 +14,7 @@ styx_threads_per_worker=${11}
 enable_compression=${12}
 use_composite_keys=${13}
 use_fallback_cache=${14}
+regenerate_tpcc_data=${15:-false}
 
 echo "============= Running Experiment ================="
 echo "workload_name: $workload_name"
@@ -30,6 +31,7 @@ echo "styx_threads_per_worker: $styx_threads_per_worker"
 echo "enable_compression: $enable_compression"
 echo "use_composite_keys: $use_composite_keys"
 echo "use_fallback_cache: $use_fallback_cache"
+echo "regenerate_tpcc_data: $regenerate_tpcc_data"
 echo "=================================================="
 
 bash scripts/start_styx_cluster.sh "$n_part" "$epoch_size" "$n_part" "$styx_threads_per_worker" "$enable_compression" "$use_composite_keys" "$use_fallback_cache"
@@ -50,8 +52,34 @@ elif [[ $workload_name == "dmr" ]]; then
     python demo/demo-deathstar-movie-review/pure_kafka_demo.py "$saving_dir" "$client_threads" "$n_part" "$input_rate" "$total_time" "$warmup_seconds"
 elif [[ $workload_name == "tpcc" ]]; then
     # TPC-C
-    bash scripts/generate_tpcc_dataset.sh "$n_keys"
-    python demo/demo-tpc-c/pure_kafka_demo.py "$saving_dir" "$client_threads" "$n_part" "$input_rate" "$total_time" "$warmup_seconds" "$n_keys" "$enable_compression" "$use_composite_keys" "$use_fallback_cache"
+    DATA_DIR="demo/demo-tpc-c/data_${n_keys}"
+    GENERATOR_DIR="demo/demo-tpc-c/tpcc-generator"
+    GENERATOR_BIN="$GENERATOR_DIR/tpcc-generator"
+
+    # Decide if we should regenerate data
+    if [[ "$regenerate_tpcc_data" == true ]]; then
+        echo "regenerate_tpcc_data is true — forcing data regeneration."
+        regenerate=true
+    elif [[ ! -d "$DATA_DIR" || $(find "$DATA_DIR" -type f | wc -l) -ne 9 ]]; then
+        echo "Data directory missing or does not contain the exact TPC-C dataset."
+        regenerate=true
+    else
+        echo "Skipping data generation: $DATA_DIR already contains the TPC-C dataset."
+        regenerate=false
+    fi
+
+    if [[ "$regenerate" == true ]]; then
+        make clean -C "$GENERATOR_DIR"
+        make -C "$GENERATOR_DIR"
+        rm -rf "$DATA_DIR"
+        mkdir -p "$DATA_DIR"
+        "$GENERATOR_BIN" "$n_keys" "$DATA_DIR"
+    fi
+
+    python demo/demo-tpc-c/pure_kafka_demo.py \
+        "$saving_dir" "$client_threads" "$n_part" \
+        "$input_rate" "$total_time" "$warmup_seconds" \
+        "$n_keys" "$enable_compression" "$use_composite_keys" "$use_fallback_cache"
 else
     echo "Benchmark not supported!"
 fi
