@@ -1,6 +1,5 @@
 import os
 
-import numpy as np
 import pandas as pd
 import argparse
 
@@ -216,11 +215,11 @@ max_rate = {
 
 min_val = 100
 max_val = 7000
-num_intervals = 200
+step = 200
 
 input_throughput = [
-    (int(x), 1)
-    for x in np.linspace(min_val, max_val, num_intervals)
+    (v, 1)
+    for v in range(min_val, max_val + 1, step)
 ]
 
 
