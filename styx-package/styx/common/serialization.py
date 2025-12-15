@@ -13,7 +13,12 @@ class Serializer(Enum):
     PICKLE = auto()
     NONE = auto()
 
-zstd_cctx = zstd.ZstdCompressor(level=3)
+zstd_cctx = zstd.ZstdCompressor(
+    level=0,
+    write_checksum=False,
+    write_content_size=False,
+    write_dict_id=False
+)
 zstd_dctx = zstd.ZstdDecompressor()
 
 def msgpack_serialization(serializable_object: object) -> bytes:

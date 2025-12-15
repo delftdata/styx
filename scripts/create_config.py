@@ -1,4 +1,6 @@
 import os
+
+import numpy as np
 import pandas as pd
 import argparse
 
@@ -208,32 +210,19 @@ n_workers = [1, 10, 100]
 max_rate = {
     1: 1000,
     10: 4000,
-    100: 6000,
+    100: 10000,
 }
 
-input_throughput = [(100, 1),
-                    (200, 1),
-                    (300, 1),
-                    (400, 1),
-                    (500, 1),
-                    (600, 1),
-                    (700, 1),
-                    (800, 1),
-                    (900, 1),
-                    (1000, 1),
-                    (1100, 1),
-                    (1400, 1),
-                    (1500, 1),
-                    (1600, 1),
-                    (2000, 1),
-                    (2400, 1),
-                    (3000, 1),
-                    (3500, 1),
-                    (4000, 1),
-                    (4500, 1),
-                    (5000, 1),
-                    (5500, 1),
-                    (6000, 1)]
+
+min_val = 100
+max_val = 7000
+num_intervals = 200
+
+input_throughput = [
+    (int(x), 1)
+    for x in np.linspace(min_val, max_val, num_intervals)
+]
+
 
 # define the four configurations
 configs = [

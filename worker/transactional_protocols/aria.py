@@ -40,8 +40,6 @@ KAFKA_URL: str = os.environ['KAFKA_URL']
 USE_ASYNC_MIGRATION: bool = bool(strtobool(os.getenv('USE_ASYNC_MIGRATION', "true")))
 ASYNC_MIGRATION_BATCH_SIZE: int = int(os.getenv('ASYNC_MIGRATION_BATCH_SIZE', 2_000))
 
-USE_COMPRESSION: bool = bool(strtobool(os.getenv("ENABLE_COMPRESSION", "true")))
-
 
 class AriaProtocol(BaseTransactionalProtocol):
 
@@ -544,10 +542,11 @@ class AriaProtocol(BaseTransactionalProtocol):
 
     async def send_delta_to_snapshotting_proc(self):
         delta_to_send = self.local_state.get_data_for_snapshot()
+
         await self.snapshotting_networking_manager.send_message(self.networking.host_name, self.snapshotting_port,
                                                                 msg=(delta_to_send,),
                                                                 msg_type=MessageType.SnapProcDelta,
-                                                                serializer=Serializer.COMPRESSED_MSGPACK if USE_COMPRESSION else Serializer.MSGPACK)
+                                                                serializer=Serializer.MSGPACK)
         self.local_state.clear_delta_map()
 
     def cleanup_after_epoch(self):

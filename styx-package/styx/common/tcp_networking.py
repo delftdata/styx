@@ -277,8 +277,8 @@ class NetworkingManager(BaseNetworking):
         elif serializer == Serializer.MSGPACK:
             ser_msg: bytes = msgpack_serialization(msg)
             ser_id = 1
-            if USE_COMPRESSION and len(ser_msg) > 10_240:
-                # If it's more than 1MB compress by default
+            if USE_COMPRESSION and len(ser_msg) > 4096:
+                # If it's more than 4KB compress
                 ser_msg = zstd_msgpack_serialization(ser_msg, already_ser=True)
                 ser_id = 4
             msg = struct.pack('>B', msg_type) + struct.pack('>B', ser_id) + ser_msg

@@ -1,15 +1,15 @@
 setuptools==80.9.0
 # networking service
-uvloop==0.21.0
-msgspec==0.19.0
-cloudpickle==3.1.1
-cityhash==0.4.8
-zstandard==0.23.0
+uvloop==0.22.1
+msgspec==0.20.0
+cloudpickle==3.1.2
+cityhash==0.4.10
+zstandard==0.25.0
 # monitoring service
-prometheus-client==0.21.1
+prometheus-client==0.23.1
 # kafka
-confluent-kafka==2.8.0
+confluent-kafka==2.12.2
 # snapshots
-minio==7.2.15
+minio==7.2.20
 # deathstar
 geopy
