@@ -1,15 +1,16 @@
 import csv
 import multiprocessing
 import os
+import pickle
 import sys
 import random
 from collections import defaultdict
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from minio import Minio
 from setuptools._distutils.util import strtobool
-from tqdm import tqdm
 
 from timeit import default_timer as timer
 import time
@@ -70,6 +71,10 @@ script_path = os.path.dirname(os.path.realpath(__file__))
 
 
 flush_interval = 100
+data_folder = f"data_{N_W}/"
+DATA_DIR = os.path.join(script_path, data_folder)
+CACHE_DIR = os.path.join(DATA_DIR, "partition_cache")
+Path(CACHE_DIR).mkdir(parents=True, exist_ok=True)
 
 g = StateflowGraph('tpcc_benchmark', operator_state_backend=LocalStateBackend.DICT)
 ####################################################################################################################
@@ -91,268 +96,122 @@ g.add_operators(customer_operator, district_operator, history_operator, item_ope
 
 
 
-def populate_warehouse(styx: SyncStyxClient):
-    with open(os.path.join(script_path, "data/warehouse.csv"), "r") as f:
-        reader = csv.reader(f, delimiter=",")
-        partitions: dict[int, dict] = {p: {} for p in range(N_PARTITIONS)}
-        for _, line in tqdm(enumerate(reader), desc="Populating Warehouse"):
-            warehouse_key = int(line[0])
-            partition: int = styx.get_operator_partition(warehouse_key, warehouse_operator)
-            warehouse_data = {
-                "W_NAME": line[1],
-                "W_STREET_1": line[2],
-                "W_STREET_2": line[3],
-                "W_CITY": line[4],
-                "W_STATE": line[5],
-                "W_ZIP": line[6],
-                "W_TAX": float(line[7]),
-                "W_YTD": float(line[8])
+# -------------------------------------------------------------------------------------
+# Cache helper
+# -------------------------------------------------------------------------------------
+
+def load_or_build(name: str, builder):
+    path = os.path.join(CACHE_DIR, f"{name}_p{N_PARTITIONS}.pkl")
+    if os.path.exists(path):
+        print(f"[CACHE HIT] {name}")
+        with open(path, "rb") as f:
+            return pickle.load(f)
+
+    print(f"[CACHE MISS] Building {name}")
+    obj = builder()
+    tmp = path + ".tmp"
+    with open(tmp, "wb") as f:
+        pickle.dump(obj, f, protocol=pickle.HIGHEST_PROTOCOL)
+    os.replace(tmp, path)
+    print(f"[CACHE WRITE] {name}")
+    return obj
+
+# -------------------------------------------------------------------------------------
+# Populate helpers
+# -------------------------------------------------------------------------------------
+
+def build_simple(styx, csv_name, key_fn, op):
+    partitions = {p: {} for p in range(N_PARTITIONS)}
+    with open(os.path.join(DATA_DIR, csv_name)) as f:
+        reader = csv.reader(f)
+        for row in reader:
+            key, value = key_fn(row)
+            part = styx_hash(styx, key, op)
+            partitions[part][key] = value
+    return partitions
+
+
+def styx_hash(styx, key, op):
+    return styx.get_operator_partition(key, op)
+
+
+# -------------------------------------------------------------------------------------
+# Populate functions
+# -------------------------------------------------------------------------------------
+
+def populate_warehouse(styx):
+    parts = load_or_build("warehouse", lambda: build_simple(styx,
+        "warehouse.csv",
+        lambda r: (
+            int(r[0]),
+            {
+                "W_NAME": r[1], "W_STREET_1": r[2], "W_STREET_2": r[3],
+                "W_CITY": r[4], "W_STATE": r[5], "W_ZIP": r[6],
+                "W_TAX": float(r[7]), "W_YTD": float(r[8])
             }
-            partitions[partition][warehouse_key] = warehouse_data
-    for partition, partition_data in partitions.items():
-        print(f"Populating {warehouse_operator.name}:{partition}...")
-        styx.init_data(warehouse_operator, partition, partition_data)
+        ),
+        warehouse_operator
+    ))
+    for p, d in parts.items():
+        styx.init_data(warehouse_operator, p, d)
 
 
-def populate_district(styx: SyncStyxClient):
-    with open(os.path.join(script_path, "data/district.csv"), "r") as f:
-        reader = csv.reader(f, delimiter=",")
-        partitions: dict[int, dict] = {p: {} for p in range(N_PARTITIONS)}
-        for _, line in tqdm(enumerate(reader), desc="Populating District"):
-            # Primary Key: (D_W_ID, D_ID)
-            district_key = f'{line[1]}:{line[0]}'
-            partition: int = styx.get_operator_partition(district_key, district_operator)
-            district_data = {
-                "D_ID": int(line[0]),
-                "D_W_ID": int(line[1]),
-                "D_NAME": line[2],
-                "D_STREET_1": line[3],
-                "D_STREET_2": line[4],
-                "D_CITY": line[5],
-                "D_STATE": line[6],
-                "D_ZIP": line[7],
-                "D_TAX": float(line[8]),
-                "D_YTD": float(line[9]),
-                "D_NEXT_O_ID": int(line[10])
+def populate_district(styx):
+    parts = load_or_build("district", lambda: build_simple(styx,
+        "district.csv",
+        lambda r: (
+            f"{r[1]}:{r[0]}",
+            {
+                "D_ID": int(r[0]), "D_W_ID": int(r[1]), "D_NAME": r[2],
+                "D_STREET_1": r[3], "D_STREET_2": r[4], "D_CITY": r[5],
+                "D_STATE": r[6], "D_ZIP": r[7], "D_TAX": float(r[8]),
+                "D_YTD": float(r[9]), "D_NEXT_O_ID": int(r[10])
             }
-            partitions[partition][district_key] = district_data
-    for partition, partition_data in partitions.items():
-        print(f"Populating {district_operator.name}:{partition}...")
-        styx.init_data(district_operator, partition, partition_data)
+        ),
+        district_operator
+    ))
+    for p, d in parts.items():
+        styx.init_data(district_operator, p, d)
 
 
-def populate_customer(styx: SyncStyxClient):
-    customer_index_data: dict[str, list[dict[str, str | int]]] = defaultdict(list)
-    with open(os.path.join(script_path, "data/customer.csv"), "r") as f:
-        reader = csv.reader(f, delimiter=",")
-        partitions: dict[int, dict] = {p: {} for p in range(N_PARTITIONS)}
-        for i, line in tqdm(enumerate(reader), desc="Populating Customer"):
-            # Primary Key: (C_W_ID, C_D_ID, C_ID)
-            customer_key = f'{line[2]}:{line[1]}:{line[0]}'
-            partition: int = styx.get_operator_partition(customer_key, customer_operator)
-            customer_data = {
-                "C_ID": int(line[0]),
-                "C_D_ID": int(line[1]),
-                "C_W_ID": int(line[2]),
-                "C_FIRST": line[3],
-                "C_MIDDLE": line[4],
-                "C_LAST": line[5],
-                "C_STREET_1": line[6],
-                "C_STREET_2": line[7],
-                "C_CITY": line[8],
-                "C_STATE": line[9],
-                "C_ZIP": line[10],
-                "C_PHONE": line[11],
-                "C_SINCE": line[12],
-                "C_CREDIT": line[13],
-                "C_CREDIT_LIM": float(line[14]),
-                "C_DISCOUNT": float(line[15]),
-                "C_BALANCE": float(line[16]),
-                "C_YTD_PAYMENT": float(line[17]),
-                "C_PAYMENT_CNT": int(line[18]),
-                "C_DELIVERY_CNT": int(line[19]),
-                "C_DATA": line[20]
-            }
+def populate_customer(styx):
+    def builder():
+        cust_parts = {p: {} for p in range(N_PARTITIONS)}
+        idx_parts = {p: {} for p in range(N_PARTITIONS)}
+        idx_buf = defaultdict(list)
 
-            customers_per_district_key = (customer_data["C_W_ID"], customer_data["C_D_ID"])
-            if customers_per_district_key in customers_per_district:
-                customers_per_district[customers_per_district_key].append(customer_data["C_LAST"])
-            else:
-                customers_per_district[customers_per_district_key] = [customer_data["C_LAST"]]
+        with open(os.path.join(DATA_DIR, "customer.csv")) as f:
+            reader = csv.reader(f)
+            for r in reader:
+                key = f"{r[2]}:{r[1]}:{r[0]}"
+                part = styx_hash(styx, key, customer_operator)
+                cust_parts[part][key] = {
+                    "C_ID": int(r[0]), "C_D_ID": int(r[1]), "C_W_ID": int(r[2]),
+                    "C_FIRST": r[3], "C_MIDDLE": r[4], "C_LAST": r[5],
+                    "C_STREET_1": r[6], "C_STREET_2": r[7], "C_CITY": r[8],
+                    "C_STATE": r[9], "C_ZIP": r[10], "C_PHONE": r[11],
+                    "C_SINCE": r[12], "C_CREDIT": r[13],
+                    "C_CREDIT_LIM": float(r[14]), "C_DISCOUNT": float(r[15]),
+                    "C_BALANCE": float(r[16]), "C_YTD_PAYMENT": float(r[17]),
+                    "C_PAYMENT_CNT": int(r[18]), "C_DELIVERY_CNT": int(r[19]),
+                    "C_DATA": r[20]
+                }
 
-            partitions[partition][customer_key] = customer_data
+                idx_key = f"{r[2]}:{r[1]}:{r[5]}"
+                idx_buf[idx_key].append((r[3], f"{r[2]}:{r[1]}:{r[0]}"))
 
-            # create index for 2.5.2.2  Case 2  C_W_ID:C_D_ID:C_LAST
-            customer_idx_key = f'{line[2]}:{line[1]}:{line[5]}'
-            customer_idx_value = {
-                "C_FIRST": line[3],
-                "C_ID": int(line[0]),
-                "C_D_ID": int(line[1]),
-                "C_W_ID": int(line[2])
-            }
-            customer_index_data[customer_idx_key].append(customer_idx_value)
+        for k, vals in idx_buf.items():
+            part = styx_hash(styx, k, customer_idx_operator)
+            idx_parts[part][k] = [v[1] for v in sorted(vals)]
 
-        for partition, partition_data in partitions.items():
-            print(f"Populating {customer_operator.name}:{partition}...")
-            styx.init_data(customer_operator, partition, partition_data)
+        return cust_parts, idx_parts
 
-        # Final batch insert for customer index
-        index_partitions: dict[int, dict[str, list[str]]] = {p: {} for p in range(N_PARTITIONS)}
-        index_keys = list(customer_index_data.items())
+    cust_parts, idx_parts = load_or_build("customer", builder)
 
-        for i, (customer_idx_key, customer_idx_values) in enumerate(index_keys):
-            partition: int = styx.get_operator_partition(customer_idx_key, customer_idx_operator)
-            sorted_customers = sorted(customer_idx_values, key=lambda x: x["C_FIRST"])
-            customer_ids = [f"{cust['C_W_ID']}:{cust['C_D_ID']}:{cust['C_ID']}" for cust in sorted_customers]
-            index_partitions[partition][customer_idx_key] = customer_ids
-
-        for partition, partition_data in index_partitions.items():
-            print(f"Populating {customer_idx_operator.name}:{partition}...")
-            styx.init_data(customer_idx_operator, partition, partition_data)
-
-
-def populate_history(styx: SyncStyxClient):
-    with open(os.path.join(script_path, "data/history.csv"), "r") as f:
-        reader = csv.reader(f, delimiter=",")
-        partitions: dict[int, dict] = {p: {} for p in range(N_PARTITIONS)}
-        for i, line in tqdm(enumerate(reader), desc="Populating History"):
-            # Primary Key: (H_W_ID, H_D_ID, H_C_ID)
-            history_key = f'{line[4]}:{line[3]}:{line[0]}'
-            partition: int = styx.get_operator_partition(history_key, history_operator)
-            history_data = {
-                "H_C_ID": int(line[0]),
-                "H_C_D_ID": int(line[1]),
-                "H_C_W_ID": int(line[2]),
-                "H_D_ID": int(line[3]),
-                "H_W_ID": int(line[4]),
-                "H_DATE": line[5],
-                "H_AMOUN": line[6],
-                "H_DATA": line[7],
-            }
-            partitions[partition][history_key] = history_data
-    for partition, partition_data in partitions.items():
-        print(f"Populating {history_operator.name}:{partition}...")
-        styx.init_data(history_operator, partition, partition_data)
-
-
-def populate_new_order(styx: SyncStyxClient):
-    with open(os.path.join(script_path, "data/new_order.csv"), "r") as f:
-        reader = csv.reader(f, delimiter=",")
-        partitions: dict[int, dict] = {p: {} for p in range(N_PARTITIONS)}
-        for i, line in tqdm(enumerate(reader), desc="Populating New Order"):
-            # Primary Key: (NO_W_ID, NO_D_ID, NO_O_ID)
-            new_order_key = f'{line[2]}:{line[1]}:{line[0]}'
-            partition: int = styx.get_operator_partition(new_order_key, new_order_operator)
-            new_order_data = {
-                "NO_O_ID": int(line[0]),
-                "NO_D_ID": int(line[1]),
-                "NO_W_ID": int(line[2])
-            }
-            partitions[partition][new_order_key]= new_order_data
-    for partition, partition_data in partitions.items():
-        print(f"Populating {new_order_operator.name}:{partition}...")
-        styx.init_data(new_order_operator, partition, partition_data)
-
-
-def populate_order(styx: SyncStyxClient):
-    with open(os.path.join(script_path, "data/order.csv"), "r") as f:
-        reader = csv.reader(f, delimiter=",")
-        partitions: dict[int, dict] = {p: {} for p in range(N_PARTITIONS)}
-        for i, line in tqdm(enumerate(reader), desc="Populating Order"):
-            # Primary Key: (O_W_ID, O_D_ID, O_ID)
-            order_key = f'{line[2]}:{line[1]}:{line[0]}'
-            partition: int = styx.get_operator_partition(order_key, order_operator)
-            order_data = {
-                "O_ID": int(line[0]),
-                "O_D_ID": int(line[1]),
-                "O_W_ID": int(line[2]),
-                "O_C_ID": int(line[3]),
-                "O_ENTRY_D": line[4],
-                "O_CARRIER_ID": line[5],
-                "O_OL_CNT": int(line[6]),
-                "O_ALL_LOCAL": bool(line[7])
-            }
-            partitions[partition][order_key] = order_data
-    for partition, partition_data in partitions.items():
-        print(f"Populating {order_operator.name}:{partition}...")
-        styx.init_data(order_operator, partition, partition_data)
-
-
-def populate_order_line(styx: SyncStyxClient):
-    with open(os.path.join(script_path, "data/order_line.csv"), "r") as f:
-        reader = csv.reader(f, delimiter=",")
-        partitions: dict[int, dict] = {p: {} for p in range(N_PARTITIONS)}
-        for i, line in tqdm(enumerate(reader), desc="Populating Order Line"):
-            # Primary Key: (OL_W_ID, OL_D_ID, OL_O_ID, OL_NUMBER)
-            order_line_key = f'{line[2]}:{line[1]}:{line[0]}:{line[3]}'
-            partition: int = styx.get_operator_partition(order_line_key, order_line_operator)
-            order_line_data = {
-                "OL_O_ID": int(line[0]),
-                "OL_D_ID": int(line[1]),
-                "OL_W_ID": int(line[2]),
-                "OL_NUMBER": int(line[3]),
-                "OL_I_ID": int(line[4]),
-                "OL_SUPPLY_W_ID": int(line[5]),
-                "OL_DELIVERY_D": line[6],
-                "OL_QUANTITY": int(line[7]),
-                "OL_AMOUNT": float(line[8]),
-                "OL_DIST_INFO": line[9]
-            }
-            partitions[partition][order_line_key] = order_line_data
-    for partition, partition_data in partitions.items():
-        print(f"Populating {order_line_operator.name}:{partition}...")
-        styx.init_data(order_line_operator, partition, partition_data)
-
-def populate_item(styx: SyncStyxClient):
-    with open(os.path.join(script_path, "data/item.csv"), "r") as f:
-        reader = csv.reader(f, delimiter=",")
-        partitions: dict[int, dict] = {p: {} for p in range(N_PARTITIONS)}
-        for i, line in tqdm(enumerate(reader), desc="Populating Item"):
-            item_key = int(line[0])
-            partition: int = styx.get_operator_partition(item_key, item_operator)
-            item_data = {
-                "I_IM_ID": int(line[1]),
-                "I_NAME": line[2],
-                "I_PRICE": float(line[3]),
-                "I_DATA": line[4]
-            }
-            partitions[partition][item_key] = item_data
-    for partition, partition_data in partitions.items():
-        print(f"Populating {item_operator.name}:{partition}...")
-        styx.init_data(item_operator, partition, partition_data)
-
-
-def populate_stock(styx: SyncStyxClient):
-    with open(os.path.join(script_path, "data/stock.csv"), "r") as f:
-        reader = csv.reader(f, delimiter=",")
-        partitions: dict[int, dict] = {p: {} for p in range(N_PARTITIONS)}
-        for i, line in tqdm(enumerate(reader), desc="Populating Stock"):
-            # Primary Key: (S_W_ID, S_I_ID)
-            stock_key = f'{line[1]}:{line[0]}'
-            partition: int = styx.get_operator_partition(stock_key, stock_operator)
-            stock_data = {
-                "S_I_ID": int(line[0]),
-                "S_W_ID": int(line[1]),
-                "S_QUANTITY": int(line[2]),
-                "S_DIST_01": line[3],
-                "S_DIST_02": line[4],
-                "S_DIST_03": line[5],
-                "S_DIST_04": line[6],
-                "S_DIST_05": line[7],
-                "S_DIST_06": line[8],
-                "S_DIST_07": line[9],
-                "S_DIST_08": line[10],
-                "S_DIST_09": line[11],
-                "S_DIST_10": line[12],
-                "S_YTD": int(line[13]),
-                "S_ORDER_CNT": int(line[14]),
-                "S_REMOTE_CNT": int(line[15]),
-                "S_DATA": line[16]
-            }
-            partitions[partition][stock_key] = stock_data
-    for partition, partition_data in partitions.items():
-        print(f"Populating {stock_operator.name}:{partition}...")
-        styx.init_data(stock_operator, partition, partition_data)
+    for p, d in cust_parts.items():
+        styx.init_data(customer_operator, p, d)
+    for p, d in idx_parts.items():
+        styx.init_data(customer_idx_operator, p, d)
 
 
 def submit_graph(styx: SyncStyxClient):
@@ -361,21 +220,73 @@ def submit_graph(styx: SyncStyxClient):
     print("Graph submitted")
 
 
-def tpc_c_init(styx: SyncStyxClient):
-    styx.set_graph(g)
-    styx.init_metadata(g)
+def populate_simple(styx, name, csv_name, key_fn, op):
+    parts = load_or_build(name, lambda: build_simple(styx, csv_name, key_fn, op))
+    for p, d in parts.items():
+        styx.init_data(op, p, d)
+
+
+def populate_all(styx):
     populate_warehouse(styx)
     populate_district(styx)
     populate_customer(styx)
-    populate_history(styx)
-    populate_new_order(styx)
-    populate_order(styx)
-    populate_order_line(styx)
-    populate_item(styx)
-    populate_stock(styx)
-    # Sleep for 5 seconds to be sure that all the data are in minio
+
+    populate_simple(styx, "history", "history.csv",
+        lambda r: (f"{r[4]}:{r[3]}:{r[0]}", {
+            "H_C_ID": int(r[0]), "H_C_D_ID": int(r[1]),
+            "H_C_W_ID": int(r[2]), "H_D_ID": int(r[3]),
+            "H_W_ID": int(r[4]), "H_DATE": r[5],
+            "H_AMOUN": r[6], "H_DATA": r[7]
+        }), history_operator)
+
+    populate_simple(styx, "new_order", "new_order.csv",
+        lambda r: (f"{r[2]}:{r[1]}:{r[0]}", {
+            "NO_O_ID": int(r[0]), "NO_D_ID": int(r[1]), "NO_W_ID": int(r[2])
+        }), new_order_operator)
+
+    populate_simple(styx,"order", "order.csv",
+        lambda r: (f"{r[2]}:{r[1]}:{r[0]}", {
+            "O_ID": int(r[0]), "O_D_ID": int(r[1]), "O_W_ID": int(r[2]),
+            "O_C_ID": int(r[3]), "O_ENTRY_D": r[4],
+            "O_CARRIER_ID": r[5], "O_OL_CNT": int(r[6]),
+            "O_ALL_LOCAL": bool(r[7])
+        }), order_operator)
+
+    populate_simple(styx, "order_line", "order_line.csv",
+        lambda r: (f"{r[2]}:{r[1]}:{r[0]}:{r[3]}", {
+            "OL_O_ID": int(r[0]), "OL_D_ID": int(r[1]),
+            "OL_W_ID": int(r[2]), "OL_NUMBER": int(r[3]),
+            "OL_I_ID": int(r[4]), "OL_SUPPLY_W_ID": int(r[5]),
+            "OL_DELIVERY_D": r[6], "OL_QUANTITY": int(r[7]),
+            "OL_AMOUNT": float(r[8]), "OL_DIST_INFO": r[9]
+        }), order_line_operator)
+
+    populate_simple(styx, "item", "item.csv",
+        lambda r: (int(r[0]), {
+            "I_IM_ID": int(r[1]), "I_NAME": r[2],
+            "I_PRICE": float(r[3]), "I_DATA": r[4]
+        }), item_operator)
+
+    populate_simple(styx, "stock", "stock.csv",
+        lambda r: (f"{r[1]}:{r[0]}", {
+            "S_I_ID": int(r[0]), "S_W_ID": int(r[1]),
+            "S_QUANTITY": int(r[2]), "S_DIST_01": r[3],
+            "S_DIST_02": r[4], "S_DIST_03": r[5],
+            "S_DIST_04": r[6], "S_DIST_05": r[7],
+            "S_DIST_06": r[8], "S_DIST_07": r[9],
+            "S_DIST_08": r[10], "S_DIST_09": r[11],
+            "S_DIST_10": r[12], "S_YTD": int(r[13]),
+            "S_ORDER_CNT": int(r[14]), "S_REMOTE_CNT": int(r[15]),
+            "S_DATA": r[16]
+        }), stock_operator)
+
+
+def tpc_c_init(styx):
+    styx.set_graph(g)
+    styx.init_metadata(g)
+    populate_all(styx)
     time.sleep(5)
-    submit_graph(styx)
+    styx.submit_dataflow(g)
 
 
 def make_item_id() -> int:
