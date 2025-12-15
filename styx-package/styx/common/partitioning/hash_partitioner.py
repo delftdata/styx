@@ -10,7 +10,7 @@ class HashPartitioner(BasePartitioner):
 
     def __init__(self,
                  partitions: int,
-                 composite_key_hash_parameters: tuple[int, str] | None = None):
+                 composite_key_hash_parameters: tuple[int, str] | None):
         self._partitions = partitions
         self._composite_key_hash_parameters = composite_key_hash_parameters
 

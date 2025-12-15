@@ -22,15 +22,16 @@ class Operator(BaseOperator):
                  name: str,
                  n_partitions: int = 1,
                  composite_key_hash_params: tuple[int, str] | None = None):
-        if not USE_COMPOSITE_KEYS:
-            composite_key_hash_params = None
         super().__init__(name, n_partitions)
+        if USE_COMPOSITE_KEYS:
+            self.__partitioner: HashPartitioner = HashPartitioner(n_partitions, composite_key_hash_params)
+        else:
+            self.__partitioner: HashPartitioner = HashPartitioner(n_partitions, None)
         self.__state = ...
         self.__networking: NetworkingManager = ...
         # where the other functions exist
         self.__dns: dict[str, dict[int, tuple[str, int, int]]] = {}
         self.__functions: dict[str, type] = {}
-        self.__partitioner: HashPartitioner = HashPartitioner(n_partitions, composite_key_hash_params)
         self.__is_shadow: bool = False
         self.__deployed_graph = None
         self.__run_func_lock: asyncio.Lock = asyncio.Lock()
