@@ -71,7 +71,7 @@ script_path = os.path.dirname(os.path.realpath(__file__))
 
 
 flush_interval = 100
-data_folder = f"data_{N_W}/"
+data_folder = f"data_{N_W}"
 DATA_DIR = os.path.join(script_path, data_folder)
 CACHE_DIR = os.path.join(script_path, f"{data_folder}_cache")
 Path(CACHE_DIR).mkdir(parents=True, exist_ok=True)
