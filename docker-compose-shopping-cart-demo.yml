@@ -12,4 +12,4 @@ services:
       - KAFKA_URL=kafka1:19092
       - PYTHONUNBUFFERED=TRUE
     ports:
-      - "8000:8000"
+      - "8001:8001"

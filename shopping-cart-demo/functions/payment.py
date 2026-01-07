@@ -1,3 +1,5 @@
+from typing import Any
+
 from styx.common.operator import Operator
 from styx.common.stateful_function import StatefulFunction
 
@@ -23,7 +25,7 @@ async def create_user(ctx: StatefulFunction):
 
 
 @payment_operator.register
-async def batch_create(ctx: StatefulFunction, key_value_pairs: dict[any, any]):
+async def batch_create(ctx: StatefulFunction, key_value_pairs: dict[Any, Any]):
     ctx.batch_insert(key_value_pairs)
     return "Batch insert successful"
 

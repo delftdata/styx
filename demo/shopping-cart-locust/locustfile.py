@@ -5,7 +5,7 @@ from locust import HttpUser, SequentialTaskSet, constant, task
 from init_orders import NUMBER_OF_ORDERS
 
 
-ORDER_URL = "http://localhost:8000"
+ORDER_URL = "http://localhost:8001"
 
 
 class CreateAndCheckoutOrder(SequentialTaskSet):

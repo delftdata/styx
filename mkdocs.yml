@@ -1,0 +1,102 @@
+site_name: Styx
+
+nav:
+  - Home: index.md
+  - Docs:
+    - Overview: styx-docs/overview.md
+    - Quickstart: styx-docs/quickstart.md
+    - Styx Operator: styx-docs/styx-operator.md
+    - Stateful Function: styx-docs/styx-stateful-function.md
+    - Stateflow Graph: styx-docs/styx-stateflow-graph.md
+    - State Backends: styx-docs/state-backends.md
+    - Sync Styx Client: styx-docs/sync-styx-client.md
+    - Async Styx Client: styx-docs/async-styx-client.md
+    - Styx Futures: styx-docs/styx-future.md
+    - Serialization: styx-docs/serialization.md
+    - Rescale: styx-docs/rescale.md
+    - Dockerfile Environment Variables: styx-docs/docker-env-variables.md
+    - Shopping Cart Example: styx-docs/shopping-cart-example.md
+  - Publications: publications.md
+  - Team: people.md
+
+theme:
+  name: material
+  font:
+    text: Quicksand
+  features:
+    - navigation.tabs
+    - content.heading.permalink
+    - navigation.top
+    - content.code.copy
+    - content.tooltips
+    - content.footnotes
+    - content.tabs.link
+    - palette.toggle
+    - footer
+    - content.code.copy
+  icon:
+    repo: fontawesome/brands/github
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  logo: assets/styx-logo.webp
+  favicon: assets/styx-logo.webp
+
+extra_css:
+  - stylesheets/extra.css
+  - https://fonts.googleapis.com/css2?family=Roboto&display=swap
+  - https://fonts.googleapis.com/css2?family=Roboto+Mono&display=swap
+
+markdown_extensions:
+  - toc:
+        permalink: true
+  - attr_list
+  - md_in_html
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: ["styx-package/styx"]
+          options:
+            show_source: false
+            merge_init_into_class: true
+            docstring_style: google
+            extra:
+              show_root_toc_entry: true
+              show_source: false
+
+hooks:
+  - docs/.hooks.py
+
+repo_url: https://github.com/delftdata/styx
+use_directory_urls: true
+repo_name: delftdata/styx
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/delftdata/styx
+  base_url: /styx/
+
+copyright: "© 2025 Styx Project"
