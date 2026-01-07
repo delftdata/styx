@@ -23,7 +23,7 @@ class StateflowGraph(object):
         self.operator_state_backend: LocalStateBackend = operator_state_backend
         self.nodes: dict[str, BaseOperator | Operator] = {}
 
-    def add_operator(self, operator: BaseOperator):
+    def add_operator(self, operator: BaseOperator | Operator):
         """Adds a single operator to the graph.
 
         Args:
@@ -39,7 +39,7 @@ class StateflowGraph(object):
         """
         return [node.name + "--OUT" for node in self.nodes.values()]
 
-    def get_operator(self, operator: BaseOperator) -> BaseOperator:
+    def get_operator(self, operator: BaseOperator | Operator) -> BaseOperator | Operator:
         """Retrieves an operator from the graph by name.
 
         Args:
@@ -50,7 +50,10 @@ class StateflowGraph(object):
         """
         return self.nodes[operator.name]
 
-    def add_operators(self, *operators: BaseOperator):
+    def get_operator_by_name(self, operator_name: str) -> BaseOperator | Operator:
+        return self.nodes[operator_name]
+
+    def add_operators(self, *operators):
         """Adds multiple operators to the graph.
 
         Args:
@@ -69,3 +72,15 @@ class StateflowGraph(object):
              self.nodes[operator_name]
              )
             for operator_name in self.nodes.keys())
+
+
+    def __repr__(self):
+        node_info = ", ".join(f"{key}={op.name}({op.n_partitions}p)" for key, op in self.nodes.items())
+        return f"StateflowGraph(name={self.name!r}, nodes={{ {node_info} }})"
+
+    def __str__(self):
+        node_descriptions = []
+        for key, op in self.nodes.items():
+            node_descriptions.append(f"{key}: {op.name} (partitions: {op.n_partitions})")
+        nodes_str = "\n  ".join(node_descriptions)
+        return f"StateflowGraph '{self.name}' with nodes:\n  {nodes_str}"

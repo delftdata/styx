@@ -1,11 +1,13 @@
 import sys
 import time
 import multiprocessing
+multiprocessing.set_start_method("fork", force=True)
 from multiprocessing import Pool
 
 import pandas as pd
 from timeit import default_timer as timer
 
+from minio import Minio
 from styx.client.sync_client import SyncStyxClient
 from styx.common.local_state_backends import LocalStateBackend
 from styx.common.operator import Operator
@@ -19,9 +21,9 @@ from tqdm import tqdm
 from ycsb import ycsb_operator
 from zipfian_generator import ZipfGenerator
 
-# A run with sensible arguments: python client.py 1 10 4 0 100 10 results 0 10
 
 threads = int(sys.argv[1])
+barrier = multiprocessing.Barrier(threads)
 N_ENTITIES = int(sys.argv[2])
 N_PARTITIONS = int(sys.argv[3])
 STARTING_MONEY = 1_000_000
@@ -39,7 +41,7 @@ KAFKA_URL = 'localhost:9092'
 # KAFKA_URL = '35.229.114.18:9094'
 SAVE_DIR: str = sys.argv[7]
 warmup_seconds: int = int(sys.argv[8])
-run_with_validation = bool(sys.argv[9])
+run_with_validation = sys.argv[9].lower() == "true"
 ####################################################################################################################
 g = StateflowGraph('ycsb-benchmark', operator_state_backend=LocalStateBackend.DICT)
 ycsb_operator.set_n_partitions(N_PARTITIONS)
@@ -52,26 +54,23 @@ def submit_graph(styx: SyncStyxClient):
 
 
 def ycsb_init(styx: SyncStyxClient, operator: Operator, keys: list[int]):
-    submit_graph(styx)
-    time.sleep(5)
-    # INSERT
+    styx.set_graph(g)
+    styx.init_metadata(g)
     partitions: dict[int, dict] = {p: {} for p in range(N_PARTITIONS)}
     for i in tqdm(keys):
         partition: int = styx.get_operator_partition(i, operator)
-        partitions[partition] |= {i: STARTING_MONEY}
-        if i % 100_000 == 0 or i == len(keys) - 1:
-            for partition, kv_pairs in partitions.items():
-                styx.send_batch_insert(operator=operator,
-                                       partition=partition,
-                                       function='insert_batch',
-                                       key_value_pairs=kv_pairs)
-            partitions: dict[int, dict] = {p: {} for p in range(N_PARTITIONS)}
+        partitions[partition][i] = STARTING_MONEY
+
+    for partition, partition_data in partitions.items():
+        styx.init_data(operator, partition, partition_data)
+    time.sleep(5)
+    submit_graph(styx)
 
 
 def transactional_ycsb_generator(keys,
                                  operator: Operator,
                                  n: int,
-                                 zipf_const: float) -> [Operator, int, str, tuple[int, ]]:
+                                 zipf_const: float):
     zipf_gen = ZipfGenerator(items=n, zipf_const=zipf_const)
     uniform_gen = ZipfGenerator(items=n, zipf_const=0.0)
     while True:
@@ -82,7 +81,7 @@ def transactional_ycsb_generator(keys,
         yield operator, key, 'transfer', (key2, )
 
 
-def read_only_ycsb_generator(keys, operator: Operator, n: int, zipf_const: float) -> [Operator, int, str, tuple[int, ]]:
+def read_only_ycsb_generator(keys, operator: Operator, n: int, zipf_const: float):
     zipf_gen = ZipfGenerator(items=n, zipf_const=zipf_const)
     while True:
         key = keys[next(zipf_gen)]
@@ -92,11 +91,14 @@ def read_only_ycsb_generator(keys, operator: Operator, n: int, zipf_const: float
 def benchmark_runner(proc_num) -> dict[bytes, dict]:
     print(f'Generator: {proc_num} starting')
     styx = SyncStyxClient(STYX_HOST, STYX_PORT, kafka_url=KAFKA_URL)
+    time.sleep(proc_num * 0.2)
     styx.open(consume=False)
     ycsb_generator = transactional_ycsb_generator(key_list, ycsb_operator, N_ENTITIES, zipf_const=ZIPF_CONST)
     timestamp_futures: dict[bytes, dict] = {}
+    time.sleep(5)
+    barrier.wait()
     start = timer()
-    for _ in range(seconds):
+    for sec in range(seconds):
         sec_start = timer()
         for i in range(messages_per_second):
             if i % (messages_per_second // sleeps_per_second) == 0:
@@ -113,7 +115,7 @@ def benchmark_runner(proc_num) -> dict[bytes, dict]:
         if lps < 1:
             time.sleep(1 - lps)
         sec_end2 = timer()
-        print(f'Latency per second: {sec_end2 - sec_start}')
+        print(f'{sec} | Latency per second: {sec_end2 - sec_start}')
     end = timer()
     print(f'Average latency per second: {(end - start) / seconds}')
 
@@ -131,14 +133,10 @@ def main():
         print("Impossible to run this benchmark with one key")
         return
 
-    styx_client = SyncStyxClient(STYX_HOST, STYX_PORT, kafka_url=KAFKA_URL)
-
-    styx_client.open(consume=False)
-
+    minio = Minio('localhost:9000', access_key='minio', secret_key='minio123', secure=False)
+    styx_client = SyncStyxClient(STYX_HOST, STYX_PORT, kafka_url=KAFKA_URL, minio=minio)
     ycsb_init(styx_client, ycsb_operator, key_list)
-
-    styx_client.close()
-
+    del styx_client
     time.sleep(5)
 
     with Pool(threads) as p:
@@ -181,7 +179,6 @@ def main():
 
 
 if __name__ == "__main__":
-    multiprocessing.set_start_method('fork')
     main()
 
     print()

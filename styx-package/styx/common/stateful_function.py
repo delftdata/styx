@@ -13,7 +13,6 @@ from .base_state import BaseOperatorState as State
 from .base_protocol import BaseTransactionalProtocol
 from .message_types import MessageType
 from .run_func_payload import RunFuncPayload
-from .partitioning.base_partitioner import BasePartitioner
 
 
 class StatefulFunction(Function):
@@ -36,7 +35,8 @@ class StatefulFunction(Function):
                  request_id: bytes,
                  fallback_mode: bool,
                  use_fallback_cache: bool,
-                 partitioner: BasePartitioner,
+                 deployed_graph,
+                 operator_lock: asyncio.Lock,
                  protocol: BaseTransactionalProtocol):
         """Initializes a stateful function with execution context.
 
@@ -68,7 +68,8 @@ class StatefulFunction(Function):
         self.__key = key
         self.__protocol = protocol
         self.__partition = partition
-        self.__partitioner = partitioner
+        self.__deployed_graph = deployed_graph
+        self.__operator_lock: asyncio.Lock = operator_lock
 
     async def __call__(self, *args, **kwargs):
         """Executes the wrapped function and triggers asynchronous remote calls if needed.
@@ -82,8 +83,40 @@ class StatefulFunction(Function):
                 or an exception tuple if an error occurs.
         """
         try:
-            res = await self.run(*args)
-            logging.info(f'Run args: {args} kwargs: {kwargs} async remote calls: {self.__async_remote_calls}')
+            await self.__operator_lock.acquire()
+            if self.__state.in_remote_keys(self.__key, self.__operator_name, self.__partition):
+
+                worker_id_old_partition = self.__state.get_worker_id_old_partition(self.__operator_name,
+                                                                                   self.__partition,
+                                                                                   self.__key)
+
+                is_local: bool = (self.__operator_name, worker_id_old_partition[1]) in self.__state.operator_partitions
+
+                if is_local:
+                    # Transfer the key from another partition within the same worker
+                    self.__state.migrate_within_the_same_worker(self.__operator_name,
+                                                                self.__partition,
+                                                                self.__key,
+                                                                worker_id_old_partition[1])
+                    self.__operator_lock.release()
+                else:
+                    # Get the key from a remote worker
+                    # logging.warning(f"{self.__request_id} | Requesting {self.__operator_name}:{self.__partition} "
+                    #                 f"-> {self.__key} from remote")
+                    await self.__networking.request_key(self.__operator_name,
+                                                        self.__partition,
+                                                        self.__key,
+                                                        worker_id_old_partition)
+                    # Need to lock only for the message send to avoid duplicates
+                    self.__operator_lock.release()
+                    await self.__networking.wait_for_remote_key_event(self.__operator_name,
+                                                                      self.__partition,
+                                                                      self.__key)
+            else:
+                self.__operator_lock.release()
+            async with self.__operator_lock:
+                res = await self.run(*args)
+            # logging.info(f'Run args: {args} kwargs: {kwargs} async remote calls: {self.__async_remote_calls}')
             if self.__fallback_enabled and self.__use_fallback_cache:
                 # if the fallback is enabled, and we are using the cached functions we can just return here
                 return res, len(self.__async_remote_calls), -1
@@ -107,7 +140,10 @@ class StatefulFunction(Function):
                                                                is_root=True)
             return res, n_remote_calls, partial_node_count
         except Exception as e:
-            logging.warning(traceback.format_exc())
+            # logging.warning(traceback.format_exc())
+            # logging.warning(f"{self.__request_id} | {self.__t_id} | {self.__key} | "
+            #               f"Call @{self.__operator_name}:{self.name}:FB={self.__fallback_enabled} in_remote={self.__state.in_remote_keys(self.__key, self.__operator_name, self.__partition)} "
+            #             f" in_local={self.__state.exists(self.__key, self.__operator_name, self.__partition)} failed with error: {e}")
             return e, -1, -1
 
     @property
@@ -192,7 +228,7 @@ class StatefulFunction(Function):
         if n_remote_calls == 0:
             return n_remote_calls
         # if fallback is enabled there is no need to call the functions because they are already cached
-        new_share_fraction: str = str(fractions.Fraction(f'1/{n_remote_calls}') * fractions.Fraction(ack_share))
+        new_share_fraction: str = str(fractions.Fraction(ack_share) / n_remote_calls)
         if is_root:
             # This is the root
             ack_host = self.__networking.host_name
@@ -223,12 +259,10 @@ class StatefulFunction(Function):
                 if self.__fallback_enabled:
                     # and no cache
                     remote_calls.append(self.__protocol.run_fallback_function(t_id=self.__t_id,
-                                                                              payload=payload,
-                                                                              internal=True))
+                                                                              payload=payload))
                 else:
                     remote_calls.append(self.__protocol.run_function(t_id=self.__t_id,
-                                                                     payload=payload,
-                                                                     internal=True))
+                                                                     payload=payload))
                     # add to cache
                     self.__networking.add_remote_function_call(self.__t_id, payload)
             else:
@@ -241,6 +275,9 @@ class StatefulFunction(Function):
             partial_node_count = 0
         await asyncio.gather(*remote_calls)
         return n_remote_calls
+
+    def __get_partition(self, operator_name: str, key) -> int:
+        return self.__deployed_graph.nodes[operator_name].which_partition(key)
 
     def call_remote_async(self,
                           operator_name: str,
@@ -257,7 +294,7 @@ class StatefulFunction(Function):
         """
         if isinstance(function_name, type):
             function_name = function_name.__name__
-        partition: int = self.__partitioner.get_partition(key)
+        partition: int = self.__get_partition(operator_name, key)
         is_local: bool = self.__networking.in_the_same_network(self.__dns[operator_name][partition][0],
                                                                self.__dns[operator_name][partition][2])
         self.__async_remote_calls.append((operator_name, function_name, partition, key, params, is_local))
@@ -287,7 +324,6 @@ class StatefulFunction(Function):
                                                                                     partition,
                                                                                     params,
                                                                                     ack_payload)
-        logging.info(f"Call RunFunRemote: {payload}")
         await self.__networking.send_message(operator_host,
                                              operator_port,
                                              msg=payload,

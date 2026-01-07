@@ -46,7 +46,7 @@ class StyxKafkaIngress(BaseIngress):
 
     async def start(self,
                     topic_partitions: list[TopicPartition],
-                    topic_partition_offsets: dict[tuple[str, int], int]):
+                    topic_partition_offsets: dict[OperatorPartition, int]):
         self.kafka_ingress_task: asyncio.Task = asyncio.create_task(self.start_kafka_consumer(topic_partitions,
                                                                                               topic_partition_offsets))
         await self.started.wait()
@@ -56,14 +56,14 @@ class StyxKafkaIngress(BaseIngress):
         try:
             await self.kafka_ingress_task
         except asyncio.CancelledError:
-            logging.warning("kafka ingress coroutine restarting...")
+            logging.warning("kafka ingress coroutine suts down...")
         await self.kafka_consumer.stop()
 
     def handle_message_from_kafka(self, msg):
-        logging.info(
-            f"Consumed: {msg.topic} {msg.partition} {msg.offset} "
-            f"{msg.key} {msg.value} {msg.timestamp}"
-        )
+        # logging.info(
+        #     f"Consumed: {msg.topic} {msg.partition} {msg.offset} "
+        #     f"{msg.key} {msg.value} {msg.timestamp}"
+        # )
         message_type: int = self.networking.get_msg_type(msg.value)
         if message_type == MessageType.ClientMsg:
             message = self.networking.decode_message(msg.value)
@@ -74,15 +74,16 @@ class StyxKafkaIngress(BaseIngress):
                                                               params=params, kafka_ingress_partition=msg.partition)
             if key is None or self.state.exists(key, operator_name, partition):
                 # Message received in the correct partition (Normal operation)
-                logging.debug("Message received in the correct partition (Normal operation)")
+                # logging.debug("Message received in the correct partition (Normal operation)")
                 self.sequencer.sequence(run_func_payload)
             elif ((true_partition := self.registered_operators[(operator_name, msg.partition)].which_partition(key))
                   == partition):
-                logging.debug("Message received in the correct partition, but it was an insert operation")
+                # logging.debug("Message received in the correct partition, but it was an insert operation")
                 # Message received in the correct partition, but it was an insert operation (didn't exist in the state)
                 self.sequencer.sequence(run_func_payload)
             else:
                 # In flight message during migration, currently the state belongs to another partition
+                # logging.warning(f"Ingress WrongPartitionRequest: {operator_name}:{msg.partition} -> {true_partition}")
                 dns = self.registered_operators[(operator_name, msg.partition)].dns
                 operator_host = dns[operator_name][true_partition][0]
                 operator_port = dns[operator_name][true_partition][2]
@@ -94,7 +95,7 @@ class StyxKafkaIngress(BaseIngress):
                     self.sequencer.sequence(run_func_payload)
                 else:
                     payload = (msg.key, operator_name, fun_name,
-                               key, true_partition, msg.partition, msg.timestamp, msg.offset, partition, params)
+                               key, true_partition, msg.partition, msg.offset, params)
                     self.send_message_tasks.append(self.networking.send_message(operator_host,
                                                                                 operator_port,
                                                                                 msg=payload,
@@ -105,8 +106,8 @@ class StyxKafkaIngress(BaseIngress):
 
     async def start_kafka_consumer(self,
                                    topic_partitions: list[TopicPartition],
-                                   topic_partition_offsets: dict[tuple[str, int], int]):
-        logging.info(f'{self.worker_id} CREATED Kafka consumer for topic partitions: {topic_partitions}')
+                                   topic_partition_offsets: dict[OperatorPartition, int]):
+        logging.warning(f'{self.worker_id} CREATED Kafka consumer for topic partitions: {topic_partitions}')
         # enable_auto_commit=False needed for exactly once
         self.kafka_consumer = AIOKafkaConsumer(bootstrap_servers=[self.kafka_url],
                                                enable_auto_commit=False,
@@ -125,7 +126,7 @@ class StyxKafkaIngress(BaseIngress):
             break
         try:
             # Consume messages
-            logging.info(f'{self.worker_id} STARTED Kafka consumer for topic partitions: {topic_partitions}')
+            logging.warning(f'{self.worker_id} STARTED Kafka consumer from offsets (-1): {topic_partition_offsets}')
             self.started.set()
             while True:
                 async with self.sequencer.lock:

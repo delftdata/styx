@@ -14,6 +14,9 @@ services:
       - KAFKA_URL=kafka1:19092
       - HEARTBEAT_LIMIT=5000
       - HEARTBEAT_CHECK_INTERVAL=500
+    depends_on:
+      - prometheus
+      - grafana
 
   prometheus:
     image: prom/prometheus:v3.2.1
@@ -37,27 +40,21 @@ services:
       - ./grafana/provisioning:/etc/grafana/provisioning  # Auto-config
       - ./grafana/dashboards:/etc/grafana/dashboards      # Load dashboards
 
-
-
   worker:
     build:
       context: .
       dockerfile: worker/worker.dockerfile
     image: dev/styx:latest
     environment:
-      - WORKER_THREADS=1
       - INGRESS_TYPE=KAFKA
       - KAFKA_URL=kafka1:19092
       - DISCOVERY_HOST=coordinator
       - DISCOVERY_PORT=8888
     env_file:
       - env/minio.env
-#    deploy:
-#      resources:
-#        limits:
-#          cpus: '2'
-#        reservations:
-#          cpus: '2'
+#    cpus: ${STYX_WORKER_THREADS}
+    depends_on:
+      - coordinator
 
 volumes:
   grafana_data:

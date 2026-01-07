@@ -9,9 +9,11 @@ from aiokafka import AIOKafkaProducer
 from aiokafka.errors import KafkaConnectionError
 from confluent_kafka.admin import AdminClient, NewTopic, KafkaException
 from minio import Minio
+from setuptools._distutils.util import strtobool
 
 from styx.common.message_types import MessageType
-from styx.common.serialization import Serializer, msgpack_serialization, cloudpickle_serialization
+from styx.common.serialization import Serializer, msgpack_serialization, cloudpickle_serialization, \
+    zstd_msgpack_serialization
 from styx.common.tcp_networking import NetworkingManager
 from styx.common.types import OperatorPartition
 from styx.common.stateflow_graph import StateflowGraph
@@ -25,6 +27,7 @@ from worker_pool import WorkerPool, Worker
 MAX_OPERATOR_PARALLELISM = int(os.getenv('MAX_OPERATOR_PARALLELISM', 10))
 KAFKA_REPLICATION_FACTOR = int(os.getenv('KAFKA_REPLICATION_FACTOR', 3))
 SNAPSHOT_BUCKET_NAME: str = os.getenv('SNAPSHOT_BUCKET_NAME', "styx-snapshots")
+COMPACT_SNAPSHOTS: bool = bool(strtobool(os.getenv("COMPACT_SNAPSHOTS", "false")))
 KAFKA_URL: str = os.getenv('KAFKA_URL', None)
 
 
@@ -58,8 +61,8 @@ class Coordinator(object):
             try:
                 await self.kafka_metadata_producer.start()
             except KafkaConnectionError:
+                # Waiting for Kafka
                 await asyncio.sleep(1)
-                logging.info("Waiting for Kafka")
                 continue
             break
 
@@ -90,9 +93,9 @@ class Coordinator(object):
         worker_assignments = self.worker_pool.get_worker_assignments()
         participating_workers: list[Worker] = self.worker_pool.get_participating_workers()
         self.worker_is_healthy = {worker.worker_id: asyncio.Event() for worker in participating_workers}
-        logging.info(f"InitRecovery | Worker assignments: {worker_assignments}")
-        logging.info(f"InitRecovery | dns: {operator_partition_locations}")
-        logging.info(f"InitRecovery | peers: {self.worker_pool.get_workers()}")
+        # logging.info(f"InitRecovery | Worker assignments: {worker_assignments}")
+        # logging.info(f"InitRecovery | dns: {operator_partition_locations}")
+        # logging.info(f"InitRecovery | peers: {self.worker_pool.get_workers()}")
         async with asyncio.TaskGroup() as tg:
             for worker in participating_workers:
                 tg.create_task(self.networking.send_message(worker.worker_ip, worker.worker_port,
@@ -103,9 +106,10 @@ class Coordinator(object):
                                                                  operator_partition_locations,
                                                                  self.worker_pool.get_workers(),
                                                                  self.submitted_graph.operator_state_backend,
-                                                                 snap_id),
+                                                                 snap_id,
+                                                                 self.submitted_graph),
                                                             msg_type=MessageType.InitRecovery))
-        logging.info('SENT RECOVER TO PARTICIPATING WORKERS')
+        # logging.info('SENT RECOVER TO PARTICIPATING WORKERS')
 
     def worker_is_ready_after_recovery(self, worker_id: int):
         self.worker_is_healthy[worker_id].set()
@@ -122,23 +126,7 @@ class Coordinator(object):
                                                             msg=b'',
                                                             msg_type=MessageType.ReadyAfterRecovery,
                                                             serializer=Serializer.NONE))
-        logging.info('ReadyAfterRecovery events sent')
-
-    # def change_operator_partition_locations(self,
-    #                                         dead_worker_id: int,
-    #                                         worker_ip: str,
-    #                                         worker_port: int,
-    #                                         protocol_port: int):
-    #     removed_ip = self.worker_pool.peek(dead_worker_id).worker_ip
-    #     new_operator_partition_locations = {}
-    #     for operator_name, partition_dict in self.operator_partition_locations.items():
-    #         new_operator_partition_locations[operator_name] = {}
-    #         for partition, worker in partition_dict.items():
-    #             if worker[0] == removed_ip:
-    #                 new_operator_partition_locations[operator_name][partition] = (worker_ip, worker_port, protocol_port)
-    #             else:
-    #                 new_operator_partition_locations[operator_name][partition] = worker
-    #     self.operator_partition_locations = new_operator_partition_locations
+        # logging.info('ReadyAfterRecovery events sent')
 
     def register_worker_heartbeat(self, worker_id: int, heartbeat_time: float):
         self.worker_pool.register_worker_heartbeat(worker_id, heartbeat_time)
@@ -171,24 +159,56 @@ class Coordinator(object):
         if current_completed_snapshot != self.prev_completed_snapshot_id:
             logging.warning(f"Cluster completed snapshot: {current_completed_snapshot}")
             # if we reached a complete snapshot we could compact its deltas with the previous one
-            sn_data: bytes = msgpack_serialization((self.completed_input_offsets,
-                                                    self.completed_out_offsets,
-                                                    self.completed_epoch_counter,
-                                                    self.completed_t_counter))
+            sn_data: bytes = zstd_msgpack_serialization((self.completed_input_offsets,
+                                                         self.completed_out_offsets,
+                                                         self.completed_epoch_counter,
+                                                         self.completed_t_counter))
             self.minio_client.put_object(SNAPSHOT_BUCKET_NAME,
                                          f"sequencer/{current_completed_snapshot}.bin",
                                          io.BytesIO(sn_data),
                                          len(sn_data))
             self.prev_completed_snapshot_id = current_completed_snapshot
-            loop = asyncio.get_running_loop()
-            loop.run_in_executor(pool,
-                                 start_snapshot_compaction,
-                                 current_completed_snapshot)
+            if COMPACT_SNAPSHOTS:
+                loop = asyncio.get_running_loop()
+                loop.run_in_executor(pool,
+                                     start_snapshot_compaction,
+                                     current_completed_snapshot)
 
     def get_current_completed_snapshot_id(self) -> int:
         if self.worker_snapshot_ids:
             return min(self.worker_snapshot_ids.values())
         return -1
+
+    async def update_stateflow_graph(self,
+                                     new_stateflow_graph: StateflowGraph):
+        if not isinstance(new_stateflow_graph, StateflowGraph):
+            raise NotAStateflowGraph
+        # TODO the cluster was balnced by the previous deployment, if the graph is complex it might be unbalanced after the update
+        for operator_name, operator in iter(new_stateflow_graph):
+            for partition in range(MAX_OPERATOR_PARALLELISM):
+                operator_copy = deepcopy(operator)
+                if partition > operator.n_partitions:
+                    operator_copy.make_shadow()
+                self.worker_pool.update_operator((operator_copy.name, partition), operator_copy)
+        worker_assignments = self.worker_pool.get_worker_assignments()
+        tasks = [self.networking.send_message(worker.worker_ip, worker.worker_port,
+                                              msg=(new_stateflow_graph,
+                                                  worker_assignments[(worker.worker_ip,
+                                                                       worker.worker_port,
+                                                                       worker.protocol_port)],
+                                                   self.worker_pool.get_operator_partition_locations(),
+                                                   self.worker_pool.get_workers(),
+                                                   new_stateflow_graph.operator_state_backend),
+                                              msg_type=MessageType.InitMigration)
+                 for worker in self.worker_pool.get_participating_workers()]
+        await asyncio.gather(*tasks)
+        self.submitted_graph = new_stateflow_graph
+        metadata_key = msgpack_serialization(self.submitted_graph.name)
+        serialized_graph = cloudpickle_serialization(new_stateflow_graph)
+        await self.kafka_metadata_producer.send_and_wait('styx-metadata',
+                                                         key=metadata_key,
+                                                         value=serialized_graph)
+
 
     async def submit_stateflow_graph(self,
                                      stateflow_graph: StateflowGraph,
@@ -216,8 +236,10 @@ class Coordinator(object):
                                                                        worker.protocol_port)],
                                                    self.worker_pool.get_operator_partition_locations(),
                                                    self.worker_pool.get_workers(),
-                                                   stateflow_graph.operator_state_backend),
-                                              msg_type=MessageType.ReceiveExecutionPlan)
+                                                   stateflow_graph.operator_state_backend,
+                                                   stateflow_graph),
+                                              msg_type=MessageType.ReceiveExecutionPlan,
+                                              serializer=Serializer.CLOUDPICKLE)
                  for worker in self.worker_pool.get_participating_workers()]
         await asyncio.gather(*tasks)
         self.graph_submitted = True
@@ -254,7 +276,8 @@ class Coordinator(object):
         for topic, future in futures.items():
             try:
                 future.result()
-                logging.warning(f"Topic {topic} created")
+                logging.warning(f"Topic {topic} created with {MAX_OPERATOR_PARALLELISM} partitions "
+                                f"and replication factor of {KAFKA_REPLICATION_FACTOR}")
             except KafkaException as e:
                 logging.warning(f"Failed to create topic {topic}: {e}")
         if self.kafka_metadata_producer is None:

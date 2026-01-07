@@ -11,8 +11,21 @@ def main(
         input_rate,
         warmup_seconds,
         client_threads,
-        n_w):
-    exp_name = f"tpcc_W{n_w}_{input_rate * client_threads}"
+        n_w,
+        enable_compression,
+        use_composite_keys,
+        use_fallback_cache):
+
+    ablation_configs = {
+        (True, True, True): "ALL",
+        (False, True, True): "NO_COMP",
+        (True, False, True): "NO_CK",
+        (True, True, False): "NO_FC",
+    }
+
+    exp_name = f"tpcc_W{n_w}_{input_rate * client_threads}_{ablation_configs[(enable_compression,
+                                                                              use_composite_keys,
+                                                                              use_fallback_cache)]}"
 
     origin_input_msgs = pd.read_csv(f'{save_dir}/client_requests.csv',
                                     dtype={'request_id': bytes,

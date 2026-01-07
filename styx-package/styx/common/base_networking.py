@@ -1,5 +1,6 @@
 import asyncio
 import fractions
+import os
 import socket
 import struct
 from abc import ABC, abstractmethod
@@ -7,12 +8,16 @@ from collections import defaultdict
 from enum import IntEnum
 from pickle import UnpicklingError
 
+from setuptools._distutils.util import strtobool
+
 from .exceptions import SerializerNotSupported
 from .logging import logging
 from .run_func_payload import RunFuncPayload
 from .serialization import Serializer, cloudpickle_serialization, msgpack_serialization, \
-    pickle_serialization, cloudpickle_deserialization, msgpack_deserialization, pickle_deserialization
+    pickle_serialization, cloudpickle_deserialization, msgpack_deserialization, pickle_deserialization, \
+    zstd_msgpack_deserialization, zstd_msgpack_serialization
 
+USE_COMPRESSION: bool = bool(strtobool(os.getenv("ENABLE_COMPRESSION", "true")))
 
 class MessagingMode(IntEnum):
     WORKER_COR = 0
@@ -97,13 +102,10 @@ class BaseNetworking(ABC):
                              ack_id: int,
                              fraction_str: str,
                              chain_participants: list[int],
-                             partial_node_count: int,
-                             remote_response: str):
+                             partial_node_count: int):
         if ack_id in self.aborted_events:
             # if the transaction was aborted we can instantly return
             return
-        if remote_response is not None:
-            self.client_responses[ack_id] = remote_response
         try:
             self.add_chain_participants(ack_id, chain_participants)
             self.ack_cnts[ack_id] = (self.ack_cnts[ack_id][0],
@@ -121,14 +123,11 @@ class BaseNetworking(ABC):
 
     def add_ack_cnt(self,
                     ack_id: int,
-                    remote_response: str,
                     cnt: int = 1,
                     ):
         if ack_id in self.aborted_events:
             # if the transaction was aborted we can instantly return
             return
-        if remote_response is not None:
-            self.client_responses[ack_id] = remote_response
         try:
             self.ack_cnts[ack_id] = (self.ack_cnts[ack_id][0] + cnt,
                                      self.ack_cnts[ack_id][1])
@@ -152,14 +151,10 @@ class BaseNetworking(ABC):
         if ack_id in self.waited_ack_events:
             self.waited_ack_events[ack_id].clear()
             self.ack_fraction[ack_id] = fractions.Fraction(0)
-        else:
-            logging.error(f"{ack_id} should exist!")
 
     def reset_ack_for_fallback_cache(self, ack_id: int):
         if ack_id in self.waited_ack_events:
             self.waited_ack_events[ack_id].clear()
-        else:
-            logging.error(f"{ack_id} should exist!")
 
     def clear_aborted_events_for_fallback(self):
         self.aborted_events.clear()
@@ -167,12 +162,15 @@ class BaseNetworking(ABC):
         self.client_responses.clear()
 
     def abort_chain(self, aborted_t_id: int, exception_str: str):
-        self.aborted_events[aborted_t_id] = exception_str
-        self.logic_aborts_everywhere.add(aborted_t_id)
+        if aborted_t_id not in self.aborted_events:
+            self.aborted_events[aborted_t_id] = exception_str
+            self.logic_aborts_everywhere.add(aborted_t_id)
         if aborted_t_id in self.waited_ack_events:
             self.waited_ack_events[aborted_t_id].set()
 
     def add_response(self, t_id: int, response: str):
+        if response is None:
+            logging.error(f'Response for T_ID: {t_id} should not be None!')
         self.client_responses[t_id] = response
 
     def merge_remote_logic_aborts(self, remote_logic_aborts: set[int]):
@@ -184,13 +182,22 @@ class BaseNetworking(ABC):
             msg = struct.pack('>B', msg_type) + struct.pack('>B', 0) + cloudpickle_serialization(msg)
             return msg
         elif serializer == Serializer.MSGPACK:
-            msg = struct.pack('>B', msg_type) + struct.pack('>B', 1) + msgpack_serialization(msg)
+            ser_msg: bytes = msgpack_serialization(msg)
+            ser_id = 1
+            if USE_COMPRESSION and len(ser_msg) > 4096:
+                # If it's more than 4KB compress
+                ser_msg = zstd_msgpack_serialization(ser_msg, already_ser=True)
+                ser_id = 4
+            msg = struct.pack('>B', msg_type) + struct.pack('>B', ser_id) + ser_msg
             return msg
         elif serializer == Serializer.PICKLE:
             msg = struct.pack('>B', msg_type) + struct.pack('>B', 2) + pickle_serialization(msg)
             return msg
         elif serializer == Serializer.NONE:
             msg = struct.pack('>B', msg_type) + struct.pack('>B', 3) + msg
+            return msg
+        elif serializer == Serializer.COMPRESSED_MSGPACK:
+            msg = struct.pack('>B', msg_type) + struct.pack('>B', 4) + zstd_msgpack_serialization(msg)
             return msg
         else:
             logging.error(f'Serializer: {serializer} is not supported')
@@ -215,6 +222,9 @@ class BaseNetworking(ABC):
                 return msg
             elif serializer == 3:
                 msg = data[2:]
+                return msg
+            elif serializer == 4:
+                msg = zstd_msgpack_deserialization(data[2:])
                 return msg
             else:
                 logging.error(f'Serializer: {serializer} is not supported')
