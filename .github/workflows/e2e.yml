@@ -35,7 +35,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           # Install Styx package from repo root
-          pip install -e .
+          pip install -e styx-package
 
           # Test deps (if not already in requirements.txt)
           pip install pytest testcontainers requests
