@@ -37,9 +37,6 @@ jobs:
           # Install Styx package from repo root
           pip install -e styx-package/
 
-          # Test deps (if not already in requirements.txt)
-          pip install pytest testcontainers requests
-
       - name: Make scripts executable
         run: |
           chmod +x scripts/start_styx_cluster.sh scripts/stop_styx_cluster.sh || true
