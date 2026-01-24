@@ -1,5 +1,11 @@
 #!/bin/bash
 
+styx_threads_per_worker=1
+enable_compression=true
+use_composite_keys=true
+use_fallback_cache=true
+regenerate_tpcc_data=false
+
 workload_name=$1
 input_rate=$2
 n_keys=$3
@@ -10,11 +16,12 @@ total_time=$7
 saving_dir=$8
 warmup_seconds=$9
 epoch_size=${10}
-styx_threads_per_worker=${11}
-enable_compression=${12}
-use_composite_keys=${13}
-use_fallback_cache=${14}
-regenerate_tpcc_data=${15:-false}
+
+[ -n "${11}" ] && styx_threads_per_worker=${11}
+[ -n "${12}" ] && enable_compression=${12}
+[ -n "${13}" ] && use_composite_keys=${13}
+[ -n "${14}" ] && use_fallback_cache=${14}
+[ -n "${15}" ] && regenerate_tpcc_data=${15}
 
 echo "============= Running Experiment ================="
 echo "workload_name: $workload_name"

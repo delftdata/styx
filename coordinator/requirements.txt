@@ -1,4 +1,4 @@
-setuptools==80.9.0
+setuptools==80.10.1
 # networking service
 uvloop==0.22.1
 msgspec==0.20.0
@@ -6,9 +6,9 @@ cloudpickle==3.1.2
 cityhash==0.4.10
 zstandard==0.25.0
 # monitoring service
-prometheus-client==0.23.1
+prometheus-client==0.24.1
 # kafka
-confluent-kafka==2.12.2
+confluent-kafka==2.13.0
 # snapshots
 minio==7.2.20
 # deathstar

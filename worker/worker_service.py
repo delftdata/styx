@@ -4,6 +4,7 @@ import concurrent.futures
 import gc
 import os
 import struct
+import sys
 import threading
 import time
 from asyncio import StreamReader, StreamWriter
@@ -64,6 +65,16 @@ PROTOCOL = Protocols.Aria
 # TODO networking can take a lot of optimization (i.e., batching, backpreasure e.t.c.)
 # TODO when compactions happen recovery should hold and vice versa
 
+
+def repair_stdio():
+    try:
+        sys.stdout = os.fdopen(1, "w", buffering=1, closefd=False)
+    except Exception:
+        pass
+    try:
+        sys.stderr = os.fdopen(2, "w", buffering=1, closefd=False)
+    except Exception:
+        pass
 
 class Worker(object):
 
@@ -154,6 +165,8 @@ class Worker(object):
         # - control_queue: for control-plane / worker_controller messages
         self.protocol_queue: asyncio.Queue[bytes] = asyncio.Queue(maxsize=PROTOCOL_QUEUE_SIZE)
         self.control_queue: asyncio.Queue[bytes] = asyncio.Queue(maxsize=CONTROL_QUEUE_SIZE)
+
+        self.mp_ctx = multiprocessing.get_context("spawn")
 
     @staticmethod
     def rehash_and_store(operator_partition: OperatorPartition,
@@ -606,12 +619,17 @@ class Worker(object):
                 await writer.wait_closed()
 
         logging.warning("Starting Worker TCP Service")
-        with concurrent.futures.ProcessPoolExecutor(MIGRATION_THREADS) as self.pool:
-            server = await asyncio.start_server(
-                request_handler, sock=self.worker_socket, limit=2 ** 32
-            )
+        self.pool = concurrent.futures.ProcessPoolExecutor(
+            max_workers=MIGRATION_THREADS,
+            mp_context=self.mp_ctx,
+            initializer=repair_stdio,
+        )
+        try:
+            server = await asyncio.start_server(request_handler, sock=self.worker_socket, limit=2 ** 32)
             async with server:
                 await server.serve_forever()
+        finally:
+            self.pool.shutdown(wait=False, cancel_futures=True)
 
     async def start_protocol_tcp_service(self):
 
@@ -672,20 +690,28 @@ class Worker(object):
                 serializer=Serializer.MSGPACK
             )
 
-    def start_heartbeat_process(self, worker_id: int, worker_pid: int):
-        uvloop.run(self.heartbeat_coroutine(worker_id, worker_pid))
+    @staticmethod
+    def heartbeat_entry(worker_id: int, worker_pid: int):
+        repair_stdio()
+        uvloop.run(Worker.heartbeat_coroutine(worker_id, worker_pid))
+
+    @staticmethod
+    def snapshot_entry(port: int, worker_id: int):
+        repair_stdio()
+        proc = AsyncSnapshottingProcess(port, worker_id)
+        proc.start_snapshot_process()
 
     async def main(self):
         try:
             await self.register_to_coordinator()
             worker_pid: int = os.getpid()
-            self.heartbeat_proc = multiprocessing.Process(
-                target=self.start_heartbeat_process,
-                args=(self.id, worker_pid)
+            self.heartbeat_proc = self.mp_ctx.Process(
+                target=self.heartbeat_entry,
+                args=(self.id, worker_pid),
             )
-            async_snapshotting_process = AsyncSnapshottingProcess(self.snapshotting_port, self.id)
-            self.async_snapshotting_proc = multiprocessing.Process(
-                target=async_snapshotting_process.start_snapshot_process
+            self.async_snapshotting_proc = self.mp_ctx.Process(
+                target=self.snapshot_entry,
+                args=(self.snapshotting_port, self.id),
             )
             self.async_snapshotting_proc.start()
             self.heartbeat_proc.start()

@@ -1,0 +1,70 @@
+# .github/workflows/e2e.yml
+name: e2e
+
+on:
+  pull_request:
+    branches: ["**"]
+  push:
+    branches: ["main"]
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e-ycsb:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Docker info
+        run: |
+          docker version
+          docker compose version
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          # Install Styx package from repo root
+          pip install -e styx-package/
+
+      - name: Make scripts executable
+        run: |
+          chmod +x scripts/start_styx_cluster.sh scripts/stop_styx_cluster.sh || true
+
+      # Needed so Kafka advertises a reachable external listener
+      - name: Set DOCKER_HOST_IP
+        run: echo "DOCKER_HOST_IP=127.0.0.1" >> $GITHUB_ENV
+
+      - name: Run e2e tests
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          pytest -m e2e -q
+
+      # Always collect logs, even on failure
+      - name: Collect docker logs (always)
+        if: always()
+        run: |
+          mkdir -p artifacts
+          if [ -f worker-logs.log ]; then cp worker-logs.log artifacts/; fi
+          if [ -f coordinator-logs.log ]; then cp coordinator-logs.log artifacts/; fi
+          docker ps -a > artifacts/docker-ps.txt || true
+          docker compose ps > artifacts/compose-ps.txt || true
+
+      - name: Upload artifacts (always)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-artifacts
+          path: artifacts
+          if-no-files-found: ignore

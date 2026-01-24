@@ -1,18 +1,15 @@
 import os
-import multiprocessing
-
+import multiprocessing as mp
 import uvloop
 
 from worker.worker_service import Worker
 
+N_THREADS = int(os.getenv("WORKER_THREADS", 1))
 
-N_THREADS = int(os.getenv('WORKER_THREADS', 1))
 
-
-class BootStyx(object):
-
+class BootStyx:
     def __init__(self):
-        self.worker_threads_pool: list[multiprocessing.Process] = []
+        self.worker_threads_pool: list[mp.Process] = []
 
     @staticmethod
     def start_worker_thread(thread_idx: int):
@@ -22,17 +19,15 @@ class BootStyx(object):
     def main(self):
         for thread_idx in range(N_THREADS):
             self.worker_threads_pool.append(
-                multiprocessing.Process(
-                    target=self.start_worker_thread,
-                    args=(thread_idx, )
-                )
+                mp.Process(target=self.start_worker_thread, args=(thread_idx,))
             )
-        for worker_thread in self.worker_threads_pool:
-            worker_thread.start()
-        for worker_thread in self.worker_threads_pool:
-            worker_thread.join()
+        for p in self.worker_threads_pool:
+            p.start()
+        for p in self.worker_threads_pool:
+            p.join()
 
 
 if __name__ == "__main__":
+    mp.set_start_method("spawn", force=True)
     boot = BootStyx()
     boot.main()

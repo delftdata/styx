@@ -147,7 +147,6 @@ class Operator(BaseOperator):
             else:
                 if resp is not None:
                     self.__networking.add_response(t_id, resp)
-        del f
         return success
 
     async def _send_response_to_root(self, resp, ack_host, ack_port, ack_id) -> None:

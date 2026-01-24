@@ -1,10 +1,10 @@
 # Styx: Transactional Stateful Functions on Streaming Dataflows
 
-This repository contains the codebase of Styx described in: https://arxiv.org/abs/2312.06893.
+This repository contains the codebase of Styx described in: https://dl.acm.org/doi/10.1145/3725363.
 
 ## Preliminaries
 
-This project requires an environment with *python 3.13* installed. 
+This project requires an environment with *Python 3.14* installed. 
 Please install the styx-package and all the requirements of the coordinator
 and the worker modules as well as pandas, numpy and matplotlib. 
 
@@ -106,7 +106,7 @@ Later we will provide k8s config files for the experiments.
 To run a single experiment:
 
 ```
-./scripts/run_experiment.sh [WORKLOAD_NAME] [INPUT_RATE] [N_KEYS] [N_PART] [ZIPF_CONST] [CLIENT_THREADS] [TOTAL_TIME] [SAVING_DIR] [WARMUP_SECONDS] [EPOCH_SIZE]
+./scripts/run_experiment.sh [WORKLOAD_NAME] [INPUT_RATE] [N_KEYS] [N_PART] [ZIPF_CONST] [CLIENT_THREADS] [TOTAL_TIME] [SAVING_DIR] [WARMUP_SECONDS] [EPOCH_SIZE] [STYX_THREADS_PER_WORKER]
 ```
 
 e.g. to run the YCSB-T workload with 1000000 keys at 1000 TPS, 4 partitions, 

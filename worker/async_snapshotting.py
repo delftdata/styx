@@ -1,5 +1,6 @@
 import asyncio
 import concurrent.futures
+import multiprocessing
 import socket
 import struct
 
@@ -28,7 +29,8 @@ class AsyncSnapshottingProcess(object):
         self.snapshotting_socket.setblocking(False)
 
         self.aio_task_scheduler = AIOTaskScheduler()
-        self.pool: concurrent.futures.ProcessPoolExecutor = concurrent.futures.ProcessPoolExecutor(4)
+        self.pool: concurrent.futures.ProcessPoolExecutor = concurrent.futures.ProcessPoolExecutor(4,
+                                                                                                   multiprocessing.get_context("spawn"))
         self.delta_maps: dict[OperatorPartition, KVPairs] = {}
         self.worker_id = worker_id
         self.async_snapshots = AsyncSnapshotsMinio(self.worker_id)

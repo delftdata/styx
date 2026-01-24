@@ -100,8 +100,9 @@ def benchmark_runner(proc_num) -> dict[bytes, dict]:
     start = timer()
     for sec in range(seconds):
         sec_start = timer()
+        step = max(1, messages_per_second // sleeps_per_second)
         for i in range(messages_per_second):
-            if i % (messages_per_second // sleeps_per_second) == 0:
+            if i % step == 0:
                 time.sleep(sleep_time)
             operator, key, func_name, params = next(ycsb_generator)
             future = styx.send_event(operator=operator,

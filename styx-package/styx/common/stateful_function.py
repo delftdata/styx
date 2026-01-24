@@ -72,78 +72,93 @@ class StatefulFunction(Function):
         self.__operator_lock: asyncio.Lock = operator_lock
 
     async def __call__(self, *args, **kwargs):
-        """Executes the wrapped function and triggers asynchronous remote calls if needed.
-
-        Args:
-            *args: Positional arguments for the function.
-            **kwargs: Keyword arguments for coordinating chained execution.
+        """
+        Executes the wrapped function and triggers asynchronous remote calls if needed.
 
         Returns:
-            tuple: A tuple of (result, number of remote calls, partial chain count),
-                or an exception tuple if an error occurs.
+            (result, n_remote_calls, partial_node_count) on success
+            (exception, -1, -1) on failure
         """
         try:
-            await self.__operator_lock.acquire()
-            if self.__state.in_remote_keys(self.__key, self.__operator_name, self.__partition):
+            # 1) Decide whether we need to fetch/migrate the key, while holding the lock briefly.
+            need_remote_fetch: bool = False
+            remote_info: tuple[int, int] | None = None  # (worker_id, old_partition) shape depends on your state
 
-                worker_id_old_partition = self.__state.get_worker_id_old_partition(self.__operator_name,
-                                                                                   self.__partition,
-                                                                                   self.__key)
+            async with self.__operator_lock:
+                if self.__state.in_remote_keys(self.__key, self.__operator_name, self.__partition):
+                    remote_info = self.__state.get_worker_id_old_partition(
+                        self.__operator_name,
+                        self.__partition,
+                        self.__key,
+                    )
 
-                is_local: bool = (self.__operator_name, worker_id_old_partition[1]) in self.__state.operator_partitions
+                    # Your state seems to return something like (worker_id, old_partition)
+                    # since you later access remote_info[1] as the old partition.
+                    old_partition = remote_info[1]
 
-                if is_local:
-                    # Transfer the key from another partition within the same worker
-                    self.__state.migrate_within_the_same_worker(self.__operator_name,
-                                                                self.__partition,
-                                                                self.__key,
-                                                                worker_id_old_partition[1])
-                    self.__operator_lock.release()
-                else:
-                    # Get the key from a remote worker
-                    # logging.warning(f"{self.__request_id} | Requesting {self.__operator_name}:{self.__partition} "
-                    #                 f"-> {self.__key} from remote")
-                    await self.__networking.request_key(self.__operator_name,
-                                                        self.__partition,
-                                                        self.__key,
-                                                        worker_id_old_partition)
-                    # Need to lock only for the message send to avoid duplicates
-                    self.__operator_lock.release()
-                    await self.__networking.wait_for_remote_key_event(self.__operator_name,
-                                                                      self.__partition,
-                                                                      self.__key)
-            else:
-                self.__operator_lock.release()
+                    is_local: bool = (self.__operator_name, old_partition) in self.__state.operator_partitions
+                    if is_local:
+                        # Transfer the key from another partition within the same worker
+                        self.__state.migrate_within_the_same_worker(
+                            self.__operator_name,
+                            self.__partition,
+                            self.__key,
+                            old_partition,
+                        )
+                    else:
+                        # We'll do networking outside the lock.
+                        need_remote_fetch = True
+
+            # 2) If needed, fetch the key from a remote worker without holding the operator lock.
+            if need_remote_fetch:
+                assert remote_info is not None
+                await self.__networking.request_key(
+                    self.__operator_name,
+                    self.__partition,
+                    self.__key,
+                    remote_info,
+                )
+                await self.__networking.wait_for_remote_key_event(
+                    self.__operator_name,
+                    self.__partition,
+                    self.__key,
+                )
+
+            # 3) Run user logic while holding the operator lock.
             async with self.__operator_lock:
                 res = await self.run(*args)
-            # logging.info(f'Run args: {args} kwargs: {kwargs} async remote calls: {self.__async_remote_calls}')
+
+            # 4) Fallback cache short-circuit.
             if self.__fallback_enabled and self.__use_fallback_cache:
-                # if the fallback is enabled, and we are using the cached functions we can just return here
                 return res, len(self.__async_remote_calls), -1
+
+            # 5) Chain / async remote calls.
             partial_node_count = 0
             n_remote_calls = 0
-            if 'ack_share' in kwargs and 'ack_host' in kwargs:
-                # middle of the chain
-                partial_node_count = kwargs['partial_node_count']
-                n_remote_calls = await self.__send_async_calls(ack_host=kwargs['ack_host'],
-                                                               ack_port=kwargs['ack_port'],
-                                                               ack_share=kwargs['ack_share'],
-                                                               chain_participants=kwargs['chain_participants'],
-                                                               partial_node_count=partial_node_count)
-            elif len(self.__async_remote_calls) > 0:
-                # start of the chain
-                n_remote_calls = await self.__send_async_calls(ack_host="",
-                                                               ack_port=-1,
-                                                               ack_share=1,
-                                                               chain_participants=[],
-                                                               partial_node_count=partial_node_count,
-                                                               is_root=True)
+
+            if "ack_share" in kwargs and "ack_host" in kwargs:
+                # Middle of the chain
+                partial_node_count = kwargs.get("partial_node_count", 0)
+                n_remote_calls = await self.__send_async_calls(
+                    ack_host=kwargs["ack_host"],
+                    ack_port=kwargs["ack_port"],
+                    ack_share=kwargs["ack_share"],
+                    chain_participants=kwargs["chain_participants"],
+                    partial_node_count=partial_node_count,
+                )
+            elif self.__async_remote_calls:
+                # Start of the chain
+                n_remote_calls = await self.__send_async_calls(
+                    ack_host="",
+                    ack_port=-1,
+                    ack_share=1,
+                    chain_participants=[],
+                    partial_node_count=partial_node_count,
+                    is_root=True,
+                )
+
             return res, n_remote_calls, partial_node_count
         except Exception as e:
-            # logging.warning(traceback.format_exc())
-            # logging.warning(f"{self.__request_id} | {self.__t_id} | {self.__key} | "
-            #               f"Call @{self.__operator_name}:{self.name}:FB={self.__fallback_enabled} in_remote={self.__state.in_remote_keys(self.__key, self.__operator_name, self.__partition)} "
-            #             f" in_local={self.__state.exists(self.__key, self.__operator_name, self.__partition)} failed with error: {e}")
             return e, -1, -1
 
     @property
