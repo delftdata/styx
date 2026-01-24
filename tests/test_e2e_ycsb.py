@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import socket
@@ -94,12 +95,12 @@ def test_styx_e2e_ycsb(tmp_path: Path):
 
     # ---- client params ----
     client_threads = 2
-    n_keys = 50
+    n_keys = 10_000
     zipf_const = 0.0
-    input_rate = 200  # IMPORTANT: must be >= sleeps_per_second in client.py to avoid /0
-    total_time = 4
+    input_rate = 200
+    total_time = 10
     warmup_seconds = 1
-    run_with_validation = "false"
+    run_with_validation = "true"
 
     env = os.environ.copy()
 
@@ -166,6 +167,28 @@ def test_styx_e2e_ycsb(tmp_path: Path):
 
         assert client_csv.exists(), f"Missing artifact: {client_csv}"
         assert output_csv.exists(), f"Missing artifact: {output_csv}"
+
+        if zipf_const > 0:
+            exp_name = f"ycsbt_zipf_{zipf_const}_{input_rate * client_threads}"
+        else:
+            exp_name = f"ycsbt_uni_{input_rate * client_threads}"
+
+        metrics_json = results_dir / f"{exp_name}.json"
+        log.info("Checking metrics json: %s", metrics_json)
+        assert metrics_json.exists(), f"Missing metrics json: {metrics_json}"
+
+        with metrics_json.open("r", encoding="utf-8") as f:
+            metrics = json.load(f)
+
+        log.info("==== METRICS JSON (%s) ====", metrics_json)
+        log.info("%s", json.dumps(metrics, indent=2, sort_keys=True))
+        log.info("==== END METRICS JSON ====")
+
+        # Required invariants
+        assert metrics.get("duplicate_requests") is False, metrics
+        assert metrics.get("exactly_once_output") is True, metrics
+        assert metrics.get("total_consistent") is True, metrics
+        assert metrics.get("are_we_consistent") is True, metrics
 
     finally:
         rc, out = run_and_stream(
