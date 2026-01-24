@@ -13,11 +13,20 @@ from setuptools._distutils.util import strtobool
 from .exceptions import SerializerNotSupported
 from .logging import logging
 from .run_func_payload import RunFuncPayload
-from .serialization import Serializer, cloudpickle_serialization, msgpack_serialization, \
-    pickle_serialization, cloudpickle_deserialization, msgpack_deserialization, pickle_deserialization, \
-    zstd_msgpack_deserialization, zstd_msgpack_serialization
+from .serialization import (
+    Serializer,
+    cloudpickle_deserialization,
+    cloudpickle_serialization,
+    msgpack_deserialization,
+    msgpack_serialization,
+    pickle_deserialization,
+    pickle_serialization,
+    zstd_msgpack_deserialization,
+    zstd_msgpack_serialization,
+)
 
 USE_COMPRESSION: bool = bool(strtobool(os.getenv("ENABLE_COMPRESSION", "true")))
+
 
 class MessagingMode(IntEnum):
     WORKER_COR = 0
@@ -26,12 +35,10 @@ class MessagingMode(IntEnum):
 
 
 class BaseNetworking(ABC):
-
-    def __init__(self,
-                 host_port,
-                 mode: MessagingMode = MessagingMode.WORKER_COR):
+    def __init__(self, host_port, mode: MessagingMode = MessagingMode.WORKER_COR):
         self.host_name: str = str(socket.gethostbyname(socket.gethostname()))
         self.host_port: int = host_port
+
         # event_id: ack_event
         self.waited_ack_events: dict[int, asyncio.Event] = {}
         # tid: fraction
@@ -46,32 +53,37 @@ class BaseNetworking(ABC):
         self.remote_function_calls: dict[int, list[RunFuncPayload]] = defaultdict(list)
         # set of t_ids that aborted because of an exception
         self.logic_aborts_everywhere: set[int] = set()
+
         self.messaging_mode = mode
         self.worker_id = -1
 
     def __repr__(self):
-        return f'{type(self).__name__} ({self.host_name}:{self.host_port}, mode: {self.messaging_mode.name})'
+        return f"{type(self).__name__} ({self.host_name}:{self.host_port}, mode: {self.messaging_mode.name})"
 
     @abstractmethod
     async def close_all_connections(self):
         raise NotImplementedError
 
     @abstractmethod
-    async def send_message(self,
-                           host,
-                           port,
-                           msg: tuple | bytes,
-                           msg_type: int,
-                           serializer: Serializer = Serializer.CLOUDPICKLE):
+    async def send_message(
+        self,
+        host,
+        port,
+        msg: tuple | bytes,
+        msg_type: int,
+        serializer: Serializer = Serializer.CLOUDPICKLE,
+    ):
         raise NotImplementedError
 
     @abstractmethod
-    async def send_message_request_response(self,
-                                            host,
-                                            port,
-                                            msg: tuple | bytes,
-                                            msg_type: int,
-                                            serializer: Serializer = Serializer.CLOUDPICKLE):
+    async def send_message_request_response(
+        self,
+        host,
+        port,
+        msg: tuple | bytes,
+        msg_type: int,
+        serializer: Serializer = Serializer.CLOUDPICKLE,
+    ):
         raise NotImplementedError
 
     def in_the_same_network(self, host: str, port: int) -> bool:
@@ -98,51 +110,52 @@ class BaseNetworking(ABC):
             if participant != self.worker_id and participant not in self.chain_participants[t_id]:
                 self.chain_participants[t_id].append(participant)
 
-    def add_ack_fraction_str(self,
-                             ack_id: int,
-                             fraction_str: str,
-                             chain_participants: list[int],
-                             partial_node_count: int):
+    def add_ack_fraction_str(
+        self,
+        ack_id: int,
+        fraction_str: str,
+        chain_participants: list[int],
+        partial_node_count: int,
+    ):
         if ack_id in self.aborted_events:
             # if the transaction was aborted we can instantly return
             return
         try:
             self.add_chain_participants(ack_id, chain_participants)
-            self.ack_cnts[ack_id] = (self.ack_cnts[ack_id][0],
-                                     self.ack_cnts[ack_id][1] + partial_node_count)
+            self.ack_cnts[ack_id] = (
+                self.ack_cnts[ack_id][0],
+                self.ack_cnts[ack_id][1] + partial_node_count,
+            )
             self.ack_fraction[ack_id] += fractions.Fraction(fraction_str)
             if self.ack_fraction[ack_id] == 1:
-                # All ACK parts have been gathered
-                # logging.warning(f"Transaction total nodes: {self.ack_cnts[ack_id][1]}")
                 self.waited_ack_events[ack_id].set()
             elif self.ack_fraction[ack_id] > 1:
-                # This should never happen, it means that multiple instances of the same function have run
-                logging.error(f'ack: {ack_id} larger than 1 -> {self.ack_fraction[ack_id]}')
+                logging.error(f"ack: {ack_id} larger than 1 -> {self.ack_fraction[ack_id]}")
         except KeyError:
-            logging.error(f'TID: {ack_id} not in ack list!')
+            logging.error(f"TID: {ack_id} not in ack list!")
 
-    def add_ack_cnt(self,
-                    ack_id: int,
-                    cnt: int = 1,
-                    ):
+    def add_ack_cnt(self, ack_id: int, cnt: int = 1):
         if ack_id in self.aborted_events:
             # if the transaction was aborted we can instantly return
             return
         try:
-            self.ack_cnts[ack_id] = (self.ack_cnts[ack_id][0] + cnt,
-                                     self.ack_cnts[ack_id][1])
+            self.ack_cnts[ack_id] = (
+                self.ack_cnts[ack_id][0] + cnt,
+                self.ack_cnts[ack_id][1],
+            )
             if self.ack_cnts[ack_id][0] == self.ack_cnts[ack_id][1]:
                 # All ACK parts have been gathered
                 self.waited_ack_events[ack_id].set()
             elif self.ack_cnts[ack_id][0] > self.ack_cnts[ack_id][1]:
-                # This should never happen
-                logging.error(f'ack: {ack_id} larger than total: '
-                              f'{self.ack_cnts[ack_id][0]}>{self.ack_cnts[ack_id][1]}')
+                logging.error(
+                    f"ack: {ack_id} larger than total: "
+                    f"{self.ack_cnts[ack_id][0]}>{self.ack_cnts[ack_id][1]}"
+                )
         except KeyError:
-            logging.error(f'TID: {ack_id} not in ack list!')
+            logging.error(f"TID: {ack_id} not in ack list!")
 
     def prepare_function_chain(self, t_id: int):
-        logging.info(f'New function chain for T_ID: {t_id}')
+        logging.info(f"New function chain for T_ID: {t_id}")
         self.waited_ack_events[t_id] = asyncio.Event()
         self.ack_fraction[t_id] = fractions.Fraction(0)
         self.ack_cnts[t_id] = (0, 0)
@@ -170,7 +183,7 @@ class BaseNetworking(ABC):
 
     def add_response(self, t_id: int, response: str):
         if response is None:
-            logging.error(f'Response for T_ID: {t_id} should not be None!')
+            logging.error(f"Response for T_ID: {t_id} should not be None!")
         self.client_responses[t_id] = response
 
     def merge_remote_logic_aborts(self, remote_logic_aborts: set[int]):
@@ -179,8 +192,7 @@ class BaseNetworking(ABC):
     @staticmethod
     def encode_message(msg: object | bytes, msg_type: int, serializer: Serializer) -> bytes:
         if serializer == Serializer.CLOUDPICKLE:
-            msg = struct.pack('>B', msg_type) + struct.pack('>B', 0) + cloudpickle_serialization(msg)
-            return msg
+            return struct.pack(">B", msg_type) + struct.pack(">B", 0) + cloudpickle_serialization(msg)
         elif serializer == Serializer.MSGPACK:
             ser_msg: bytes = msgpack_serialization(msg)
             ser_id = 1
@@ -188,19 +200,15 @@ class BaseNetworking(ABC):
                 # If it's more than 4KB compress
                 ser_msg = zstd_msgpack_serialization(ser_msg, already_ser=True)
                 ser_id = 4
-            msg = struct.pack('>B', msg_type) + struct.pack('>B', ser_id) + ser_msg
-            return msg
+            return struct.pack(">B", msg_type) + struct.pack(">B", ser_id) + ser_msg
         elif serializer == Serializer.PICKLE:
-            msg = struct.pack('>B', msg_type) + struct.pack('>B', 2) + pickle_serialization(msg)
-            return msg
+            return struct.pack(">B", msg_type) + struct.pack(">B", 2) + pickle_serialization(msg)
         elif serializer == Serializer.NONE:
-            msg = struct.pack('>B', msg_type) + struct.pack('>B', 3) + msg
-            return msg
+            return struct.pack(">B", msg_type) + struct.pack(">B", 3) + msg
         elif serializer == Serializer.COMPRESSED_MSGPACK:
-            msg = struct.pack('>B', msg_type) + struct.pack('>B', 4) + zstd_msgpack_serialization(msg)
-            return msg
+            return struct.pack(">B", msg_type) + struct.pack(">B", 4) + zstd_msgpack_serialization(msg)
         else:
-            logging.error(f'Serializer: {serializer} is not supported')
+            logging.error(f"Serializer: {serializer} is not supported")
             raise SerializerNotSupported()
 
     @staticmethod
@@ -208,27 +216,22 @@ class BaseNetworking(ABC):
         return msg[0]
 
     @staticmethod
-    def decode_message(data):
+    def decode_message(data: bytes):
         try:
             serializer = data[1]
             if serializer == 0:
-                msg = cloudpickle_deserialization(data[2:])
-                return msg
+                return cloudpickle_deserialization(data[2:])
             elif serializer == 1:
-                msg = msgpack_deserialization(data[2:])
-                return msg
+                return msgpack_deserialization(data[2:])
             elif serializer == 2:
-                msg = pickle_deserialization(data[2:])
-                return msg
+                return pickle_deserialization(data[2:])
             elif serializer == 3:
-                msg = data[2:]
-                return msg
+                return data[2:]
             elif serializer == 4:
-                msg = zstd_msgpack_deserialization(data[2:])
-                return msg
+                return zstd_msgpack_deserialization(data[2:])
             else:
-                logging.error(f'Serializer: {serializer} is not supported')
+                logging.error(f"Serializer: {serializer} is not supported")
                 raise SerializerNotSupported()
         except UnpicklingError:
-            logging.error(f'Unpickling msg: {data}')
-            raise UnpicklingError
+            logging.error(f"Unpickling msg: {data}")
+            raise

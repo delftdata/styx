@@ -8,14 +8,14 @@ version = "0.0.1"
 authors = [
     { name = "Kyriakos Psarakis" }
 ]
-requires-python = ">=3.13"
+requires-python = ">=3.14"
 dependencies = [
     # Serialization
     "cloudpickle>=3.1.2,<4.0.0",
     "msgspec>=0.20.0,<1.0.0",
     # Kafka clients (async/sync)
     "aiokafka>=0.12.0,<1.0",
-    "confluent-kafka>=2.12.2,<2.13",
+    "confluent-kafka>=2.13.0,<2.14",
     # Async logging
     "aiologger>=0.7.0,<1.0",
     # Hashing

@@ -1,4 +1,4 @@
-FROM python:3.13.11-slim-trixie
+FROM python:3.14.2-slim-trixie
 
 # 1. Install dependencies, create user, and clean up in one step
 RUN apt-get update && apt-get install -y --no-install-recommends \
