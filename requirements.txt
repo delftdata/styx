@@ -29,4 +29,4 @@ matplotlib==3.10.8
 # docs
 mkdocs-material==9.7.1
 # tests
-testcontainers==4.14.0
+pytest==9.0.2
