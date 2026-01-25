@@ -166,6 +166,7 @@ class CoordinatorService(object):
                         return
                     logging.info("Submitted Stateflow Graph to Workers")
             case MessageType.MigrationRepartitioningDone:
+                logging.warning("Migration repartitioning done received!")
                 async with self.networking_locks[message_type]:
                     (epoch_counter, t_counter, input_offsets, output_offsets) = self.networking.decode_message(data)
                     sync_complete: bool = await self.migration_metadata.repartitioning_done(
@@ -174,6 +175,7 @@ class CoordinatorService(object):
                         input_offsets,
                         output_offsets
                     )
+                    logging.warning(f"Migration repartitioning is complete: {sync_complete}")
                     if sync_complete:
                         await self.finalize_migration_repartition()
                         await self.migration_metadata.cleanup(message_type)
@@ -402,6 +404,7 @@ class CoordinatorService(object):
         self.protocol_networking.start_networking_tasks()
 
     async def finalize_migration_repartition(self):
+        logging.warning("Sending MigrationRepartitioningDone to all workers")
         async with asyncio.TaskGroup() as tg:
             for worker in self.coordinator.worker_pool.get_participating_workers():
                 tg.create_task(self.protocol_networking.send_message(
