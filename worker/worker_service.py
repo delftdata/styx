@@ -122,7 +122,6 @@ class Worker(object):
 
         self.function_execution_protocol: AriaProtocol | None = None
 
-        # Still instantiated but now unused for TCP ingestion; kept for compatibility
         self.aio_task_scheduler = AIOTaskScheduler()
         self.protocol_task_scheduler = AIOTaskScheduler()
 
@@ -315,8 +314,9 @@ class Worker(object):
                                 self.dns,
                                 self.id
                             ).add_done_callback(self.repartitioning_callback)
-                    await self.completed_repartitioning_event.wait()
                     self.completed_repartitioning_event.clear()
+                    await self.completed_repartitioning_event.wait()
+                    logging.warning('Local Repartitioning completed')
                     self.local_state.add_keys_to_send(self.final_keys_to_send)
                     # 3) Coordinate: Everyone done with repartitioning
                     self.worker_operators = new_worker_operators
@@ -429,6 +429,7 @@ class Worker(object):
                     self.local_state.set_data_from_migration(operator_partition, key, value)
                     self.protocol_networking.key_received(operator_partition, key)
             case MessageType.MigrationRepartitioningDone:
+                logging.warning("MIGRATION | REPARTITIONING DONE FROM COORDINATOR")
                 (self.m_epoch_counter, self.m_t_counter,
                  self.m_input_offsets, self.m_output_offsets) = self.networking.decode_message(data)
                 self.migration_repartitioning_done.set()
@@ -568,7 +569,7 @@ class Worker(object):
         while True:
             message: bytes = await self.control_queue.get()
             try:
-                await self.worker_controller(message)
+                self.aio_task_scheduler.create_task(self.worker_controller(message))
             except Exception as e:
                 logging.error(f"Error while processing control-plane message: {e}")
             finally:
@@ -584,7 +585,7 @@ class Worker(object):
             message: bytes = await self.protocol_queue.get()
             try:
                 if self.function_execution_protocol is not None:
-                    await self.function_execution_protocol.protocol_tcp_controller(message)
+                    self.protocol_task_scheduler.create_task(self.function_execution_protocol.protocol_tcp_controller(message))
                 else:
                     msg_type = self.protocol_networking.get_msg_type(message)
                     logging.debug(
