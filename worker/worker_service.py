@@ -661,10 +661,6 @@ class Worker(object):
         async with server:
             await server.serve_forever()
 
-    def start_networking_tasks(self):
-        self.networking.start_networking_tasks()
-        self.protocol_networking.start_networking_tasks()
-
     async def register_to_coordinator(self):
         self.id = await self.networking.send_message_request_response(
             DISCOVERY_HOST, DISCOVERY_PORT,
@@ -716,7 +712,6 @@ class Worker(object):
             )
             self.async_snapshotting_proc.start()
             self.heartbeat_proc.start()
-            self.start_networking_tasks()
 
             # Start queue workers:
             # - control_queue: single worker for ordered control-plane traffic
