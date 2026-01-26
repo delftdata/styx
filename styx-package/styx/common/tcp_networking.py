@@ -2,9 +2,7 @@ import asyncio
 import os
 import socket
 import struct
-import sys
 from struct import unpack
-from timeit import default_timer as timer
 from typing import Any
 
 from setuptools._distutils.util import strtobool
@@ -167,13 +165,10 @@ class SocketPool:
 class NetworkingManager(BaseNetworking):
     def __init__(self, host_port, size: int = 4, mode: MessagingMode = MessagingMode.WORKER_COR):
         super().__init__(host_port, mode)
-        self.aio_task_scheduler = AIOTaskScheduler()
+        self.aio_task_scheduler = AIOTaskScheduler(max_concurrency=1_000)
         self.pools: dict[tuple[str, int], SocketPool] = {}
         self.get_socket_lock = asyncio.Lock()
         self.socket_pool_size = size
-        self.send_message_time_ms = 0.0
-        self.send_message_calls = 0
-        self.send_message_size = 0
 
         self.peers: dict[int, tuple[str, int, int]] = {}
         self.wait_remote_key_event: dict[OperatorPartition, dict[Any, asyncio.Event]] = {}
@@ -188,9 +183,6 @@ class NetworkingManager(BaseNetworking):
         if pool is not None:
             await pool.close()
 
-    def start_networking_tasks(self):
-        self.aio_task_scheduler.create_task(self.start_metrics())
-
     async def create_socket_connection(self, host: str, port: int):
         self.pools[(host, port)] = SocketPool(host, port, size=self.socket_pool_size, mode=self.messaging_mode)
         await self.pools[(host, port)].create_socket_connections()
@@ -203,17 +195,12 @@ class NetworkingManager(BaseNetworking):
         msg_type: int,
         serializer: Serializer = Serializer.CLOUDPICKLE,
     ):
-        start_time = timer()
         msg = self.encode_message(msg=msg, msg_type=msg_type, serializer=serializer)
         async with self.get_socket_lock:
             if (host, port) not in self.pools:
                 await self.create_socket_connection(host, port)
             socket_conn = next(self.pools[(host, port)])
         await socket_conn.send_message(msg)
-        end_time = timer()
-        self.send_message_time_ms += (end_time - start_time) * 1000.0
-        self.send_message_calls += 1
-        self.send_message_size += sys.getsizeof(msg)
 
     def set_peers(self, peers: dict[int, tuple[str, int, int]]):
         self.peers = peers
@@ -285,30 +272,6 @@ class NetworkingManager(BaseNetworking):
 
         resp = self.decode_message(raw)
         return resp
-
-    async def start_metrics(self, interval=30):
-        while True:
-            await asyncio.sleep(interval)
-            await self.log_metrics()
-
-    async def log_metrics(self):
-        avg_msg_time_ms = (
-            self.send_message_time_ms / self.send_message_calls
-            if self.send_message_calls > 0
-            else 0
-        )
-        avg_msg_size = (
-            self.send_message_size // self.send_message_calls
-            if self.send_message_calls > 0
-            else 0
-        )
-        logging.warning(
-            f"{self}: "
-            f"Send_message calls: {self.send_message_calls}, "
-            f"Send_message time: {self.send_message_time_ms} ms, "
-            f"Avg message time: {avg_msg_time_ms} ms, "
-            f"Avg message size: {avg_msg_size} B."
-        )
 
     @staticmethod
     def encode_message(msg: object | bytes, msg_type: int, serializer: Serializer) -> bytes:

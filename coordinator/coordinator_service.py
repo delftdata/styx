@@ -399,10 +399,6 @@ class CoordinatorService(object):
             async with server:
                 await server.serve_forever()
 
-    def start_networking_tasks(self):
-        self.networking.start_networking_tasks()
-        self.protocol_networking.start_networking_tasks()
-
     async def finalize_migration_repartition(self):
         logging.warning("Sending MigrationRepartitioningDone to all workers")
         async with asyncio.TaskGroup() as tg:
@@ -594,7 +590,6 @@ class CoordinatorService(object):
     async def main(self):
         self.init_snapshot_minio_bucket()
         self.aio_task_scheduler.create_task(self.heartbeat_monitor_coroutine())
-        self.start_networking_tasks()
         self.snapshotting_task = asyncio.create_task(self.send_snapshot_marker())
         await self.tcp_service()
 
