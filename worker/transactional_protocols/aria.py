@@ -347,7 +347,7 @@ class AriaProtocol(BaseTransactionalProtocol):
         return start_wal, end_wal
 
     async def send_async_migrate_batch(self):
-        if USE_ASYNC_MIGRATION and self.local_state.has_keys_to_send:
+        if USE_ASYNC_MIGRATION and self.local_state.has_keys_to_send():
             batch = self.local_state.get_async_migrate_batch(ASYNC_MIGRATION_BATCH_SIZE)
             for operator_partition, k_v_pairs in batch.items():
                 operator_name, partition = operator_partition
