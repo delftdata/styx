@@ -3,7 +3,7 @@ from enum import Enum, auto
 
 
 @dataclass
-class StateflowIngress(object):
+class StateflowIngress:
     host: str
     port: int
     ext_host: str

@@ -1,7 +1,7 @@
 from styx.common.operator import Operator
 from styx.common.stateful_function import StatefulFunction
 
-movie_info_operator = Operator('movie_info')
+movie_info_operator = Operator("movie_info")
 # key: movie_id
 
 

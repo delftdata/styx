@@ -1,7 +1,7 @@
 from styx.common.operator import Operator
 from styx.common.stateful_function import StatefulFunction
 
-hotel_operator = Operator('hotel')
+hotel_operator = Operator("hotel")
 
 
 class NotEnoughSpace(Exception):
@@ -11,8 +11,8 @@ class NotEnoughSpace(Exception):
 @hotel_operator.register
 async def create(ctx: StatefulFunction, cap: int):
     hotel_data: dict = {
-        'Cap': cap,
-        'Customers': []
+        "Cap": cap,
+        "Customers": []
     }
     ctx.put(hotel_data)
     return ctx.key
@@ -22,6 +22,6 @@ async def create(ctx: StatefulFunction, cap: int):
 async def reserve(ctx: StatefulFunction):
     hotel_data = ctx.get()
     # hotel_data['Cap'] -= - 1
-    if hotel_data['Cap'] < 0:
-        raise NotEnoughSpace(f'Not enough space: for hotel: {ctx.key}')
+    if hotel_data["Cap"] < 0:
+        raise NotEnoughSpace(f"Not enough space: for hotel: {ctx.key}")
     ctx.put(hotel_data)

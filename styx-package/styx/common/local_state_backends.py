@@ -10,4 +10,5 @@ class LocalStateBackend(Enum):
     Values:
         DICT: Uses a plain Python dictionary as the state backend.
     """
+
     DICT = auto()

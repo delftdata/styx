@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 
 @dataclass
-class RunFuncPayload(object):
+class RunFuncPayload:
     request_id: bytes
     key: object
     operator_name: str
@@ -16,12 +16,12 @@ class RunFuncPayload(object):
 
 
 @dataclass
-class SequencedItem(object):
+class SequencedItem:
     t_id: int
     payload: RunFuncPayload
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash(self.t_id)
 
-    def __lt__(self, other):
+    def __lt__(self, other: SequencedItem) -> bool:
         return self.t_id < other.t_id

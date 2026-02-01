@@ -1,11 +1,11 @@
+from matplotlib import rcParams
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib import rcParams
 
 sys_name = "SysX"
 
-rcParams['figure.figsize'] = [12, 5]
-plt.rcParams.update({'font.size': 18})
+rcParams["figure.figsize"] = [12, 5]
+plt.rcParams.update({"font.size": 18})
 
 x_labels = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99, 0.999]
 
@@ -41,21 +41,21 @@ plt.grid(linestyle="--", linewidth=1.5)
 plt.plot(x, y_styx_50, "-^", color="#B65FCF", label=f"{sys_name}@2K 50p",
          linewidth=line_width, markersize=marker_size)
 plt.plot(x, y_styx_99, "--", marker="^", color="#B65FCF", label=f"{sys_name}@2K 99p",
-         linewidth=line_width, markersize=marker_size, markerfacecolor='none')
+         linewidth=line_width, markersize=marker_size, markerfacecolor="none")
 plt.plot(x, y_styx3k_50, "-o", color="#882255", label=f"{sys_name}@3K 50p",
          linewidth=line_width, markersize=marker_size)
 plt.plot(x, y_styx3k_99, "--", marker="o", color="#882255", label=f"{sys_name}@3K 99p",
-         linewidth=line_width, markersize=marker_size, markerfacecolor='none')
+         linewidth=line_width, markersize=marker_size, markerfacecolor="none")
 plt.plot(x[statefun_50_mask], y_statefun_50[statefun_50_mask], "-P", color="#005F20", label="T-Statefun@700 50p",
          linewidth=line_width, markersize=marker_size)
 plt.plot(x[statefun_99_mask], y_statefun_99[statefun_99_mask], "--", marker="P", color="#005F20",
-         label="T-Statefun@700 99p", linewidth=line_width, markersize=marker_size, markerfacecolor='none')
+         label="T-Statefun@700 99p", linewidth=line_width, markersize=marker_size, markerfacecolor="none")
 
 # plt.ylim([0, 3])
 plt.ylabel("Latency (ms)")
 plt.xlabel("Zipfian const")
-plt.legend(bbox_to_anchor=(0.5, 1.2), loc="center", ncol=3, prop={'size': 21})
-plt.yscale('log', base=10)
+plt.legend(bbox_to_anchor=(0.5, 1.2), loc="center", ncol=3, prop={"size": 21})
+plt.yscale("log", base=10)
 plt.ylim([10, 9000])
 plt.tight_layout()
 plt.savefig("zipfian.pdf")

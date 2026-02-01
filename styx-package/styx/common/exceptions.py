@@ -1,43 +1,42 @@
-class SerializerNotSupported(Exception):
+class SerializerNotSupportedError(Exception):
     """
     Exception thrown when the selected serializer is not supported
     """
-    pass
 
 
-class OperatorDoesNotContainFunction(Exception):
+class OperatorDoesNotContainFunctionError(Exception):
     """
     If the operator does not contain the specific function
     """
-    pass
 
 
-class NonSupportedKeyType(Exception):
+class NonSupportedKeyTypeError(Exception):
     """
     If the key type is not supported
     """
-    pass
 
 
-class NotAStateflowGraph(Exception):
+class NotAStateflowGraphError(Exception):
     """
     When the client did not submit a correct graph
     """
-    pass
 
 
-class FutureAlreadySet(Exception):
+class FutureAlreadySetError(Exception):
     """
     When the client attempts to set the same future twice
     """
-    pass
 
 
-class FutureTimedOut(Exception):
+class FutureTimedOutError(Exception):
     """
     When a Styx future times out
     """
+
+
+class InvalidRangePartitioningError(Exception):
     pass
 
-class InvalidRangePartitioning(Exception):
+
+class GraphNotSerializableError(Exception):
     pass

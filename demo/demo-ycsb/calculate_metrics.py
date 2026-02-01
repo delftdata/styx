@@ -2,8 +2,8 @@ import json
 import math
 import sys
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 
 # A run with sensible defaults: python calculate_metrics.py results 0 10 10 100 0.0 1
 
@@ -17,7 +17,7 @@ def main(
         save_dir,
         run_with_validation
 ):
-    print('Calculating metrics...')
+    print("Calculating metrics...")
 
     if zipf_const > 0:
         exp_name = f"ycsbt_zipf_{zipf_const}_{input_rate * client_threads}"
@@ -26,48 +26,48 @@ def main(
 
     starting_money = 1_000_000
 
-    origin_input_msgs = pd.read_csv(f'{save_dir}/client_requests.csv',
-                                    dtype={'request_id': bytes,
-                                        'timestamp': np.uint64}).sort_values('timestamp')
+    origin_input_msgs = pd.read_csv(f"{save_dir}/client_requests.csv",
+                                    dtype={"request_id": bytes,
+                                        "timestamp": np.uint64}).sort_values("timestamp")
 
-    duplicate_requests = not origin_input_msgs['request_id'].is_unique
+    duplicate_requests = not origin_input_msgs["request_id"].is_unique
 
 
-    output_msgs = pd.read_csv(f'{save_dir}/output.csv', dtype={'request_id': bytes,
-                                                            'timestamp': np.uint64},
-                            low_memory=False).sort_values('timestamp')
+    output_msgs = pd.read_csv(f"{save_dir}/output.csv", dtype={"request_id": bytes,
+                                                            "timestamp": np.uint64},
+                            low_memory=False).sort_values("timestamp")
     print(
-        f'Found {len(output_msgs)} output messages with {len(output_msgs['response'].dropna())} non-empty responses.'
+        f"Found {len(output_msgs)} output messages with {len(output_msgs['response'].dropna())} non-empty responses."
     )
 
-    exactly_once_output = output_msgs['request_id'].is_unique
+    exactly_once_output = output_msgs["request_id"].is_unique
 
     output_run_messages = output_msgs.iloc[n_partitions:]
 
     # remove warmup from input
-    input_msgs = origin_input_msgs.loc[(origin_input_msgs['timestamp'] -
-                                        origin_input_msgs['timestamp'][0] >= warmup_seconds * 1000)]
+    input_msgs = origin_input_msgs.loc[(origin_input_msgs["timestamp"] -
+                                        origin_input_msgs["timestamp"][0] >= warmup_seconds * 1000)]
     print(
-        f'Removed {len(origin_input_msgs) - len(input_msgs)} input messages '
-        f'due to an initial warmup period of {warmup_seconds} seconds.'
+        f"Removed {len(origin_input_msgs) - len(input_msgs)} input messages "
+        f"due to an initial warmup period of {warmup_seconds} seconds."
     )
 
     # Perform a left join to include all rows from client_df
-    joined = input_msgs.merge(output_run_messages, on='request_id', how='left', suffixes=('_client', '_output'))
+    joined = input_msgs.merge(output_run_messages, on="request_id", how="left", suffixes=("_client", "_output"))
 
     print(
-        f'Joined {len(joined)} messages from {len(input_msgs)} input messages '
-        f'and {len(output_run_messages)} output messages.'
+        f"Joined {len(joined)} messages from {len(input_msgs)} input messages "
+        f"and {len(output_run_messages)} output messages."
     )
 
-    missed = len(joined[joined['timestamp_output'].isna()])
+    missed = len(joined[joined["timestamp_output"].isna()])
     print(
-        f'Missed {missed} messages after the join for which no response '
-         'was found.'
+        f"Missed {missed} messages after the join for which no response "
+         "was found."
     )
 
     joined = joined.dropna()
-    runtime = joined['timestamp_output'] - joined['timestamp_client']
+    runtime = joined["timestamp_output"] - joined["timestamp_client"]
 
     start_time = -math.inf
     throughput = {}
@@ -76,7 +76,7 @@ def main(
     # 1 second (ms) (i.e. bucket size)
     granularity = 1000
 
-    for t in output_msgs['timestamp']:
+    for t in output_msgs["timestamp"]:
         if t - start_time > granularity:
             bucket_id += 1
             start_time = t
@@ -86,7 +86,7 @@ def main(
 
     throughput_vals = list(throughput.values())
 
-    req_ids = output_msgs['request_id']
+    req_ids = output_msgs["request_id"]
     dup = output_msgs[req_ids.isin(req_ids[req_ids.duplicated()])].sort_values("request_id")
 
 
@@ -119,8 +119,8 @@ def main(
 
     if run_with_validation:
         # Consistency test
-        verification_state_reads = {int(e[0]): int(e[1]) for e in [res.strip('][').split(', ')
-                                                                for res in output_msgs['response'].tail(n_keys)]}
+        verification_state_reads = {int(e[0]): int(e[1]) for e in [res.strip("][").split(", ")
+                                                                for res in output_msgs["response"].tail(n_keys)]}
 
         verification_total = sum(verification_state_reads.values())
 
@@ -128,9 +128,9 @@ def main(
         res_dict["total_consistent"] = total_consistent
         res_dict["total_money"] = verification_total
         transaction_operations = [(int(op[0]), int(op[1]))
-                                for op in [op.split(' ')[1].split('->')
-                                            for op in origin_input_msgs['op']]]
-        true_res = {key: starting_money for key in range(n_keys)}
+                                for op in [op.split(" ")[1].split("->")
+                                            for op in origin_input_msgs["op"]]]
+        true_res = dict.fromkeys(range(n_keys), starting_money)
 
         for op in transaction_operations:
             send_key, rcv_key = op
@@ -145,9 +145,9 @@ def main(
         for res in true_res.items():
             key, value = res
             if key in verification_state_reads and verification_state_reads[key] != value:
-                wrong_values.append(f'For key: {key}|{key % n_partitions} the value should be {value}'
-                                    f' but it is {verification_state_reads[key]} | '
-                                    f'{verification_state_reads[key] - value}')
+                wrong_values.append(f"For key: {key}|{key % n_partitions} the value should be {value}"
+                                    f" but it is {verification_state_reads[key]} | "
+                                    f"{verification_state_reads[key] - value}")
             elif key not in verification_state_reads:
                 missing_verification_keys.append(key)
         missing_verification_keys = len(missing_verification_keys)
@@ -156,12 +156,12 @@ def main(
 
         if not are_we_consistent:
             print(f"{'\033[91m'}NOT CONSISTENT: {verification_total} != {n_keys * starting_money}{'\033[0m'}")
-    print(f'Done. Persisted metrics in {save_dir}/{exp_name}.json')
-    with open(f'{save_dir}/{exp_name}.json', 'w', encoding='utf-8') as f:
+    print(f"Done. Persisted metrics in {save_dir}/{exp_name}.json")
+    with open(f"{save_dir}/{exp_name}.json", "w", encoding="utf-8") as f:
         json.dump(res_dict, f, ensure_ascii=False, indent=4)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main(
         int(sys.argv[3]),
         int(sys.argv[4]),

@@ -1,10 +1,14 @@
-from typing import Iterator
+from typing import TYPE_CHECKING
 
-from .local_state_backends import LocalStateBackend
-from .operator import BaseOperator, Operator
+from styx.common.operator import BaseOperator, Operator
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    from styx.common.local_state_backends import LocalStateBackend
 
 
-class StateflowGraph(object):
+class StateflowGraph:
     """Represents a dataflow graph of operators in a Styx application.
 
     Each node in the graph is an operator. The graph tracks the
@@ -12,7 +16,7 @@ class StateflowGraph(object):
     and enables operator lookup and iteration.
     """
 
-    def __init__(self, name: str, operator_state_backend: LocalStateBackend):
+    def __init__(self, name: str, operator_state_backend: LocalStateBackend) -> None:
         """Initializes the StateflowGraph.
 
         Args:
@@ -23,7 +27,7 @@ class StateflowGraph(object):
         self.operator_state_backend: LocalStateBackend = operator_state_backend
         self.nodes: dict[str, BaseOperator | Operator] = {}
 
-    def add_operator(self, operator: BaseOperator | Operator):
+    def add_operator(self, operator: BaseOperator | Operator) -> None:
         """Adds a single operator to the graph.
 
         Args:
@@ -39,7 +43,10 @@ class StateflowGraph(object):
         """
         return [node.name + "--OUT" for node in self.nodes.values()]
 
-    def get_operator(self, operator: BaseOperator | Operator) -> BaseOperator | Operator:
+    def get_operator(
+        self,
+        operator: BaseOperator | Operator,
+    ) -> BaseOperator | Operator:
         """Retrieves an operator from the graph by name.
 
         Args:
@@ -53,7 +60,7 @@ class StateflowGraph(object):
     def get_operator_by_name(self, operator_name: str) -> BaseOperator | Operator:
         return self.nodes[operator_name]
 
-    def add_operators(self, *operators):
+    def add_operators(self, *operators: BaseOperator | Operator) -> None:
         """Adds multiple operators to the graph.
 
         Args:
@@ -68,19 +75,22 @@ class StateflowGraph(object):
             Iterator[tuple[str, BaseOperator]]: Iterable of name-operator pairs.
         """
         return (
-            (operator_name,
-             self.nodes[operator_name]
-             )
-            for operator_name in self.nodes.keys())
+            (
+                operator_name,
+                self.nodes[operator_name],
+            )
+            for operator_name in self.nodes
+        )
 
-
-    def __repr__(self):
+    def __repr__(self) -> str:
         node_info = ", ".join(f"{key}={op.name}({op.n_partitions}p)" for key, op in self.nodes.items())
         return f"StateflowGraph(name={self.name!r}, nodes={{ {node_info} }})"
 
-    def __str__(self):
+    def __str__(self) -> str:
         node_descriptions = []
         for key, op in self.nodes.items():
-            node_descriptions.append(f"{key}: {op.name} (partitions: {op.n_partitions})")
+            node_descriptions.append(
+                f"{key}: {op.name} (partitions: {op.n_partitions})",
+            )
         nodes_str = "\n  ".join(node_descriptions)
         return f"StateflowGraph '{self.name}' with nodes:\n  {nodes_str}"

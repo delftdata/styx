@@ -1,6 +1,4 @@
 from benchmark.zipfian_generator import ZipfGenerator
-import matplotlib.pyplot as plt
-import numpy as np
 
 obs = 1_000_000
 

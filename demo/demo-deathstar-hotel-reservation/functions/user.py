@@ -1,7 +1,7 @@
 from styx.common.operator import Operator
 from styx.common.stateful_function import StatefulFunction
 
-user_operator = Operator('user')
+user_operator = Operator("user")
 # key: username
 # value: password
 

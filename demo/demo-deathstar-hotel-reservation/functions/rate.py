@@ -1,7 +1,7 @@
 from styx.common.operator import Operator
 from styx.common.stateful_function import StatefulFunction
 
-rate_operator = Operator('rate')
+rate_operator = Operator("rate")
 
 
 class NotEnoughSpace(Exception):

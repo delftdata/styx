@@ -1,23 +1,22 @@
 from styx.common.operator import Operator
 from styx.common.stateful_function import StatefulFunction
 
-
-payment_txn_operator = Operator('payment_txn')
+payment_txn_operator = Operator("payment_txn")
 
 
 def send_output(front_end_metadata):
-    if (front_end_metadata['warehouse_data'] is not None and
-            front_end_metadata['district_data'] is not None and
-            front_end_metadata['customer_data'] is not None):
+    if (front_end_metadata["warehouse_data"] is not None and
+            front_end_metadata["district_data"] is not None and
+            front_end_metadata["customer_data"] is not None):
         return True
     return False
 
 
 def pack_response(ctx, front_end_metadata):
     # Adjust the total for the discount
-    warehouse_data = front_end_metadata['warehouse_data']
-    district_data = front_end_metadata['district_data']
-    customer_data = front_end_metadata['customer_data']
+    warehouse_data = front_end_metadata["warehouse_data"]
+    district_data = front_end_metadata["district_data"]
+    customer_data = front_end_metadata["customer_data"]
 
     # Concatenate w_name, four spaces, d_name
     h_data = f"{warehouse_data['W_NAME']}    {district_data['D_NAME']}"
@@ -25,25 +24,25 @@ def pack_response(ctx, front_end_metadata):
     # ----------------------
     # Insert History Query
     # ----------------------
-    w_id = front_end_metadata['W_ID']
-    d_id = front_end_metadata['D_ID']
-    c_id = customer_data['C_ID']
+    w_id = front_end_metadata["W_ID"]
+    d_id = front_end_metadata["D_ID"]
+    c_id = customer_data["C_ID"]
 
-    history_key = f'{w_id}:{d_id}:{c_id}'
+    history_key = f"{w_id}:{d_id}:{c_id}"
     history_params = {
-        'H_C_ID': c_id,
-        'H_C_D_ID': front_end_metadata['C_D_ID'],
-        'H_C_W_ID': front_end_metadata['C_W_ID'],
-        'H_D_ID': d_id,
-        'H_W_ID': w_id,
-        'H_DATE': front_end_metadata['H_DATE'],
-        'H_AMOUNT': front_end_metadata['H_AMOUNT'],
-        'H_DATA': h_data,
+        "H_C_ID": c_id,
+        "H_C_D_ID": front_end_metadata["C_D_ID"],
+        "H_C_W_ID": front_end_metadata["C_W_ID"],
+        "H_D_ID": d_id,
+        "H_W_ID": w_id,
+        "H_DATE": front_end_metadata["H_DATE"],
+        "H_AMOUNT": front_end_metadata["H_AMOUNT"],
+        "H_DATA": h_data,
     }
 
     ctx.call_remote_async(
-        'history',
-        'insert',
+        "history",
+        "insert",
         history_key,
         (history_params, )
     )
@@ -74,7 +73,7 @@ async def get_customer(ctx: StatefulFunction, customer_data: dict):
     # Get response from the district entity
     # --------------------
     front_end_metadata = ctx.get()
-    front_end_metadata['customer_data'] = customer_data
+    front_end_metadata["customer_data"] = customer_data
     ctx.put(front_end_metadata)
     if send_output(front_end_metadata):
         response = pack_response(ctx, front_end_metadata)
@@ -87,7 +86,7 @@ async def get_warehouse(ctx: StatefulFunction, warehouse_data: dict):
     # Get response from the warehouse entity
     # --------------------
     front_end_metadata = ctx.get()
-    front_end_metadata['warehouse_data'] = warehouse_data
+    front_end_metadata["warehouse_data"] = warehouse_data
     ctx.put(front_end_metadata)
     if send_output(front_end_metadata):
         response = pack_response(ctx, front_end_metadata)
@@ -100,7 +99,7 @@ async def get_district(ctx: StatefulFunction, district_data: dict):
     # Get response from the district entity
     # --------------------
     front_end_metadata = ctx.get()
-    front_end_metadata['district_data'] = district_data
+    front_end_metadata["district_data"] = district_data
     ctx.put(front_end_metadata)
     if send_output(front_end_metadata):
         response = pack_response(ctx, front_end_metadata)
@@ -110,27 +109,27 @@ async def get_district(ctx: StatefulFunction, district_data: dict):
 @payment_txn_operator.register
 async def payment(ctx: StatefulFunction, params: dict):
     # Initialize transaction properties
-    w_id: str = params['W_ID']
-    d_id: str = params['D_ID']
-    h_amount: float = params['H_AMOUNT']
-    c_w_id: str = params['C_W_ID']
-    c_d_id: str = params['C_D_ID']
-    c_id: str = params['C_ID']
-    c_last: str = params['C_LAST']
-    h_date: str = params['H_DATE']
+    w_id: str = params["W_ID"]
+    d_id: str = params["D_ID"]
+    h_amount: float = params["H_AMOUNT"]
+    c_w_id: str = params["C_W_ID"]
+    c_d_id: str = params["C_D_ID"]
+    c_id: str = params["C_ID"]
+    c_last: str = params["C_LAST"]
+    h_date: str = params["H_DATE"]
 
     # Init metadata
     init_data = {
-        'W_ID': w_id,
-        'D_ID': d_id,
-        'C_ID': c_id,
-        'C_W_ID': c_w_id,
-        'C_D_ID': c_d_id,
-        'H_DATE': h_date,
-        'H_AMOUNT': h_amount,
-        'warehouse_data': None,
-        'district_data': None,
-        'customer_data': None
+        "W_ID": w_id,
+        "D_ID": d_id,
+        "C_ID": c_id,
+        "C_W_ID": c_w_id,
+        "C_D_ID": c_d_id,
+        "H_DATE": h_date,
+        "H_AMOUNT": h_amount,
+        "warehouse_data": None,
+        "district_data": None,
+        "customer_data": None
     }
 
     ctx.put(init_data)
@@ -139,10 +138,10 @@ async def payment(ctx: StatefulFunction, params: dict):
         # --------------------------
         # Get Customer By ID Query
         # --------------------------
-        customer_key = f'{c_w_id}:{c_d_id}:{c_id}'
+        customer_key = f"{c_w_id}:{c_d_id}:{c_id}"
         ctx.call_remote_async(
-            'customer',
-            'pay',
+            "customer",
+            "pay",
             customer_key,
             # needed to get back the reply
             (ctx.key, h_amount, d_id, w_id)
@@ -151,10 +150,10 @@ async def payment(ctx: StatefulFunction, params: dict):
         # ----------------------------------
         # Get Customers By Last Name Query
         # ----------------------------------
-        customer_idx_key = f'{c_w_id}:{c_d_id}:{c_last}'
+        customer_idx_key = f"{c_w_id}:{c_d_id}:{c_last}"
         ctx.call_remote_async(
-            'customer_idx',
-            'pay',
+            "customer_idx",
+            "pay",
             customer_idx_key,
             # needed to get back the reply
             (ctx.key, h_amount, d_id, w_id)
@@ -164,15 +163,15 @@ async def payment(ctx: StatefulFunction, params: dict):
     # Update payment in warehouse and district
     # --------------------
     ctx.call_remote_async(
-        'warehouse',
-        'pay',
+        "warehouse",
+        "pay",
         w_id,
         (ctx.key, h_amount)
     )
-    district_key = f'{w_id}:{d_id}'
+    district_key = f"{w_id}:{d_id}"
     ctx.call_remote_async(
-        'district',
-        'pay',
+        "district",
+        "pay",
         district_key,
         (ctx.key, h_amount)
     )

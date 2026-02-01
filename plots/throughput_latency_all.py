@@ -1,10 +1,10 @@
-import matplotlib.pyplot as plt
-import numpy as np
 from matplotlib import rcParams
 from matplotlib.lines import Line2D
+import matplotlib.pyplot as plt
+import numpy as np
 
-rcParams['figure.figsize'] = [24, 8]
-plt.rcParams.update({'font.size': 22})
+rcParams["figure.figsize"] = [24, 8]
+plt.rcParams.update({"font.size": 22})
 
 line_width = 2.5
 marker_size = 8
@@ -43,28 +43,28 @@ y_boki_99 = np.array([47.25, None, 53.22, None, 47.9, 58.04, 3478.05, 5656.14, 6
                      + [None] * (len(x) - 11)).astype(np.double)
 y_boki_99_mask = np.isfinite(y_boki_99)
 
-ax[0].grid(linestyle="--", linewidth=1.5, which='major', axis='both')
+ax[0].grid(linestyle="--", linewidth=1.5, which="major", axis="both")
 ax[0].plot(x[styx_50_mask], y_styx_50[styx_50_mask], "-o", color="#882255",
            linewidth=line_width, markersize=marker_size)
 ax[0].plot(x[styx_99_mask], y_styx_99[styx_99_mask], "--", marker="o", color="#882255",
-           linewidth=line_width, markersize=marker_size, markerfacecolor='none')
+           linewidth=line_width, markersize=marker_size, markerfacecolor="none")
 ax[0].plot(x, y_beldi_50, "-^", color="#BD7105",
            linewidth=line_width, markersize=marker_size)
 ax[0].plot(x, y_beldi_99, "--", marker="^", color="#BD7105",
-           linewidth=line_width, markersize=marker_size, markerfacecolor='none')
+           linewidth=line_width, markersize=marker_size, markerfacecolor="none")
 ax[0].plot(x[y_statefun_50_mask], y_statefun_50[y_statefun_50_mask], "-P", color="#005F20",
            linewidth=line_width, markersize=marker_size)
 ax[0].plot(x[y_statefun_99_mask], y_statefun_99[y_statefun_99_mask], "--", marker="P", color="#005F20",
-           linewidth=line_width, markersize=marker_size, markerfacecolor='none')
+           linewidth=line_width, markersize=marker_size, markerfacecolor="none")
 ax[0].plot(x[y_boki_50_mask], y_boki_50[y_boki_50_mask], "-d", color="#332288",
            linewidth=line_width, markersize=marker_size)
 ax[0].plot(x[y_boki_99_mask], y_boki_99[y_boki_99_mask], "--", marker="d", color="#332288",
-           linewidth=line_width, markersize=marker_size, markerfacecolor='none')
-ax[0].set_yscale('log', base=10)
-ax[0].set_xscale('log', base=10)
-ax[0].set_xlabel('Input Throughput (transactions/s)')
-ax[0].set_ylabel('Latency (ms)')
-ax[0].title.set_text('YCSB-T')
+           linewidth=line_width, markersize=marker_size, markerfacecolor="none")
+ax[0].set_yscale("log", base=10)
+ax[0].set_xscale("log", base=10)
+ax[0].set_xlabel("Input Throughput (transactions/s)")
+ax[0].set_ylabel("Latency (ms)")
+ax[0].title.set_text("YCSB-T")
 
 # Deathstar travel
 
@@ -117,20 +117,20 @@ ax[1].grid(linestyle="--", linewidth=1.5)
 ax[1].plot(x[styx_50_mask], y_styx_50[styx_50_mask], "-o", color="#882255",
            linewidth=line_width, markersize=marker_size)
 ax[1].plot(x[styx_99_mask], y_styx_99[styx_99_mask], "--", marker="o", color="#882255",
-           linewidth=line_width, markersize=marker_size, markerfacecolor='none')
+           linewidth=line_width, markersize=marker_size, markerfacecolor="none")
 ax[1].plot(x, y_beldi_50, "-^", color="#BD7105",
            linewidth=line_width, markersize=marker_size)
 ax[1].plot(x, y_beldi_99, "--", marker="^", color="#BD7105",
-           linewidth=line_width, markersize=marker_size, markerfacecolor='none')
+           linewidth=line_width, markersize=marker_size, markerfacecolor="none")
 ax[1].plot(x[y_boki_50_mask], y_boki_50[y_boki_50_mask], "-d", color="#332288",
            linewidth=line_width, markersize=marker_size)
 ax[1].plot(x[y_boki_99_mask], y_boki_99[y_boki_99_mask], "--", marker="d", color="#332288",
-           linewidth=line_width, markersize=marker_size, markerfacecolor='none')
-ax[1].set_yscale('log', base=10)
-ax[1].set_xscale('log', base=10)
-ax[1].title.set_text('Deathstar Travel')
-ax[1].set_xlabel('Input Throughput (transactions/s)')
-ax[1].set_ylabel('Latency (ms)')
+           linewidth=line_width, markersize=marker_size, markerfacecolor="none")
+ax[1].set_yscale("log", base=10)
+ax[1].set_xscale("log", base=10)
+ax[1].title.set_text("Deathstar Travel")
+ax[1].set_xlabel("Input Throughput (transactions/s)")
+ax[1].set_ylabel("Latency (ms)")
 
 # Deathstar movie
 
@@ -158,38 +158,38 @@ ax[2].grid(linestyle="--", linewidth=1.5)
 ax[2].plot(x[styx_50_mask], y_styx_50[styx_50_mask], "-o", color="#882255",
            linewidth=line_width, markersize=marker_size)
 ax[2].plot(x[styx_99_mask], y_styx_99[styx_99_mask], "--", marker="o", color="#882255",
-           linewidth=line_width, markersize=marker_size, markerfacecolor='none')
+           linewidth=line_width, markersize=marker_size, markerfacecolor="none")
 ax[2].plot(x, y_beldi_50, "-^", color="#BD7105",
            linewidth=line_width, markersize=marker_size)
 ax[2].plot(x, y_beldi_99, "--", marker="^", color="#BD7105",
-           linewidth=line_width, markersize=marker_size, markerfacecolor='none')
+           linewidth=line_width, markersize=marker_size, markerfacecolor="none")
 ax[2].plot(x[y_boki_50_mask], y_boki_50[y_boki_50_mask], "-d", color="#332288",
            linewidth=line_width, markersize=marker_size)
 ax[2].plot(x[y_boki_99_mask], y_boki_99[y_boki_99_mask], "--", marker="d", color="#332288",
-           linewidth=line_width, markersize=marker_size, markerfacecolor='none')
-ax[2].set_yscale('log', base=10)
-ax[2].set_xscale('log', base=10)
-ax[2].title.set_text('Deathstar Movie')
-ax[2].set_xlabel('Input Throughput (transactions/s)')
-ax[2].set_ylabel('Latency (ms)')
+           linewidth=line_width, markersize=marker_size, markerfacecolor="none")
+ax[2].set_yscale("log", base=10)
+ax[2].set_xscale("log", base=10)
+ax[2].title.set_text("Deathstar Movie")
+ax[2].set_xlabel("Input Throughput (transactions/s)")
+ax[2].set_ylabel("Latency (ms)")
 
 # legend
-leg1 = Line2D([0], [0], color=styx_color, linewidth=line_width, linestyle='-',
+leg1 = Line2D([0], [0], color=styx_color, linewidth=line_width, linestyle="-",
               label="Styx 50p", marker="o", markersize=marker_size)
-leg2 = Line2D([0], [0], color=styx_color, linewidth=line_width, linestyle='--',
-              label="Styx 99p", marker="o", markersize=marker_size, markerfacecolor='none')
-leg3 = Line2D([0], [0], color=tstatefun_color, linewidth=line_width, linestyle='-',
+leg2 = Line2D([0], [0], color=styx_color, linewidth=line_width, linestyle="--",
+              label="Styx 99p", marker="o", markersize=marker_size, markerfacecolor="none")
+leg3 = Line2D([0], [0], color=tstatefun_color, linewidth=line_width, linestyle="-",
               label="T-Statefun 50p", marker="P", markersize=marker_size)
-leg4 = Line2D([0], [0], color=tstatefun_color, linewidth=line_width, linestyle='--',
-              label="T-Statefun 99p", marker="P", markersize=marker_size, markerfacecolor='none')
-leg5 = Line2D([0], [0], color=boki_color, linewidth=line_width, linestyle='-',
+leg4 = Line2D([0], [0], color=tstatefun_color, linewidth=line_width, linestyle="--",
+              label="T-Statefun 99p", marker="P", markersize=marker_size, markerfacecolor="none")
+leg5 = Line2D([0], [0], color=boki_color, linewidth=line_width, linestyle="-",
               label="Boki 50p", marker="d", markersize=marker_size)
-leg6 = Line2D([0], [0], color=boki_color, linewidth=line_width, linestyle='--',
-              label="Boki 99p", marker="d", markersize=marker_size, markerfacecolor='none')
-leg7 = Line2D([0], [0], color=beldi_color, linewidth=line_width, linestyle='-',
+leg6 = Line2D([0], [0], color=boki_color, linewidth=line_width, linestyle="--",
+              label="Boki 99p", marker="d", markersize=marker_size, markerfacecolor="none")
+leg7 = Line2D([0], [0], color=beldi_color, linewidth=line_width, linestyle="-",
               label="Beldi 50p", marker="^", markersize=marker_size)
-leg8 = Line2D([0], [0], color=beldi_color, linewidth=line_width, linestyle='--',
-              label="Beldi 99p", marker="^", markersize=marker_size, markerfacecolor='none')
+leg8 = Line2D([0], [0], color=beldi_color, linewidth=line_width, linestyle="--",
+              label="Beldi 99p", marker="^", markersize=marker_size, markerfacecolor="none")
 fig.legend(handles=[leg1, leg2, leg3, leg4,
                     leg5, leg6, leg7, leg8],
            bbox_to_anchor=(0.5, 0.1), loc="center", ncol=4)

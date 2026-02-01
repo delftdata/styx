@@ -1,0 +1,105 @@
+target-version = "py314"
+line-length = 120
+indent-width = 4
+respect-gitignore = true
+show-fixes = true
+
+exclude = [
+  ".git",
+  ".venv",
+  "venv",
+  "build",
+  "dist",
+  "__pypackages__",
+  ".mypy_cache",
+  ".pytest_cache",
+  ".ruff_cache",
+  "abl/",
+  "docs/",
+  "plots/",
+  "shopping-cart-demo/",
+  "results/",
+  "res-rev/",
+  "s_results/",
+  "scripts/",
+  "demo/",
+  "shopping-cart-demo",
+  ""
+
+]
+
+[lint]
+select = ["ALL"]
+
+ignore = [
+  # --- Formater conflicts
+  "COM812",
+
+  # --- Docs: do not enforce docstrings / doc conventions just yet
+  "D",
+
+  # --- Boolean positional args are sometimes fine
+  "FBT001",
+  "FBT002",
+  "FBT003",
+
+  # --- Blind exceptions are needed in some parts
+  "BLE001",
+  "TRY201",
+
+  # --- The project is still in an early stage and TODOs are acceptable
+  "FIX002",
+  "TD002",
+  "TD003",
+  "TD004",
+
+  # --- We use pickle to serialize things within Styx
+  "S301",
+
+  # --- In the future we should fix the logging within the project
+  "LOG015",
+]
+
+fixable = ["ALL"]
+
+[lint.per-file-ignores]
+
+"tests/**" = [
+  "S101",   # asserts are fine in tests
+  "ANN",    # optional in tests
+  "PLR2004", # magic numbers are common in tests
+  "TRY003",
+  "EM102",
+  "PLW1510",
+  "S603"
+]
+
+"**/__init__.py" = ["F401"]
+"scripts/**" = ["T201"]
+
+
+[lint.isort]
+force-sort-within-sections = true
+combine-as-imports = true
+split-on-trailing-comma = true
+
+[lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[lint.pyupgrade]
+keep-runtime-typing = false
+
+[lint.pylint]
+max-args = 15
+max-branches = 20
+max-returns = 10
+max-statements = 80
+max-locals = 25
+max-nested-blocks = 6
+
+[format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+docstring-code-format = true
+docstring-code-line-length = "dynamic"

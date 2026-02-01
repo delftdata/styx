@@ -1,10 +1,9 @@
-from .base_partitioner import BasePartitioner
-from ..exceptions import InvalidRangePartitioning
+from styx.common.exceptions import InvalidRangePartitioningError
+from styx.common.partitioning.base_partitioner import BasePartitioner
 
 
 class RangePartitioner(BasePartitioner):
-
-    def __init__(self, ranges: list[tuple[int, int]]):
+    def __init__(self, ranges: list[tuple[int, int]]) -> None:
         # ranges is a sorted list of inclusive ranges where the index is the partition id
         self._ranges = ranges
 
@@ -16,11 +15,11 @@ class RangePartitioner(BasePartitioner):
             mid_lower, mid_upper = self._ranges[mid]
             if mid_lower <= key <= mid_upper:
                 return mid
-            elif key < mid_lower:
+            if key < mid_lower:
                 high = mid - 1
             else:
                 low = mid + 1
-        raise InvalidRangePartitioning()
+        raise InvalidRangePartitioningError
 
-    def update_ranges(self, ranges: list[tuple[int, int]]):
+    def update_ranges(self, ranges: list[tuple[int, int]]) -> None:
         self._ranges = ranges

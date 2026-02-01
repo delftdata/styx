@@ -1,22 +1,25 @@
 import asyncio
 import os
+from typing import TYPE_CHECKING
 
 from setuptools._distutils.util import strtobool
 
-from typing import Any
+from styx.common.base_operator import BaseOperator
+from styx.common.exceptions import OperatorDoesNotContainFunctionError
+from styx.common.message_types import MessageType
+from styx.common.partitioning.hash_partitioner import HashPartitioner
+from styx.common.serialization import Serializer
+from styx.common.stateful_function import StatefulFunction
 
-from .message_types import MessageType
-from .tcp_networking import NetworkingManager
-from .serialization import Serializer
-from .base_operator import BaseOperator
-from .base_protocol import BaseTransactionalProtocol
-from .stateful_function import StatefulFunction
-from .exceptions import OperatorDoesNotContainFunction
-# from .logging import logging
-from .partitioning.hash_partitioner import HashPartitioner
-
+if TYPE_CHECKING:
+    from styx.common.base_protocol import BaseTransactionalProtocol
+    from styx.common.base_state import BaseOperatorState
+    from styx.common.stateflow_graph import StateflowGraph
+    from styx.common.tcp_networking import NetworkingManager
+    from styx.common.types import K
 
 USE_COMPOSITE_KEYS: bool = bool(strtobool(os.getenv("USE_COMPOSITE_KEYS", "true")))
+
 
 class Operator(BaseOperator):
     """A stateful operator that executes user-defined stateful functions in Styx.
@@ -25,10 +28,12 @@ class Operator(BaseOperator):
     communication between workers, and execution of distributed function chains.
     """
 
-    def __init__(self,
-                 name: str,
-                 n_partitions: int = 1,
-                 composite_key_hash_params: tuple[int, str] | None = None):
+    def __init__(
+        self,
+        name: str,
+        n_partitions: int = 1,
+        composite_key_hash_params: tuple[int, str] | None = None,
+    ) -> None:
         """Initializes the operator with a name and number of partitions.
 
         Args:
@@ -37,11 +42,14 @@ class Operator(BaseOperator):
         """
         super().__init__(name, n_partitions)
         if USE_COMPOSITE_KEYS:
-            self.__partitioner: HashPartitioner = HashPartitioner(n_partitions, composite_key_hash_params)
+            self.__partitioner: HashPartitioner = HashPartitioner(
+                n_partitions,
+                composite_key_hash_params,
+            )
         else:
             self.__partitioner: HashPartitioner = HashPartitioner(n_partitions, None)
-        self.__state = ...
-        self.__networking: NetworkingManager = ...
+        self.__state: BaseOperatorState | None = None
+        self.__networking: NetworkingManager | None = None
         # where the other functions exist
         self.__dns: dict[str, dict[int, tuple[str, int, int]]] = {}
         self.__functions: dict[str, type] = {}
@@ -52,7 +60,7 @@ class Operator(BaseOperator):
     def get_partitioner(self) -> HashPartitioner:
         return self.__partitioner
 
-    def which_partition(self, key) -> int:
+    def which_partition(self, key: K) -> int:
         """Determines the partition for a given key.
 
         Args:
@@ -63,36 +71,38 @@ class Operator(BaseOperator):
         """
         return self.__partitioner.get_partition(key)
 
-    def make_shadow(self):
+    def make_shadow(self) -> None:
         """Marks this operator instance as a shadow partition."""
         self.__is_shadow = True
 
     @property
-    def is_shadow(self):
+    def is_shadow(self) -> bool:
         """bool: Indicates whether this operator is a shadow partition."""
         return self.__is_shadow
 
     @property
-    def dns(self):
+    def dns(self) -> dict[str, dict[int, tuple[str, int, int]]]:
         """dict: A mapping from function names and partition numbers to worker addresses."""
         return self.__dns
 
     @property
-    def functions(self):
+    def functions(self) -> dict[str, type]:
         """dict: A mapping from function names to function classes/types."""
         return self.__functions
 
-    async def run_function(self,
-                           key,
-                           t_id: int,
-                           request_id: bytes,
-                           function_name: str,
-                           partition: int,
-                           ack_payload: tuple[str, int, int, str, list[int], int] | None,
-                           fallback_mode: bool,
-                           use_fallback_cache: bool,
-                           params: tuple,
-                           protocol: BaseTransactionalProtocol) -> bool:
+    async def run_function(
+        self,
+        key: K,
+        t_id: int,
+        request_id: bytes,
+        function_name: str,
+        partition: int,
+        ack_payload: tuple[str, int, int, str, list[int], int] | None,
+        fallback_mode: bool,
+        use_fallback_cache: bool,
+        params: tuple,
+        protocol: BaseTransactionalProtocol,
+    ) -> bool:
         """Executes a registered function with given parameters in a distributed execution chain.
 
         Args:
@@ -110,21 +120,36 @@ class Operator(BaseOperator):
         Returns:
             bool: True if execution succeeded, False if an exception was encountered.
         """
-        f = self.__materialize_function(function_name, partition, key, t_id, request_id,
-                                        fallback_mode, use_fallback_cache, protocol)
-        params = (f, ) + tuple(params)
-        # logging.debug(f'RQ_ID: {request_id} TID: {t_id} KEY: {key}'
-        #               f'function: {self.name}:{function_name} fallback mode: {fallback_mode}')
+        f = self.__materialize_function(
+            function_name,
+            partition,
+            key,
+            t_id,
+            request_id,
+            fallback_mode,
+            use_fallback_cache,
+            protocol,
+        )
+        params = (f, *tuple(params))
         success: bool = True
         if ack_payload is not None:
             # part of a chain (not root)
-            ack_host, ack_port, ack_id, fraction_str, chain_participants, partial_node_count = ack_payload
-            resp, n_remote_calls, partial_node_count = await f(*params,
-                                                               ack_host=ack_host,
-                                                               ack_port=ack_port,
-                                                               ack_share=fraction_str,
-                                                               chain_participants=chain_participants,
-                                                               partial_node_count=partial_node_count)
+            (
+                ack_host,
+                ack_port,
+                ack_id,
+                fraction_str,
+                chain_participants,
+                partial_node_count,
+            ) = ack_payload
+            resp, n_remote_calls, partial_node_count = await f(
+                *params,
+                ack_host=ack_host,
+                ack_port=ack_port,
+                ack_share=fraction_str,
+                chain_participants=chain_participants,
+                partial_node_count=partial_node_count,
+            )
             if isinstance(resp, Exception):
                 await self._send_chain_abort(str(resp), ack_host, ack_port, ack_id)
                 success = False
@@ -133,8 +158,14 @@ class Operator(BaseOperator):
             elif n_remote_calls == 0:
                 # we need to count the last node as part of the chain
                 partial_node_count += 1
-                await self.__send_ack(ack_host, ack_port, ack_id, fraction_str,
-                                      chain_participants, partial_node_count)
+                await self.__send_ack(
+                    ack_host,
+                    ack_port,
+                    ack_id,
+                    fraction_str,
+                    chain_participants,
+                    partial_node_count,
+                )
             if success and resp is not None:
                 # send the response to the root
                 await self._send_response_to_root(resp, ack_host, ack_port, ack_id)
@@ -144,21 +175,35 @@ class Operator(BaseOperator):
             if isinstance(resp, Exception):
                 self.__networking.abort_chain(t_id, str(resp))
                 success = False
-            else:
-                if resp is not None:
-                    self.__networking.add_response(t_id, resp)
+            elif resp is not None:
+                self.__networking.add_response(t_id, resp)
         return success
 
-    async def _send_response_to_root(self, resp, ack_host, ack_port, ack_id) -> None:
+    async def _send_response_to_root(
+        self,
+        resp: str | Exception,
+        ack_host: str,
+        ack_port: int,
+        ack_id: int,
+    ) -> None:
         if self.__networking.in_the_same_network(ack_host, ack_port):
             self.__networking.add_response(ack_id, resp)
         else:
-            await self.__networking.send_message(ack_host, ack_port,
-                                                 msg=(ack_id, resp),
-                                                 msg_type=MessageType.ResponseToRoot,
-                                                 serializer=Serializer.MSGPACK)
+            await self.__networking.send_message(
+                ack_host,
+                ack_port,
+                msg=(ack_id, resp),
+                msg_type=MessageType.ResponseToRoot,
+                serializer=Serializer.MSGPACK,
+            )
 
-    async def _send_chain_abort(self, resp, ack_host, ack_port, ack_id) -> None:
+    async def _send_chain_abort(
+        self,
+        resp: str,
+        ack_host: str,
+        ack_port: int,
+        ack_id: int,
+    ) -> None:
         """Sends an abort signal to the worker that holds the root of a distributed chain.
 
         Args:
@@ -170,35 +215,44 @@ class Operator(BaseOperator):
         if self.__networking.in_the_same_network(ack_host, ack_port):
             self.__networking.abort_chain(ack_id, resp)
         else:
-            await self.__networking.send_message(ack_host, ack_port,
-                                                 msg=(ack_id, resp),
-                                                 msg_type=MessageType.ChainAbort,
-                                                 serializer=Serializer.MSGPACK)
+            await self.__networking.send_message(
+                ack_host,
+                ack_port,
+                msg=(ack_id, resp),
+                msg_type=MessageType.ChainAbort,
+                serializer=Serializer.MSGPACK,
+            )
 
-    async def __send_cache_ack(self, ack_host, ack_port, ack_id) -> None:
-        """Sends an acknowledgement to the worker that holds the root of a distributed chain during fallback mode with cache enabled.
+    async def __send_cache_ack(self, ack_host: str, ack_port: int, ack_id: int) -> None:
+        """Sends an acknowledgement to the worker that holds the root of a distributed chain during fallback mode
+         with cache enabled.
 
-                Args:
-                    ack_host: Hostname or IP of the next worker.
-                    ack_port: Port number of the next worker.
-                    ack_id: Acknowledgement ID for the cache.
-                """
+        Args:
+            ack_host: Hostname or IP of the next worker.
+            ack_port: Port number of the next worker.
+            ack_id: Acknowledgement ID for the cache.
+        """
         if self.__networking.in_the_same_network(ack_host, ack_port):
             # case when the ack host is the same worker
             self.__networking.add_ack_cnt(ack_id)
         else:
-            await self.__networking.send_message(ack_host, ack_port,
-                                                 msg=(ack_id, ),
-                                                 msg_type=MessageType.AckCache,
-                                                 serializer=Serializer.MSGPACK)
+            await self.__networking.send_message(
+                ack_host,
+                ack_port,
+                msg=(ack_id,),
+                msg_type=MessageType.AckCache,
+                serializer=Serializer.MSGPACK,
+            )
 
-    async def __send_ack(self,
-                         ack_host,
-                         ack_port,
-                         ack_id,
-                         fraction_str,
-                         chain_participants,
-                         partial_node_count) -> None:
+    async def __send_ack(
+        self,
+        ack_host: str,
+        ack_port: int,
+        ack_id: int,
+        fraction_str: str,
+        chain_participants: list[int],
+        partial_node_count: int,
+    ) -> None:
         """Sends an acknowledgement to the worker that holds the root of a distributed chain during normal operation.
 
         Args:
@@ -211,17 +265,34 @@ class Operator(BaseOperator):
         """
         if self.__networking.in_the_same_network(ack_host, ack_port):
             # case when the ack host is the same worker
-            self.__networking.add_ack_fraction_str(ack_id, fraction_str, chain_participants, partial_node_count)
+            self.__networking.add_ack_fraction_str(
+                ack_id,
+                fraction_str,
+                chain_participants,
+                partial_node_count,
+            )
         else:
             if self.__networking.worker_id not in chain_participants:
                 chain_participants.append(self.__networking.worker_id)
-            await self.__networking.send_message(ack_host, ack_port,
-                                                 msg=(ack_id, fraction_str, chain_participants, partial_node_count),
-                                                 msg_type=MessageType.Ack,
-                                                 serializer=Serializer.MSGPACK)
+            await self.__networking.send_message(
+                ack_host,
+                ack_port,
+                msg=(ack_id, fraction_str, chain_participants, partial_node_count),
+                msg_type=MessageType.Ack,
+                serializer=Serializer.MSGPACK,
+            )
 
-    def __materialize_function(self, function_name, partition, key, t_id, request_id,
-                               fallback_mode, use_fallback_cache, protocol):
+    def __materialize_function(
+        self,
+        function_name: str,
+        partition: int,
+        key: K,
+        t_id: int,
+        request_id: bytes,
+        fallback_mode: bool,
+        use_fallback_cache: bool,
+        protocol: BaseTransactionalProtocol,
+    ) -> StatefulFunction:
         """Constructs and binds a `StatefulFunction` instance.
 
         Args:
@@ -238,29 +309,32 @@ class Operator(BaseOperator):
             StatefulFunction: A bound function instance ready for execution.
 
         Raises:
-            OperatorDoesNotContainFunction: If the function is not registered.
+            OperatorDoesNotContainFunctionError: If the function is not registered.
         """
-        f = StatefulFunction(key,
-                             function_name,
-                             partition,
-                             self.name,
-                             self.__state,
-                             self.__networking,
-                             self.__dns,
-                             t_id,
-                             request_id,
-                             fallback_mode,
-                             use_fallback_cache,
-                             self.__deployed_graph,
-                             self.__run_func_lock,
-                             protocol)
+        f = StatefulFunction(
+            key,
+            function_name,
+            partition,
+            self.name,
+            self.__state,
+            self.__networking,
+            self.__dns,
+            t_id,
+            request_id,
+            fallback_mode,
+            use_fallback_cache,
+            self.__deployed_graph,
+            self.__run_func_lock,
+            protocol,
+        )
         try:
             f.run = self.__functions[function_name]
-        except KeyError:
-            raise OperatorDoesNotContainFunction(f'Operator: {self.name} does not contain function: {function_name}')
+        except KeyError as e:
+            msg = f"Operator: {self.name} does not contain function: {function_name}"
+            raise OperatorDoesNotContainFunctionError(msg) from e
         return f
 
-    def register(self, func: type):
+    def register(self, func: type) -> None:
         """Registers a function with this operator.
 
         Args:
@@ -268,7 +342,13 @@ class Operator(BaseOperator):
         """
         self.__functions[func.__name__] = func
 
-    def attach_state_networking(self, state, networking, dns, deployed_graph):
+    def attach_state_networking(
+        self,
+        state: BaseOperatorState,
+        networking: NetworkingManager,
+        dns: dict[str, dict[int, tuple[str, int, int]]],
+        deployed_graph: StateflowGraph,
+    ) -> None:
         """Attaches shared state and networking dependencies.
 
         Args:
@@ -282,7 +362,7 @@ class Operator(BaseOperator):
         self.__dns = dns
         self.__deployed_graph = deployed_graph
 
-    def set_n_partitions(self, n_partitions: int):
+    def set_n_partitions(self, n_partitions: int) -> None:
         """Sets the number of partitions and updates the partitioner.
 
         Args:

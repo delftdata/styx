@@ -5,7 +5,7 @@
 import random
 
 
-class NURandC(object):
+class NURandC:
     def __init__(self, c_last, c_id, order_line_item_id):
         self.c_last: int = c_last
         self.c_id: int = c_id

@@ -1,10 +1,9 @@
+from matplotlib import rcParams
+import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
 
-import matplotlib.pyplot as plt
-from matplotlib import rcParams
-
-rcParams['figure.figsize'] = [12, 5]
-plt.rcParams.update({'font.size': 18})
+rcParams["figure.figsize"] = [12, 5]
+plt.rcParams.update({"font.size": 18})
 x = [2, 4, 6, 8, 10, 12, 14, 16, 24, 32]
 
 y_styx_mp_prc = {

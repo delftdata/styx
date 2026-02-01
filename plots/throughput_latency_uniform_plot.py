@@ -1,9 +1,8 @@
+from matplotlib import rcParams
 import matplotlib.pyplot as plt
-import numpy as np
-from matplotlib import rcParams, rc
 
-rcParams['figure.figsize'] = [9, 8]
-plt.rcParams.update({'font.size': 16})
+rcParams["figure.figsize"] = [9, 8]
+plt.rcParams.update({"font.size": 16})
 x = [100, 300, 500, 700, 1000, 1200, 1500, 2000, 3000, 6000, 8000, 10000, 12000]
 y_styx_50 = [21, 28, 25, 26, 26, None, 24, 23, 22, 33, 50, 127, 639]
 y_beldi_50 = [269.90, 267.25, 220.37, 69.87, 78.17, 71.78, 256.39, None, None, None, None, None, None]
@@ -23,7 +22,7 @@ ax0.plot(x, y_statefun_50, "-x", color="#fde725", label="T-Statefun 50p")
 ax0.plot(x, y_statefun_99, "--", marker="x", color="#fde725", label="T-Statefun 99p")
 # ax0.legend()
 # ax0.set_xlim([0, 3])
-ax0.set_ylim([0, 1000])             
+ax0.set_ylim([0, 1000])
 # ax0.ylabel("Latency (ms)")
 # ax0.xlabel("Input Throughput (transactions/s)")
 
@@ -40,8 +39,8 @@ ax1.set_ylim([1000, 70000])
 # ax1.ylabel("Latency (ms)")
 # ax1.xlabel("Input Throughput (transactions/s)")
 
-fig.supxlabel('Input Throughput (transactions/s)')
-fig.supylabel('Latency (ms)')
+fig.supxlabel("Input Throughput (transactions/s)")
+fig.supylabel("Latency (ms)")
 
 
 

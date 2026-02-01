@@ -1,11 +1,11 @@
+from matplotlib import rcParams
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib import rcParams, rc
 
 sys_name = "SysX"
 
-rcParams['figure.figsize'] = [12, 5]
-plt.rcParams.update({'font.size': 18})
+rcParams["figure.figsize"] = [12, 5]
+plt.rcParams.update({"font.size": 18})
 
 x = np.array([100, 300, 500, 700, 1000, 1500, 2000, 3000, 4000, 5000,
               6000, 8000, 10000, 12000, 15000, 18000, 21000, 25000, 30000,
@@ -58,22 +58,22 @@ plt.grid(linestyle="--", linewidth=1.5)
 plt.plot(x[styx_50_mask], y_styx_50[styx_50_mask], "-o", color="#882255", label=f"{sys_name} 50p",
          linewidth=line_width, markersize=marker_size)
 plt.plot(x[styx_99_mask], y_styx_99[styx_99_mask], "--", marker="o", color="#882255", label=f"{sys_name} 99p",
-         linewidth=line_width, markersize=marker_size, markerfacecolor='none')
+         linewidth=line_width, markersize=marker_size, markerfacecolor="none")
 plt.plot(x, y_beldi_50, "-^", color="#BD7105", label="Beldi 50p",
          linewidth=line_width, markersize=marker_size)
 plt.plot(x, y_beldi_99, "--", marker="^", color="#BD7105", label="Beldi 99p",
-         linewidth=line_width, markersize=marker_size, markerfacecolor='none')
+         linewidth=line_width, markersize=marker_size, markerfacecolor="none")
 plt.plot(x[y_boki_50_mask], y_boki_50[y_boki_50_mask], "-d", color="#332288", label="Boki 50p",
          linewidth=line_width, markersize=marker_size)
 plt.plot(x[y_boki_99_mask], y_boki_99[y_boki_99_mask], "--", marker="d", color="#332288", label="Boki 99p",
-         linewidth=line_width, markersize=marker_size, markerfacecolor='none')
+         linewidth=line_width, markersize=marker_size, markerfacecolor="none")
 plt.legend(bbox_to_anchor=(0.5, 1.2), loc="center", ncol=3)
 # plt.ylim([1, 100000])
 # plt.xlim([100, 50000])
 plt.ylabel("Latency (ms)")
 plt.xlabel("Input Throughput (transactions/s)")
-plt.yscale('log', base=10)
-plt.xscale('log', base=10)
+plt.yscale("log", base=10)
+plt.xscale("log", base=10)
 plt.tight_layout()
 plt.savefig("throughput_latency_deathstar_flight.pdf")
 plt.show()

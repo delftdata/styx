@@ -3,11 +3,9 @@ import sys
 
 from aiokafka import AIOKafkaConsumer
 import pandas as pd
-
-import uvloop
-from styx.common.serialization import msgpack_deserialization
-
 from pure_kafka_demo import g
+from styx.common.serialization import msgpack_deserialization
+import uvloop
 
 
 def all_egress_topics_created(topics: set[str], egress_topic_names: list[str]):
@@ -23,9 +21,9 @@ async def consume(save_dir):
 
     records = []
     consumer = AIOKafkaConsumer(
-        auto_offset_reset='earliest',
+        auto_offset_reset="earliest",
         value_deserializer=msgpack_deserialization,
-        bootstrap_servers='localhost:9092')
+        bootstrap_servers="localhost:9092")
     await consumer.start()
     topics = []
     # Ensure topic is created by the producer (and not auto-created by this
@@ -52,7 +50,7 @@ async def consume(save_dir):
         # Will leave consumer group; perform autocommit if enabled.
         await consumer.stop()
         pd.DataFrame.from_records(records,
-                                  columns=['request_id', 'response', 'timestamp']).to_csv(f'{save_dir}/output.csv',
+                                  columns=["request_id", "response", "timestamp"]).to_csv(f"{save_dir}/output.csv",
                                                                                           index=False)
 
 def main(save_dir=None):

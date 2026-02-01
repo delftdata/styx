@@ -12,20 +12,15 @@ from tests.helpers import run_and_stream, run_and_stream_with_timed_action, wait
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-log = logging.getLogger("e2e.ycsb")
+log = logging.getLogger("e2e.deathstar_movie_review")
 
 
 def _assert_metrics(
     results_dir: Path,
-    zipf_const: float,
     input_rate: int,
     client_threads: int,
 ) -> None:
-    if zipf_const > 0:
-        exp_name = f"ycsbt_zipf_{zipf_const}_{input_rate * client_threads}"
-    else:
-        exp_name = f"ycsbt_uni_{input_rate * client_threads}"
-
+    exp_name = f"d_movie_review_{input_rate * client_threads}"
     metrics_json = results_dir / f"{exp_name}.json"
     log.info("Checking metrics json: %s", metrics_json)
     assert metrics_json.exists(), f"Missing metrics json: {metrics_json}"
@@ -39,8 +34,6 @@ def _assert_metrics(
 
     assert metrics.get("duplicate_requests") is False, metrics
     assert metrics.get("exactly_once_output") is True, metrics
-    assert metrics.get("total_consistent") is True, metrics
-    assert metrics.get("are_we_consistent") is True, metrics
     assert int(metrics.get("missed messages")) == 0, metrics
 
 
@@ -57,12 +50,9 @@ class _ClusterParams:
 @dataclass(frozen=True)
 class _ClientParams:
     client_threads: int = 2
-    n_keys: int = 10_000
-    zipf_const: float = 0.0
-    input_rate: int = 200
+    input_rate: int = 100
     total_time: int = 10
     warmup_seconds: int = 1
-    run_with_validation: str = "true"
 
 
 @dataclass(frozen=True)
@@ -75,7 +65,7 @@ class _Paths:
 
 def _resolve_paths() -> _Paths:
     repo_root = Path(__file__).resolve().parents[1]
-    demo_dir = repo_root / "demo" / "demo-ycsb"
+    demo_dir = repo_root / "demo" / "demo-deathstar-movie-review"
     start_script = repo_root / "scripts" / "start_styx_cluster.sh"
     stop_script = repo_root / "scripts" / "stop_styx_cluster.sh"
 
@@ -119,16 +109,13 @@ def _stop_cmd(paths: _Paths, p: _ClusterParams) -> list[str]:
 def _client_cmd(results_dir: Path, cluster: _ClusterParams, client: _ClientParams) -> list[str]:
     return [
         "python",
-        "client.py",
+        "pure_kafka_demo.py",
+        str(results_dir),
         str(client.client_threads),
-        str(client.n_keys),
         str(cluster.n_partitions),
-        str(client.zipf_const),
         str(client.input_rate),
         str(client.total_time),
-        str(results_dir),
         str(client.warmup_seconds),
-        client.run_with_validation,
     ]
 
 
@@ -173,7 +160,7 @@ def _run_client(
             cwd=str(paths.demo_dir),
             env=env,
             timeout=timeout_s,
-            banner="RUN YCSB CLIENT",
+            banner="RUN DEATHSTAR MOVIE REVIEW CLIENT",
             log=log,
         )
     else:
@@ -185,7 +172,7 @@ def _run_client(
             cwd=str(paths.demo_dir),
             env=env,
             timeout=timeout_s,
-            banner="RUN YCSB CLIENT (TIMED ACTION)",
+            banner="RUN DEATHSTAR MOVIE REVIEW CLIENT (TIMED ACTION)",
             action_at_s=float(timed_action_at_s),
             action_cmd=list(timed_action_cmd),
             action_banner=timed_action_banner or "timed action",
@@ -204,7 +191,7 @@ def _assert_artifacts_and_metrics(results_dir: Path, client: _ClientParams) -> N
     assert client_csv.exists(), f"Missing artifact: {client_csv}"
     assert output_csv.exists(), f"Missing artifact: {output_csv}"
 
-    _assert_metrics(results_dir, client.zipf_const, client.input_rate, client.client_threads)
+    _assert_metrics(results_dir=results_dir, input_rate=client.input_rate, client_threads=client.client_threads)
 
 
 def _stop_cluster(paths: _Paths, env: dict, cluster: _ClusterParams, *, timeout_s: int) -> None:
@@ -221,7 +208,7 @@ def _stop_cluster(paths: _Paths, env: dict, cluster: _ClusterParams, *, timeout_
 
 
 @pytest.mark.e2e
-def test_styx_e2e_ycsb(tmp_path: Path):
+def test_styx_e2e_dmr(tmp_path: Path):
     paths = _resolve_paths()
     results_dir = _make_results_dir(tmp_path)
 
@@ -246,7 +233,7 @@ def test_styx_e2e_ycsb(tmp_path: Path):
 
 
 @pytest.mark.e2e
-def test_styx_e2e_ycsb_kill_worker_midrun(tmp_path: Path):
+def test_styx_e2e_dmr_kill_worker_midrun(tmp_path: Path):
     """
     Same scenario/params, but:
       - total_time = 60 seconds
@@ -269,7 +256,7 @@ def test_styx_e2e_ycsb_kill_worker_midrun(tmp_path: Path):
             results_dir=results_dir,
             cluster=cluster,
             client=client,
-            timed_action_at_s=40.0,
+            timed_action_at_s=20,
             timed_action_cmd=["docker", "kill", "styx-worker-1"],
             timed_action_banner="docker kill styx-worker-1",
             timeout_s=30 * 60,  # headroom for recovery

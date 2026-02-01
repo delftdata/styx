@@ -1,9 +1,8 @@
 from styx.common.operator import Operator
 from styx.common.stateful_function import StatefulFunction
 
-
-district_operator = Operator('district',
-                             composite_key_hash_params=(0, ':'))
+district_operator = Operator("district",
+                             composite_key_hash_params=(0, ":"))
 # Key -> w_id:d_id
 
 
@@ -20,19 +19,19 @@ async def insert(ctx: StatefulFunction, district: dict):
 async def get_district(ctx: StatefulFunction, frontend_key, w_id, d_id, c_id, o_entry_d, i_ids, i_qtys, i_w_ids, all_local):
     district_data = ctx.get()
     if district_data is None:
-        raise DistrictDoesNotExist(f'District with key: {ctx.key} does not exist')
+        raise DistrictDoesNotExist(f"District with key: {ctx.key} does not exist")
 
     # Return district data to transaction coordinator
     ctx.call_remote_async(
-        'new_order_txn',
-        'get_district',
+        "new_order_txn",
+        "get_district",
         frontend_key,
         (district_data, )
     )
 
     for i, i_key in enumerate(i_ids):
-        ctx.call_remote_async('item',
-                              'get_item',
+        ctx.call_remote_async("item",
+                              "get_item",
                               i_key,
                               # needed to get back the reply
                               (
@@ -43,40 +42,40 @@ async def get_district(ctx: StatefulFunction, frontend_key, w_id, d_id, c_id, o_
                                   o_entry_d,
                                   i_qtys[i],
                                   i_w_ids[i],
-                                  district_data['D_NEXT_O_ID'])
+                                  district_data["D_NEXT_O_ID"])
                               )
 
     # Use and increment D_NEXT_O_ID
-    d_next_o_id = district_data['D_NEXT_O_ID']
+    d_next_o_id = district_data["D_NEXT_O_ID"]
 
     # Insert Order
     order_key = f"{w_id}:{d_id}:{d_next_o_id}"
     order_params = {
-        'O_C_ID': c_id,
-        'O_ENTRY_D': o_entry_d,
-        'O_CARRIER_ID': None,  # per spec, initially null
-        'O_OL_CNT': len(i_ids),
-        'O_ALL_LOCAL': all_local
+        "O_C_ID": c_id,
+        "O_ENTRY_D": o_entry_d,
+        "O_CARRIER_ID": None,  # per spec, initially null
+        "O_OL_CNT": len(i_ids),
+        "O_ALL_LOCAL": all_local
     }
-    ctx.call_remote_async('order',
-                          'insert',
+    ctx.call_remote_async("order",
+                          "insert",
                           order_key,
                           (order_params, ))
 
     # Insert New-Order (NO_W_ID, NO_D_ID, NO_O_ID)
-    new_order_key = f'{w_id}:{d_id}:{d_next_o_id}'
+    new_order_key = f"{w_id}:{d_id}:{d_next_o_id}"
     new_order_data = {
-        'NO_O_ID': d_next_o_id,
-        'NO_D_ID': d_id,
-        'NO_W_ID': w_id,
+        "NO_O_ID": d_next_o_id,
+        "NO_D_ID": d_id,
+        "NO_W_ID": w_id,
     }
-    ctx.call_remote_async('new_order',
-                          'insert',
+    ctx.call_remote_async("new_order",
+                          "insert",
                           new_order_key,
                           (new_order_data, ))
 
     # Update D_NEXT_O_ID
-    district_data['D_NEXT_O_ID'] = d_next_o_id + 1
+    district_data["D_NEXT_O_ID"] = d_next_o_id + 1
     ctx.put(district_data)
 
 
@@ -84,12 +83,12 @@ async def get_district(ctx: StatefulFunction, frontend_key, w_id, d_id, c_id, o_
 async def pay(ctx: StatefulFunction, frontend_key, h_amount):
     district_data = ctx.get()
     if district_data is None:
-        raise DistrictDoesNotExist(f'District with key: {ctx.key} does not exist')
-    district_data['D_YTD'] = float(district_data['D_YTD']) + h_amount
+        raise DistrictDoesNotExist(f"District with key: {ctx.key} does not exist")
+    district_data["D_YTD"] = float(district_data["D_YTD"]) + h_amount
     ctx.put(district_data)
     ctx.call_remote_async(
-        'payment_txn',
-        'get_district',
+        "payment_txn",
+        "get_district",
         frontend_key,
         (district_data, )
     )

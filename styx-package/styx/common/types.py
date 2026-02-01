@@ -1,7 +1,11 @@
-from typing import Any
+from collections.abc import Hashable
+from typing import TypeVar
 
+K = TypeVar("K", bound=Hashable)
+V = TypeVar("V")
 
-# OperaOperatorPartition: (operator_name, partition)
+# OperatorPartition: |operator_name, partition|
 type OperatorPartition = tuple[str, int]
-# KVPairs: hashmap of any hashable for key and any value
-type KVPairs = dict[Any, Any]
+
+# KVPairs: hashmap of hashable key and arbitrary value
+type KVPairs[K, V] = dict[K, V]

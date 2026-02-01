@@ -1,7 +1,7 @@
 from styx.common.operator import Operator
 from styx.common.stateful_function import StatefulFunction
 
-ycsb_operator = Operator('ycsb')
+ycsb_operator = Operator("ycsb")
 
 
 class NotEnoughCredit(Exception):
@@ -46,16 +46,16 @@ async def transfer(ctx: StatefulFunction, key_b: str):
     value_a = ctx.get()
 
     ctx.call_remote_async(
-        operator_name='ycsb',
-        function_name='update_t',
+        operator_name="ycsb",
+        function_name="update_t",
         key=key_b
     )
 
     value_a -= 1
 
     if value_a < 0:
-        raise NotEnoughCredit(f'Not enough credit for'
-                              f' user: {ctx.key}')
+        raise NotEnoughCredit(f"Not enough credit for"
+                              f" user: {ctx.key}")
 
     ctx.put(value_a)
 

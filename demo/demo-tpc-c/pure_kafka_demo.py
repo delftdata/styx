@@ -1,36 +1,40 @@
-import csv
-import multiprocessing
-import os
-import pickle
-import sys
-import random
 from collections import defaultdict
+import csv
 from datetime import datetime
+import multiprocessing
+from multiprocessing import Pool
+import os
 from pathlib import Path
+import pickle
+import random
+import sys
+import time
+from timeit import default_timer as timer
 from typing import Any
 
+import calculate_metrics
+from graph import (
+    customer_idx_operator,
+    customer_operator,
+    district_operator,
+    history_operator,
+    item_operator,
+    new_order_operator,
+    new_order_txn_operator,
+    order_line_operator,
+    order_operator,
+    payment_txn_operator,
+    stock_operator,
+    warehouse_operator,
+)
+import kafka_output_consumer
 from minio import Minio
-from setuptools._distutils.util import strtobool
-
-from timeit import default_timer as timer
-import time
-from multiprocessing import Pool
-
 import pandas as pd
-
+import rand
+from setuptools._distutils.util import strtobool
+from styx.client import SyncStyxClient
 from styx.common.local_state_backends import LocalStateBackend
 from styx.common.stateflow_graph import StateflowGraph
-from styx.client import SyncStyxClient
-
-from graph import (customer_operator, district_operator, history_operator, item_operator, new_order_operator,
-                   order_operator, order_line_operator, stock_operator, warehouse_operator,
-                   payment_txn_operator, customer_idx_operator, new_order_txn_operator)
-
-import rand
-
-import kafka_output_consumer
-import calculate_metrics
-
 
 random.seed(42)
 
@@ -41,9 +45,9 @@ messages_per_second = int(sys.argv[4])
 sleeps_per_second = 100
 sleep_time = 0.0085
 seconds = int(sys.argv[5])
-STYX_HOST: str = 'localhost'
+STYX_HOST: str = "localhost"
 STYX_PORT: int = 8886
-KAFKA_URL = 'localhost:9092'
+KAFKA_URL = "localhost:9092"
 warmup_seconds = int(sys.argv[6])
 N_W = int(sys.argv[7])
 N_PARTITIONS = min(N_W, N_PARTITIONS)
@@ -77,7 +81,7 @@ tag = f"ck{int(use_composite_keys)}_p{N_PARTITIONS}"
 CACHE_DIR = os.path.join(script_path, f"{data_folder}_cache_{tag}")
 Path(CACHE_DIR).mkdir(parents=True, exist_ok=True)
 
-g = StateflowGraph('tpcc_benchmark', operator_state_backend=LocalStateBackend.DICT)
+g = StateflowGraph("tpcc_benchmark", operator_state_backend=LocalStateBackend.DICT)
 ####################################################################################################################
 customer_operator.set_n_partitions(N_PARTITIONS)
 district_operator.set_n_partitions(N_PARTITIONS)
@@ -286,6 +290,7 @@ def tpc_c_init(styx):
     styx.set_graph(g)
     styx.init_metadata(g)
     populate_all(styx)
+    styx.notify_init_data_complete()
     time.sleep(5)
     styx.submit_dataflow(g)
 
@@ -301,45 +306,45 @@ def make_customer_id():
 def get_new_order_transaction(front_end_key):
     """Return parameters for NEW_ORDER"""
     params: dict[str, Any] = {
-        'W_ID': random.randint(1, N_W),
-        'D_ID': random.randint(1, D_Per_Warehouse),
-        'C_ID': make_customer_id(),
-        'O_ENTRY_D': datetime.now().strftime("%m/%d/%Y, %H:%M:%S"),
+        "W_ID": random.randint(1, N_W),
+        "D_ID": random.randint(1, D_Per_Warehouse),
+        "C_ID": make_customer_id(),
+        "O_ENTRY_D": datetime.now().strftime("%m/%d/%Y, %H:%M:%S"),
     }
 
     rollback = random.randint(1, 100) == 1  # 1% rollback chance
 
-    params['I_IDS'] = []
-    params['I_W_IDS'] = []
-    params['I_QTYS'] = []
+    params["I_IDS"] = []
+    params["I_W_IDS"] = []
+    params["I_QTYS"] = []
 
     ol_cnt = random.randint(MIN_OL_CNT, MAX_OL_CNT)
 
     for i in range(ol_cnt):
         if rollback and i + 1 == ol_cnt:
-            params['I_IDS'].append(N_I + 1)  # Invalid ID triggers rollback
+            params["I_IDS"].append(N_I + 1)  # Invalid ID triggers rollback
         else:
             i_id = make_item_id()
-            while i_id in params['I_IDS']:
+            while i_id in params["I_IDS"]:
                 i_id = make_item_id()
-            params['I_IDS'].append(i_id)
+            params["I_IDS"].append(i_id)
 
         # Decide if this item comes from a remote warehouse
         remote = random.randint(1, 100) == 1  # 1% chance
         if N_W > 1 and remote:
-            params['I_W_IDS'].append(
-                rand.number_excluding(1, N_W, params['W_ID'])
+            params["I_W_IDS"].append(
+                rand.number_excluding(1, N_W, params["W_ID"])
             )
         else:
-            params['I_W_IDS'].append(params['W_ID'])
+            params["I_W_IDS"].append(params["W_ID"])
 
-        params['I_QTYS'].append(rand.number(1, MAX_OL_QUANTITY))
+        params["I_QTYS"].append(rand.number(1, MAX_OL_QUANTITY))
 
     # Ensure at least one item is from the local warehouse
-    if not any(w_id == params['W_ID'] for w_id in params['I_W_IDS']):
-        params['I_W_IDS'][random.randint(0, ol_cnt - 1)] = params['W_ID']
+    if not any(w_id == params["W_ID"] for w_id in params["I_W_IDS"]):
+        params["I_W_IDS"][random.randint(0, ol_cnt - 1)] = params["W_ID"]
 
-    return new_order_txn_operator, front_end_key, 'new_order', (params,)
+    return new_order_txn_operator, front_end_key, "new_order", (params,)
 
 
 def get_payment_transaction(front_end_key):
@@ -371,22 +376,22 @@ def get_payment_transaction(front_end_key):
         c_last = None
 
     params = {
-        'W_ID': w_id,
-        'D_ID': d_id,
-        'H_AMOUNT': h_amount,
-        'C_W_ID': c_w_id,
-        'C_D_ID': c_d_id,
-        'C_ID': c_id,
-        'C_LAST': c_last,
-        'H_DATE': h_date
+        "W_ID": w_id,
+        "D_ID": d_id,
+        "H_AMOUNT": h_amount,
+        "C_W_ID": c_w_id,
+        "C_D_ID": c_d_id,
+        "C_ID": c_id,
+        "C_LAST": c_last,
+        "H_DATE": h_date
     }
-    return payment_txn_operator, front_end_key, 'payment', (params,)
+    return payment_txn_operator, front_end_key, "payment", (params,)
 
 
 def tpc_c_workload_generator(proc_num):
     c = 0
     while True:
-        front_end_key = f'{proc_num}:{c}'
+        front_end_key = f"{proc_num}:{c}"
         coin = rand.number(1, 100)
         if coin < 52:
             yield get_new_order_transaction(front_end_key)
@@ -414,16 +419,16 @@ def benchmark_runner(proc_num) -> dict[bytes, dict]:
                                      key=key,
                                      function=func_name,
                                      params=params)
-            timestamp_futures[future.request_id] = {"op": f'{func_name} {key}->{params}'}
+            timestamp_futures[future.request_id] = {"op": f"{func_name} {key}->{params}"}
         styx.flush()
         sec_end = timer()
         lps = sec_end - sec_start
         if lps < 1:
             time.sleep(1 - lps)
         sec_end2 = timer()
-        print(f'Latency per second: {sec_end2 - sec_start}')
+        print(f"Latency per second: {sec_end2 - sec_start}")
     end = timer()
-    print(f'Average latency per second: {(end - start) / seconds}')
+    print(f"Average latency per second: {(end - start) / seconds}")
     styx.close()
     for key, metadata in styx.delivery_timestamps.items():
         timestamp_futures[key]["timestamp"] = metadata
@@ -431,11 +436,11 @@ def benchmark_runner(proc_num) -> dict[bytes, dict]:
 
 
 def main():
-    minio = Minio('localhost:9000', access_key='minio', secret_key='minio123', secure=False)
+    minio = Minio("localhost:9000", access_key="minio", secret_key="minio123", secure=False)
     styx_client = SyncStyxClient(STYX_HOST, STYX_PORT, kafka_url=KAFKA_URL, minio=minio)
     tpc_c_init(styx_client)
     del styx_client
-    print('Data populated waiting for 1 minute')
+    print("Data populated waiting for 1 minute")
     # 1 min so that the init is surely done
     time.sleep(60)
 
@@ -446,12 +451,12 @@ def main():
     pd.DataFrame({"request_id": list(results.keys()),
                   "timestamp": [res["timestamp"] for res in results.values()],
                   "op": [res["op"] for res in results.values()]
-                  }).sort_values(by="timestamp").to_csv(f'{SAVE_DIR}/client_requests.csv',
+                  }).sort_values(by="timestamp").to_csv(f"{SAVE_DIR}/client_requests.csv",
                                                         index=False)
 
 
 if __name__ == "__main__":
-    multiprocessing.set_start_method('fork')
+    multiprocessing.set_start_method("fork")
     main()
 
     print()

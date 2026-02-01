@@ -1,20 +1,28 @@
 import asyncio
 import logging
 import sys
+from typing import TYPE_CHECKING
 import uuid
-from typing import Type, Any
 
-from aiokafka import AIOKafkaProducer, AIOKafkaConsumer
+from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 from aiokafka.errors import KafkaConnectionError
-from minio import Minio
 
-from .base_client import BaseStyxClient
-from .styx_future import StyxAsyncFuture
-from ..common.base_operator import BaseOperator
-from ..common.message_types import MessageType
-from ..common.serialization import Serializer, msgpack_deserialization, cloudpickle_deserialization
-from ..common.stateflow_graph import StateflowGraph
-from ..common.tcp_networking import NetworkingManager
+from styx.client.base_client import BaseStyxClient
+from styx.client.styx_future import StyxAsyncFuture
+from styx.common.message_types import MessageType
+from styx.common.serialization import (
+    Serializer,
+    cloudpickle_deserialization,
+    msgpack_deserialization,
+)
+from styx.common.stateflow_graph import StateflowGraph
+from styx.common.tcp_networking import NetworkingManager
+
+if TYPE_CHECKING:
+    from minio import Minio
+
+    from styx.common.base_operator import BaseOperator
+    from styx.common.types import K
 
 
 class AsyncStyxClient(BaseStyxClient):
@@ -25,29 +33,31 @@ class AsyncStyxClient(BaseStyxClient):
 
     _kafka_producer: AIOKafkaProducer
 
-    def __init__(self,
-                 styx_coordinator_adr: str,
-                 styx_coordinator_port: int,
-                 kafka_url: str,
-                 minio: Minio | None = None):
+    def __init__(
+        self,
+        styx_coordinator_adr: str,
+        styx_coordinator_port: int,
+        kafka_url: str,
+        minio: Minio | None = None,
+    ) -> None:
         """Initializes an asynchronous Styx client.
 
-         Args:
-             styx_coordinator_adr (str): Address of the Styx coordinator.
-             styx_coordinator_port (int): Port of the Styx coordinator.
-             kafka_url (str): Kafka bootstrap server URL.
-         """
+        Args:
+            styx_coordinator_adr (str): Address of the Styx coordinator.
+            styx_coordinator_port (int): Port of the Styx coordinator.
+            kafka_url (str): Kafka bootstrap server URL.
+        """
         super().__init__(styx_coordinator_adr, styx_coordinator_port, minio)
         self._kafka_url = kafka_url
         self._futures: dict[bytes, StyxAsyncFuture] = {}
-        self._result_consumer_task: asyncio.Task = ...
-        self._result_consumer: AIOKafkaConsumer = ...
-        self._metadata_consumer_task: asyncio.Task = ...
-        self._metadata_consumer: AIOKafkaConsumer = ...
+        self._result_consumer_task: asyncio.Task | None = None
+        self._result_consumer: AIOKafkaConsumer | None = None
+        self._metadata_consumer_task: asyncio.Task | None = None
+        self._metadata_consumer: AIOKafkaConsumer | None = None
         self.graph_known_event: asyncio.Event = asyncio.Event()
         self._networking_manager: NetworkingManager = NetworkingManager(None)
 
-    async def get_operator_partition(self, key: Any, operator: BaseOperator) -> int:
+    async def get_operator_partition(self, key: K, operator: BaseOperator) -> int:
         """Returns the partition for a given key/operator pair.
 
         Waits for the metadata graph to be known before resolving the partition.
@@ -63,7 +73,7 @@ class AsyncStyxClient(BaseStyxClient):
             await self.graph_known_event.wait()
         return self._current_active_graph.get_operator(operator).which_partition(key)
 
-    async def close(self):
+    async def close(self) -> None:
         """Closes the client by stopping Kafka consumers/producers and cancelling tasks."""
         await self.flush()
         await self._kafka_producer.stop()
@@ -77,7 +87,7 @@ class AsyncStyxClient(BaseStyxClient):
         except asyncio.CancelledError:
             pass
 
-    async def start_result_consumer_task(self):
+    async def start_result_consumer_task(self) -> None:
         """Starts a background task to consume results from Kafka.
 
         Waits for all necessary egress topics to be present before subscribing.
@@ -85,12 +95,14 @@ class AsyncStyxClient(BaseStyxClient):
         """
         if not self.graph_known_event.is_set():
             await self.graph_known_event.wait()
-        self._result_consumer: AIOKafkaConsumer = AIOKafkaConsumer(auto_offset_reset='earliest',
-                                                                   value_deserializer=msgpack_deserialization,
-                                                                   bootstrap_servers=[self._kafka_url],
-                                                                   enable_auto_commit=False,
-                                                                   fetch_min_bytes=1,
-                                                                   group_id=str(uuid.uuid4()))
+        self._result_consumer: AIOKafkaConsumer = AIOKafkaConsumer(
+            auto_offset_reset="earliest",
+            value_deserializer=msgpack_deserialization,
+            bootstrap_servers=[self._kafka_url],
+            enable_auto_commit=False,
+            fetch_min_bytes=1,
+            group_id=str(uuid.uuid4()),
+        )
         await self._result_consumer.start()
         egress_topic_names: list[str] = self._current_active_graph.get_egress_topic_names()
         topics = await self._result_consumer.topics()
@@ -104,8 +116,8 @@ class AsyncStyxClient(BaseStyxClient):
                 break
             await asyncio.sleep(1)
             topics = await self._result_consumer.topics()
-        topics_to_subscribe = [topic for topic in topics if topic.endswith('--OUT')]
-        logging.warning(f"Subscribed to topics: {topics_to_subscribe}")
+        topics_to_subscribe = [topic for topic in topics if topic.endswith("--OUT")]
+        logging.warning("Subscribed to topics: %s", topics_to_subscribe)
         self._result_consumer.subscribe(topics_to_subscribe)
         # Consume messages
         while True:
@@ -114,25 +126,29 @@ class AsyncStyxClient(BaseStyxClient):
             for messages in data.values():
                 for msg in messages:
                     if msg.key in self._futures:
-                        self._futures[msg.key].set(response_val=msg.value,
-                                                   out_timestamp=msg.timestamp)
+                        self._futures[msg.key].set(
+                            response_val=msg.value,
+                            out_timestamp=msg.timestamp,
+                        )
 
-    async def start_consuming_metadata(self):
+    async def start_consuming_metadata(self) -> None:
         """Starts a background task to consume metadata from Kafka.
 
         Waits for the `styx-metadata` topic to exist, then listens for `StateflowGraph` updates.
         """
-        self._metadata_consumer: AIOKafkaConsumer = AIOKafkaConsumer(auto_offset_reset='earliest',
-                                                                     bootstrap_servers=[self._kafka_url],
-                                                                     enable_auto_commit=False,
-                                                                     fetch_min_bytes=1,
-                                                                     group_id=str(uuid.uuid4()))
+        self._metadata_consumer: AIOKafkaConsumer = AIOKafkaConsumer(
+            auto_offset_reset="earliest",
+            bootstrap_servers=[self._kafka_url],
+            enable_auto_commit=False,
+            fetch_min_bytes=1,
+            group_id=str(uuid.uuid4()),
+        )
         await self._metadata_consumer.start()
         topics = await self._metadata_consumer.topics()
-        while 'styx-metadata' not in topics:
+        while "styx-metadata" not in topics:
             await asyncio.sleep(1)
             topics = await self._metadata_consumer.topics()
-        self._metadata_consumer.subscribe(['styx-metadata'])
+        self._metadata_consumer.subscribe(["styx-metadata"])
         while True:
             # poll every 100ms
             data = await self._metadata_consumer.getmany(timeout_ms=100)
@@ -144,20 +160,23 @@ class AsyncStyxClient(BaseStyxClient):
                         logging.warning("Current active graph updated")
                         self.graph_known_event.set()
 
-
-    async def open(self, consume: bool = True):
+    async def open(self, consume: bool = True) -> None:
         """Initializes the Kafka producer and optionally starts result and metadata consumer tasks.
 
         Args:
             consume (bool, optional): Whether to consume results in a background task. Defaults to True.
         """
-        self._metadata_consumer_task = asyncio.create_task(self.start_consuming_metadata())
-        self._kafka_producer = AIOKafkaProducer(bootstrap_servers=[self._kafka_url],
-                                                max_request_size=134217728,
-                                                enable_idempotence=True,
-                                                acks="all",
-                                                linger_ms=0,
-                                                client_id=str(uuid.uuid4()))
+        self._metadata_consumer_task = asyncio.create_task(
+            self.start_consuming_metadata(),
+        )
+        self._kafka_producer = AIOKafkaProducer(
+            bootstrap_servers=[self._kafka_url],
+            max_request_size=134217728,
+            enable_idempotence=True,
+            acks="all",
+            linger_ms=0,
+            client_id=str(uuid.uuid4()),
+        )
         while True:
             try:
                 await self._kafka_producer.start()
@@ -167,18 +186,22 @@ class AsyncStyxClient(BaseStyxClient):
                 continue
             break
         if consume:
-            self._result_consumer_task = asyncio.create_task(self.start_result_consumer_task())
+            self._result_consumer_task = asyncio.create_task(
+                self.start_result_consumer_task(),
+            )
 
-    async def flush(self):
+    async def flush(self) -> None:
         """Flushes the Kafka producer buffer to ensure all messages are sent."""
         await self._kafka_producer.flush()
 
-    async def send_event(self,
-                         operator: BaseOperator,
-                         key: Any,
-                         function: Type | str,
-                         params: tuple = tuple(),
-                         serializer: Serializer = Serializer.MSGPACK) -> StyxAsyncFuture:
+    async def send_event(
+        self,
+        operator: BaseOperator,
+        key: K,
+        function: type | str,
+        params: tuple = (),
+        serializer: Serializer = Serializer.MSGPACK,
+    ) -> StyxAsyncFuture:
         """Sends a single function invocation event to an operator.
 
         Args:
@@ -191,25 +214,33 @@ class AsyncStyxClient(BaseStyxClient):
         Returns:
             StyxAsyncFuture: Future representing the pending result of the event.
         """
-        request_id, serialized_value, partition = self._prepare_kafka_message(key,
-                                                                              operator,
-                                                                              function,
-                                                                              params,
-                                                                              serializer)
+        request_id, serialized_value, partition = self._prepare_kafka_message(
+            key,
+            operator,
+            function,
+            params,
+            serializer,
+        )
         self._futures[request_id] = StyxAsyncFuture(request_id=request_id)
-        msg = await self._kafka_producer.send_and_wait(operator.name,
-                                                       key=request_id,
-                                                       value=serialized_value,
-                                                       partition=partition)
+        msg = await self._kafka_producer.send_and_wait(
+            operator.name,
+            key=request_id,
+            value=serialized_value,
+            partition=partition,
+        )
         self._delivery_timestamps[request_id] = msg.timestamp
         self._futures[request_id].set_in_timestamp(msg.timestamp)
         return self._futures[request_id]
 
-    def set_graph(self, graph: StateflowGraph):
+    def set_graph(self, graph: StateflowGraph) -> None:
         self._current_active_graph = graph
         self.graph_known_event.set()
 
-    async def submit_dataflow(self, stateflow_graph: StateflowGraph, external_modules: tuple = None):
+    async def submit_dataflow(
+        self,
+        stateflow_graph: StateflowGraph,
+        external_modules: tuple | None = None,
+    ) -> None:
         """Submits a dataflow graph to the Styx coordinator.
 
         Args:
@@ -220,7 +251,18 @@ class AsyncStyxClient(BaseStyxClient):
         self._verify_dataflow_input(stateflow_graph, external_modules)
         self._current_active_graph = stateflow_graph
         self.graph_known_event.set()
-        await self._networking_manager.send_message(self._styx_coordinator_adr,
-                                                    self._styx_coordinator_port,
-                                                    msg=(stateflow_graph, ),
-                                                    msg_type=MessageType.SendExecutionGraph)
+        await self._networking_manager.send_message(
+            self._styx_coordinator_adr,
+            self._styx_coordinator_port,
+            msg=(stateflow_graph,),
+            msg_type=MessageType.SendExecutionGraph,
+        )
+
+    async def notify_init_data_complete(self) -> None:
+        await self._networking_manager.send_message(
+            self._styx_coordinator_adr,
+            self._styx_coordinator_port,
+            msg=b"",
+            msg_type=MessageType.InitDataComplete,
+            serializer=Serializer.NONE,
+        )

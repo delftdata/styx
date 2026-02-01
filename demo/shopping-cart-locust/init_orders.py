@@ -4,8 +4,8 @@ import logging
 import aiohttp
 
 logging.basicConfig(level=logging.INFO,
-                    format='%(levelname)s - %(asctime)s - %(name)s - %(message)s',
-                    datefmt='%I:%M:%S')
+                    format="%(levelname)s - %(asctime)s - %(name)s - %(message)s",
+                    datefmt="%I:%M:%S")
 logger = logging.getLogger(__name__)
 
 NUMBER_0F_ITEMS = 100_000
