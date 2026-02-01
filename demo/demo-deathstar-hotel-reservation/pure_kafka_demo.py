@@ -1,4 +1,6 @@
 import multiprocessing
+import subprocess
+
 multiprocessing.set_start_method("fork", force=True)
 from multiprocessing import Pool
 import random
@@ -36,6 +38,7 @@ warmup_seconds = int(sys.argv[6])
 STYX_HOST: str = "localhost"
 STYX_PORT: int = 8886
 KAFKA_URL = "localhost:9092"
+kill_at = int(sys.argv[7]) if len(sys.argv) > 7 else -1
 
 g = StateflowGraph("deathstar_hotel_reservations", operator_state_backend=LocalStateBackend.DICT)
 ####################################################################################################################
@@ -272,7 +275,10 @@ def benchmark_runner(proc_num) -> dict[bytes, dict]:
     timestamp_futures: dict[bytes, dict] = {}
     barrier.wait()
     start = timer()
-    for _ in range(seconds):
+    for second in range(seconds):
+        if proc_num == 0 and 0 <= kill_at == second:
+            subprocess.run(["docker", "kill", "styx-worker-1"], check=False)
+            print("KILL -> styx-worker-1 done")
         sec_start = timer()
         for i in range(messages_per_second):
             if i % (messages_per_second // sleeps_per_second) == 0:

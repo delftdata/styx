@@ -3,14 +3,10 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import pytest
 
-from tests.helpers import run_and_stream, run_and_stream_with_timed_action, wait_port
-
-if TYPE_CHECKING:
-    from collections.abc import Sequence
+from tests.helpers import run_and_stream, wait_port
 
 log = logging.getLogger("e2e.deathstar_movie_review")
 
@@ -53,6 +49,7 @@ class _ClientParams:
     input_rate: int = 100
     total_time: int = 10
     warmup_seconds: int = 1
+    kill_at: int = -1  # <0 disables killing; client checks `0 <= kill_at == second`
 
 
 @dataclass(frozen=True)
@@ -107,6 +104,7 @@ def _stop_cmd(paths: _Paths, p: _ClusterParams) -> list[str]:
 
 
 def _client_cmd(results_dir: Path, cluster: _ClusterParams, client: _ClientParams) -> list[str]:
+    # kill_at is sys.argv[7] in your pure_kafka_demo.py
     return [
         "python",
         "pure_kafka_demo.py",
@@ -116,6 +114,7 @@ def _client_cmd(results_dir: Path, cluster: _ClusterParams, client: _ClientParam
         str(client.input_rate),
         str(client.total_time),
         str(client.warmup_seconds),
+        str(client.kill_at),
     ]
 
 
@@ -147,40 +146,18 @@ def _run_client(
     results_dir: Path,
     cluster: _ClusterParams,
     client: _ClientParams,
-    timed_action_at_s: float | None = None,
-    timed_action_cmd: Sequence[str] | None = None,
-    timed_action_banner: str | None = None,
     timeout_s: int = 20 * 60,
 ) -> None:
-    cmd = _client_cmd(results_dir, cluster, client)
-
-    if timed_action_at_s is None:
-        rc, out = run_and_stream(
-            cmd,
-            cwd=str(paths.demo_dir),
-            env=env,
-            timeout=timeout_s,
-            banner="RUN DEATHSTAR MOVIE REVIEW CLIENT",
-            log=log,
-        )
-    else:
-        if timed_action_cmd is None:
-            msg = "timed_action_cmd must be provided when timed_action_at_s is set"
-            raise ValueError(msg)
-        rc, out = run_and_stream_with_timed_action(
-            cmd,
-            cwd=str(paths.demo_dir),
-            env=env,
-            timeout=timeout_s,
-            banner="RUN DEATHSTAR MOVIE REVIEW CLIENT (TIMED ACTION)",
-            action_at_s=float(timed_action_at_s),
-            action_cmd=list(timed_action_cmd),
-            action_banner=timed_action_banner or "timed action",
-            log=log,
-        )
-
+    rc, out = run_and_stream(
+        _client_cmd(results_dir, cluster, client),
+        cwd=str(paths.demo_dir),
+        env=env,
+        timeout=timeout_s,
+        banner="RUN DEATHSTAR MOVIE REVIEW CLIENT",
+        log=log,
+    )
     if rc != 0:
-        raise AssertionError(f"client.py failed (rc={rc}). Output:\n{out}")
+        raise AssertionError(f"pure_kafka_demo.py failed (rc={rc}). Output:\n{out}")
 
 
 def _assert_artifacts_and_metrics(results_dir: Path, client: _ClientParams) -> None:
@@ -213,7 +190,7 @@ def test_styx_e2e_dmr(tmp_path: Path):
     results_dir = _make_results_dir(tmp_path)
 
     cluster = _ClusterParams()
-    client = _ClientParams(total_time=10)
+    client = _ClientParams(total_time=10, kill_at=-1)
 
     env = os.environ.copy()
 
@@ -237,28 +214,24 @@ def test_styx_e2e_dmr_kill_worker_midrun(tmp_path: Path):
     """
     Same scenario/params, but:
       - total_time = 60 seconds
-      - at t=40s after client start: docker kill styx-worker-1
+      - kill at second=20 inside pure_kafka_demo.py (proc 0 only)
     """
     paths = _resolve_paths()
     results_dir = _make_results_dir(tmp_path)
 
     cluster = _ClusterParams()
-    client = _ClientParams(total_time=60)
+    client = _ClientParams(total_time=60, kill_at=20)
 
     env = os.environ.copy()
 
     try:
         _start_cluster_and_wait(paths, env, cluster)
-
         _run_client(
             paths=paths,
             env=env,
             results_dir=results_dir,
             cluster=cluster,
             client=client,
-            timed_action_at_s=20,
-            timed_action_cmd=["docker", "kill", "styx-worker-1"],
-            timed_action_banner="docker kill styx-worker-1",
             timeout_s=30 * 60,  # headroom for recovery
         )
         _assert_artifacts_and_metrics(results_dir, client)

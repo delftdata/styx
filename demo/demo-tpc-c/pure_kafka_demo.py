@@ -1,3 +1,4 @@
+import subprocess
 from collections import defaultdict
 import csv
 from datetime import datetime
@@ -67,6 +68,7 @@ use_fallback_cache: bool = bool(strtobool(sys.argv[10]))
 os.environ["ENABLE_COMPRESSION"] = str(enable_compression)
 os.environ["USE_COMPOSITE_KEYS"] = str(use_composite_keys)
 os.environ["USE_FALLBACK_CACHE"] = str(use_fallback_cache)
+kill_at = int(sys.argv[11]) if len(sys.argv) > 11 else -1
 
 
 customers_per_district: dict[tuple, list] = {}
@@ -409,7 +411,10 @@ def benchmark_runner(proc_num) -> dict[bytes, dict]:
     timestamp_futures: dict[bytes, dict] = {}
     time.sleep(5)
     start = timer()
-    for _ in range(seconds):
+    for second in range(seconds):
+        if proc_num == 0 and 0 <= kill_at == second:
+            subprocess.run(["docker", "kill", "styx-worker-1"], check=False)
+            print("KILL -> styx-worker-1 done")
         sec_start = timer()
         for i in range(messages_per_second):
             if i % (messages_per_second // sleeps_per_second) == 0:

@@ -4,14 +4,10 @@ import logging
 import os
 from pathlib import Path
 import shutil
-from typing import TYPE_CHECKING
 
 import pytest
 
-from tests.helpers import run_and_stream, run_and_stream_with_timed_action, wait_port
-
-if TYPE_CHECKING:
-    from collections.abc import Sequence
+from tests.helpers import run_and_stream, wait_port
 
 log = logging.getLogger("e2e.tpcc")
 
@@ -56,6 +52,8 @@ class _ClientParams:
     warmup_seconds: int = 1
     n_keys: int = 1
     regenerate_tpcc_data: bool = True
+    n_warehouses: int = 1
+    kill_at: int = -1  # <0 disables killing; client checks `0 <= kill_at == second`
 
 
 @dataclass(frozen=True)
@@ -110,10 +108,18 @@ def _stop_cmd(paths: _Paths, p: _ClusterParams) -> list[str]:
 
 
 def _client_cmd(results_dir: Path, cluster: _ClusterParams, client: _ClientParams) -> list[str]:
-    # Mirrors:
-    # python demo/demo-tpc-c/pure_kafka_demo.py \
-    #   saving_dir client_threads n_part input_rate total_time warmup_seconds \
-    #   n_keys enable_compression use_composite_keys use_fallback_cache
+    # Your TPCC script expects:
+    #  1  SAVE_DIR
+    #  2  threads
+    #  3  N_PARTITIONS
+    #  4  messages_per_second
+    #  5  seconds
+    #  6  warmup_seconds
+    #  7  N_W
+    #  8  enable_compression
+    #  9  use_composite_keys
+    # 10  use_fallback_cache
+    # 11  kill_at (optional; default -1)
     return [
         "python",
         "pure_kafka_demo.py",
@@ -123,10 +129,11 @@ def _client_cmd(results_dir: Path, cluster: _ClusterParams, client: _ClientParam
         str(client.input_rate),
         str(client.total_time),
         str(client.warmup_seconds),
-        str(client.n_keys),
+        str(client.n_warehouses),
         cluster.enable_compression,
         cluster.use_composite_keys,
         cluster.use_fallback_cache,
+        str(client.kill_at),
     ]
 
 
@@ -153,29 +160,14 @@ def _start_cluster_and_wait(paths: _Paths, env: dict, cluster: _ClusterParams) -
 
 def _ensure_tpcc_dataset(paths: _Paths, env: dict, *, n_keys: int, regenerate_tpcc_data: bool) -> None:
     """
-    Mirrors the bash logic:
-
-      DATA_DIR="demo/demo-tpc-c/data_${n_keys}"
-      GENERATOR_DIR="demo/demo-tpc-c/tpcc-generator"
-      GENERATOR_BIN="$GENERATOR_DIR/tpcc-generator"
-
-      regenerate if:
-        - regenerate_tpcc_data is true, OR
-        - DATA_DIR missing, OR
-        - DATA_DIR does not contain exactly 9 files
-
-      if regenerate:
-        make clean -C GENERATOR_DIR
-        make -C GENERATOR_DIR
-        rm -rf DATA_DIR
-        mkdir -p DATA_DIR
-        GENERATOR_BIN n_keys DATA_DIR
+    Mirrors the bash logic you had for tpcc-generator:
+      - dataset at demo/demo-tpc-c/data_{n_keys}
+      - regenerate if forced or missing/incorrect
     """
     data_dir = paths.demo_dir / f"data_{n_keys}"
     generator_dir = paths.demo_dir / "tpcc-generator"
     generator_bin = generator_dir / "tpcc-generator"
 
-    # Decide whether to regenerate.
     if regenerate_tpcc_data:
         log.info("regenerate_tpcc_data is true — forcing data regeneration.")
         regenerate = True
@@ -198,7 +190,6 @@ def _ensure_tpcc_dataset(paths: _Paths, env: dict, *, n_keys: int, regenerate_tp
     if not regenerate:
         return
 
-    # Build generator
     for cmd, banner in [
         (["make", "clean", "-C", str(generator_dir)], "TPC-C GENERATOR: make clean"),
         (["make", "-C", str(generator_dir)], "TPC-C GENERATOR: make"),
@@ -214,14 +205,10 @@ def _ensure_tpcc_dataset(paths: _Paths, env: dict, *, n_keys: int, regenerate_tp
         if rc != 0:
             raise AssertionError(f"{banner} failed (rc={rc}). Output:\n{out}")
 
-    # Recreate data dir
     if data_dir.exists():
-        # fast/portable removal: use python to remove tree rather than shell rm -rf
-        # (keeps it OS-independent inside CI containers)
         shutil.rmtree(data_dir)
     data_dir.mkdir(parents=True, exist_ok=True)
 
-    # Generate
     rc, out = run_and_stream(
         [str(generator_bin), str(n_keys), str(data_dir)],
         cwd=str(paths.repo_root),
@@ -241,38 +228,16 @@ def _run_client(
     results_dir: Path,
     cluster: _ClusterParams,
     client: _ClientParams,
-    timed_action_at_s: float | None = None,
-    timed_action_cmd: Sequence[str] | None = None,
-    timed_action_banner: str | None = None,
     timeout_s: int = 20 * 60,
 ) -> None:
-    cmd = _client_cmd(results_dir, cluster, client)
-
-    if timed_action_at_s is None:
-        rc, out = run_and_stream(
-            cmd,
-            cwd=str(paths.demo_dir),
-            env=env,
-            timeout=timeout_s,
-            banner="RUN TPC-C CLIENT",
-            log=log,
-        )
-    else:
-        if timed_action_cmd is None:
-            msg = "timed_action_cmd must be provided when timed_action_at_s is set"
-            raise ValueError(msg)
-        rc, out = run_and_stream_with_timed_action(
-            cmd,
-            cwd=str(paths.demo_dir),
-            env=env,
-            timeout=timeout_s,
-            banner="RUN TPC-C CLIENT (TIMED ACTION)",
-            action_at_s=float(timed_action_at_s),
-            action_cmd=list(timed_action_cmd),
-            action_banner=timed_action_banner or "timed action",
-            log=log,
-        )
-
+    rc, out = run_and_stream(
+        _client_cmd(results_dir, cluster, client),
+        cwd=str(paths.demo_dir),
+        env=env,
+        timeout=timeout_s,
+        banner="RUN TPC-C CLIENT",
+        log=log,
+    )
     if rc != 0:
         raise AssertionError(f"pure_kafka_demo.py failed (rc={rc}). Output:\n{out}")
 
@@ -307,18 +272,13 @@ def test_styx_e2e_tpcc(tmp_path: Path):
     results_dir = _make_results_dir(tmp_path)
 
     cluster = _ClusterParams()
-    client = _ClientParams(total_time=10, n_keys=1, regenerate_tpcc_data=True)
+    client = _ClientParams(total_time=10, n_keys=1, n_warehouses=1, regenerate_tpcc_data=True, kill_at=-1)
 
     env = os.environ.copy()
 
     try:
         _start_cluster_and_wait(paths, env, cluster)
-        _ensure_tpcc_dataset(
-            paths,
-            env,
-            n_keys=client.n_keys,
-            regenerate_tpcc_data=client.regenerate_tpcc_data,
-        )
+        _ensure_tpcc_dataset(paths, env, n_keys=client.n_keys, regenerate_tpcc_data=client.regenerate_tpcc_data)
         _run_client(
             paths=paths,
             env=env,
@@ -337,34 +297,25 @@ def test_styx_e2e_tpcc_kill_worker_midrun(tmp_path: Path):
     """
     Same scenario/params, but:
       - total_time = 60 seconds
-      - at t=20s after client start: docker kill styx-worker-1
+      - kill at second=20 inside pure_kafka_demo.py (proc 0 only)
     """
     paths = _resolve_paths()
     results_dir = _make_results_dir(tmp_path)
 
     cluster = _ClusterParams()
-    client = _ClientParams(total_time=60, n_keys=1, regenerate_tpcc_data=True)
+    client = _ClientParams(total_time=60, n_keys=1, n_warehouses=1, regenerate_tpcc_data=True, kill_at=20)
 
     env = os.environ.copy()
 
     try:
         _start_cluster_and_wait(paths, env, cluster)
-        _ensure_tpcc_dataset(
-            paths,
-            env,
-            n_keys=client.n_keys,
-            regenerate_tpcc_data=client.regenerate_tpcc_data,
-        )
-
+        _ensure_tpcc_dataset(paths, env, n_keys=client.n_keys, regenerate_tpcc_data=client.regenerate_tpcc_data)
         _run_client(
             paths=paths,
             env=env,
             results_dir=results_dir,
             cluster=cluster,
             client=client,
-            timed_action_at_s=105,
-            timed_action_cmd=["docker", "kill", "styx-worker-1"],
-            timed_action_banner="docker kill styx-worker-1",
             timeout_s=30 * 60,  # headroom for recovery
         )
         _assert_artifacts_and_metrics(results_dir, client)

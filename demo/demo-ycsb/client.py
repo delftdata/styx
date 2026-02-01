@@ -1,4 +1,5 @@
 import multiprocessing
+import subprocess
 import sys
 import time
 
@@ -38,6 +39,7 @@ KAFKA_URL = "localhost:9092"
 SAVE_DIR: str = sys.argv[7]
 warmup_seconds: int = int(sys.argv[8])
 run_with_validation = sys.argv[9].lower() == "true"
+kill_at: int = int(sys.argv[10])
 ####################################################################################################################
 g = StateflowGraph("ycsb-benchmark", operator_state_backend=LocalStateBackend.DICT)
 ycsb_operator.set_n_partitions(N_PARTITIONS)
@@ -95,7 +97,10 @@ def benchmark_runner(proc_num) -> dict[bytes, dict]:
     time.sleep(5)
     barrier.wait()
     start = timer()
-    for sec in range(seconds):
+    for second in range(seconds):
+        if proc_num == 0 and 0 <= kill_at == second:
+            subprocess.run(["docker", "kill", "styx-worker-1"], check=False)
+            print("KILL -> styx-worker-1 done")
         sec_start = timer()
         step = max(1, messages_per_second // sleeps_per_second)
         for i in range(messages_per_second):
@@ -113,7 +118,7 @@ def benchmark_runner(proc_num) -> dict[bytes, dict]:
         if lps < 1:
             time.sleep(1 - lps)
         sec_end2 = timer()
-        print(f"{sec} | Latency per second: {sec_end2 - sec_start}")
+        print(f"{second} | Latency per second: {sec_end2 - sec_start}")
     end = timer()
     print(f"Average latency per second: {(end - start) / seconds}")
 
