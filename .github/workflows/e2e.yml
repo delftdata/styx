@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  e2e-ycsb:
+  e2e-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
