@@ -303,7 +303,9 @@ def test_styx_e2e_tpcc_kill_worker_midrun(tmp_path: Path):
     results_dir = _make_results_dir(tmp_path)
 
     cluster = _ClusterParams()
-    client = _ClientParams(total_time=60, n_keys=1, n_warehouses=1, regenerate_tpcc_data=True, kill_at=20, warmup_seconds=10)
+    client = _ClientParams(
+        total_time=60, n_keys=1, n_warehouses=1, regenerate_tpcc_data=True, kill_at=20, warmup_seconds=10
+    )
 
     env = os.environ.copy()
 
