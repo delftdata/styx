@@ -220,7 +220,7 @@ def test_styx_e2e_dmr_kill_worker_midrun(tmp_path: Path):
     results_dir = _make_results_dir(tmp_path)
 
     cluster = _ClusterParams()
-    client = _ClientParams(total_time=60, kill_at=20)
+    client = _ClientParams(total_time=60, kill_at=20, warmup_seconds=10)
 
     env = os.environ.copy()
 
