@@ -318,7 +318,7 @@ class AriaProtocol(BaseTransactionalProtocol):
                     await self.unlock_tid(t_id)
             case MessageType.DeterministicReordering:
                 async with self.networking_locks[message_type]:
-                    (global_read_reservations, global_write_set, global_read_set) = self.networking.decode_message(data)
+                    (w_id, global_read_reservations, global_write_set, global_read_set) = self.networking.decode_message(data)
                     self.local_state.set_global_read_write_sets(global_read_reservations,
                                                                 global_write_set,
                                                                 global_read_set)
