@@ -42,6 +42,7 @@ class AsyncSnapshotsMinio(BaseSnapshotter):
         self.current_output_offsets = None
         self.current_epoch_counter = -1
         self.current_t_counter = -1
+        self.total_snapshot_size = 0
 
     def update_n_assigned_partitions(self, n_assigned_partitions: int) -> None:
         self.n_assigned_partitions = n_assigned_partitions
@@ -63,6 +64,7 @@ class AsyncSnapshotsMinio(BaseSnapshotter):
                     self.current_output_offsets,
                     self.current_epoch_counter,
                     self.current_t_counter,
+                    int(self.total_snapshot_size / (1024 * 1024)),
                 ),
                 msg_type=MessageType.SnapID,
                 serializer=Serializer.MSGPACK,
@@ -74,6 +76,7 @@ class AsyncSnapshotsMinio(BaseSnapshotter):
             self.snapshot_id += 1
             self.snapshot_in_progress = False
             self.completed_snapshots = 0
+            self.total_snapshot_size = 0
 
     def start_snapshotting(
         self,
@@ -88,6 +91,9 @@ class AsyncSnapshotsMinio(BaseSnapshotter):
         self.current_output_offsets = current_output_offsets
         self.current_epoch_counter = current_epoch_counter
         self.current_t_counter = current_t_counter
+
+    def register_size(self, file_size_bytes: int) -> None:
+        self.total_snapshot_size += file_size_bytes
 
     @staticmethod
     def store_snapshot(snapshot_name: str, sn_data: bytes) -> bool:

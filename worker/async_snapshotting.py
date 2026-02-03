@@ -81,11 +81,13 @@ class AsyncSnapshottingProcess:
         )
         for operator_partition, delta_map in self.delta_maps.items():
             operator_name, partition = operator_partition
+            data_to_store: bytes = zstd_msgpack_serialization(delta_map)
+            self.async_snapshots.register_size(len(data_to_store))
             loop.run_in_executor(
                 self.pool,
                 self.async_snapshots.store_snapshot,
                 f"data/{operator_name}/{partition}/{self.async_snapshots.snapshot_id}.bin",
-                zstd_msgpack_serialization(delta_map),
+                data_to_store,
             ).add_done_callback(self.async_snapshots.snapshot_completed_callback)
         self.clear_delta_maps()
 

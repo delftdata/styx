@@ -36,7 +36,7 @@ def _assert_metrics(
 @dataclass(frozen=True)
 class _ClusterParams:
     n_partitions: int = 4
-    epoch_size: int = 1000
+    epoch_size: int = 100
     threads_per_worker: int = 1
     enable_compression: str = "true"
     use_composite_keys: str = "true"
@@ -45,7 +45,7 @@ class _ClusterParams:
 
 @dataclass(frozen=True)
 class _ClientParams:
-    client_threads: int = 2
+    client_threads: int = 1
     input_rate: int = 100
     total_time: int = 10
     warmup_seconds: int = 1

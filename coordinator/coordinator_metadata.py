@@ -72,6 +72,7 @@ class Coordinator:
 
     def init_data_complete(self) -> None:
         self.worker_snapshot_ids = dict.fromkeys(self.worker_snapshot_ids.keys(), 0)
+        self.prev_completed_snapshot_id = 0
 
     def register_worker(
         self,

@@ -366,6 +366,7 @@ class CoordinatorService:
                 partial_output_offsets,
                 epoch_counter,
                 t_counter,
+                sn_size,
             ) = self.networking.decode_message(data)
 
             snapshot_time = end - start
@@ -377,7 +378,8 @@ class CoordinatorService:
                 f"Completed snapshot: {snapshot_id} | "
                 f"started at: {start} | "
                 f"ended at: {end} | "
-                f"took: {snapshot_time}ms",
+                f"took: {snapshot_time}ms | "
+                f"size: {sn_size}"
             )
 
             self.coordinator.register_snapshot(
