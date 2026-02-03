@@ -357,6 +357,7 @@ class Worker:
             peers,
             self.operator_state_backend,
             self.deployed_graph,
+            snapshot_id,
         ) = self.networking.decode_message(data)
 
         self._update_peers(peers)
@@ -367,10 +368,10 @@ class Worker:
             n_assigned_partitions=len(self.registered_operators),
         )
 
-        await self._send_snap_assigned(snapshot_id=0)
+        await self._send_snap_assigned(snapshot_id=snapshot_id)
 
         (snap_data, _in_off, _out_off, epoch, t_counter) = self.async_snapshots.retrieve_snapshot(
-            0,
+            snapshot_id,
             self.registered_operators.keys(),
         )
         self.attach_state_to_operators_after_snapshot(snap_data)
@@ -512,7 +513,7 @@ class Worker:
             n_assigned_partitions=len(self.registered_operators),
         )
 
-        # Snapshot id -1 indicates "migration" in your original code
+        # Snapshot id -1 indicates "migration"
         await self._send_snap_assigned(snapshot_id=-1)
 
         # Ensure local state has all newly assigned partitions

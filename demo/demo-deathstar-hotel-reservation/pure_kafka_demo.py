@@ -193,7 +193,7 @@ def deathstar_init(styx: SyncStyxClient):
     populate_with_init_data(styx)
     print("Data populated with init_data")
     styx.notify_init_data_complete()
-
+    time.sleep(1)
     styx.submit_dataflow(g)
     print("Graph submitted")
 

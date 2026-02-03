@@ -301,6 +301,7 @@ class Coordinator:
                     self.worker_pool.get_workers(),
                     stateflow_graph.operator_state_backend,
                     stateflow_graph,
+                    self.get_current_completed_snapshot_id(),
                 ),
                 msg_type=MessageType.ReceiveExecutionPlan,
                 serializer=Serializer.CLOUDPICKLE,
