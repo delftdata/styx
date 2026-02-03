@@ -229,7 +229,8 @@ class Coordinator:
         for _, operator in iter(new_stateflow_graph):
             for partition in range(MAX_OPERATOR_PARALLELISM):
                 operator_copy = deepcopy(operator)
-                if partition > operator.n_partitions:
+                # Partitions are [0, n_partitions). Everything >= n_partitions is a shadow partition.
+                if partition >= operator.n_partitions:
                     operator_copy.make_shadow()
                 self.worker_pool.update_operator(
                     (operator_copy.name, partition),
