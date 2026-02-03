@@ -44,3 +44,8 @@ class BaseOperator:
             NotImplementedError: If not overridden by a subclass.
         """
         raise NotImplementedError
+
+    @abstractmethod
+    def make_shadow(self) -> None:
+        """Marks this operator instance as a shadow partition."""
+        raise NotImplementedError

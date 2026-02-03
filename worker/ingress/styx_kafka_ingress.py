@@ -44,8 +44,8 @@ class StyxKafkaIngress(BaseIngress):
 
         self.started: asyncio.Event = asyncio.Event()
 
-        self.kafka_consumer: AIOKafkaConsumer = ...
-        self.kafka_ingress_task: asyncio.Task = ...
+        self.kafka_consumer: AIOKafkaConsumer | None = None
+        self.kafka_ingress_task: asyncio.Task | None = None
 
     async def start(
         self,

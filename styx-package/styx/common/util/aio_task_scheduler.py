@@ -38,14 +38,14 @@ class AIOTaskScheduler:
         if exc is not None:
             logging.exception("Background task failed", exc_info=exc)
 
-    def create_task(self, coroutine: Awaitable) -> asyncio.Task | None:
+    def create_task(self, coroutine: Awaitable) -> None:
         """
         Schedule a coroutine to run in the background.
         Returns the created task (or None if scheduler is closed).
         """
         if self.closed:
             logging.warning("Trying to create a task in a closed AIOTaskScheduler!")
-            return None
+            return
 
         async def runner() -> Coroutine:
             async with self._sem:
@@ -54,7 +54,7 @@ class AIOTaskScheduler:
         task = asyncio.create_task(runner())
         self.background_tasks.add(task)
         task.add_done_callback(self._on_done)
-        return task
+        return
 
     async def close(self) -> None:
         """

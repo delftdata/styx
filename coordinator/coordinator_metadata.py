@@ -224,7 +224,7 @@ class Coordinator:
     async def update_stateflow_graph(self, new_stateflow_graph: StateflowGraph) -> None:
         if not isinstance(new_stateflow_graph, StateflowGraph):
             raise NotAStateflowGraphError
-        # TODO the cluster was balnced by the previous deployment, if the graph is complex it might be
+        # TODO the cluster was balanced by the previous deployment, if the graph is complex it might be
         #  unbalanced after the update
         for _, operator in iter(new_stateflow_graph):
             for partition in range(MAX_OPERATOR_PARALLELISM):

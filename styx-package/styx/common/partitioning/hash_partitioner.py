@@ -43,6 +43,7 @@ class HashPartitioner(BasePartitioner):
         key: K,
     ) -> int:
         if composite_key_hash_parameters is not None:
+            key: str  # This only holds for str keys
             field, delim = composite_key_hash_parameters
             key = key.split(delim)[field]
         return HashPartitioner.make_key_hashable(key) % partitions
@@ -51,6 +52,7 @@ class HashPartitioner(BasePartitioner):
         if key is None:
             return None
         if self._composite_key_hash_parameters is not None:
+            key: str  # This only holds for str keys
             field, delim = self._composite_key_hash_parameters
             key = key.split(delim)[field]
         return self.make_key_hashable(key) % self._partitions
@@ -59,7 +61,7 @@ class HashPartitioner(BasePartitioner):
     def make_key_hashable(key: K) -> int:
         if isinstance(key, int):
             return key
-        if key.isdigit():
+        if isinstance(key, str) and key.isdigit():
             return int(key)
         try:
             return cityhash.CityHash64(key)

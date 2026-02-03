@@ -7,11 +7,11 @@ class BaseEgress(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def start(self, *args: dict, **kwargs: dict) -> None:
+    async def start(self, *args, **kwargs) -> None:  # noqa: ANN002, ANN003
         raise NotImplementedError
 
     @abstractmethod
-    async def stop(self, *args: dict, **kwargs: dict) -> None:
+    async def stop(self, *args, **kwargs) -> None:  # noqa: ANN002, ANN003
         raise NotImplementedError
 
     @abstractmethod
@@ -25,9 +25,5 @@ class BaseEgress(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def get_messages_sent_before_recovery(
-        self,
-        *args: dict,
-        **kwargs: dict,
-    ) -> None:
+    async def get_messages_sent_before_recovery(self, *args, **kwargs) -> None:  # noqa: ANN002, ANN003
         raise NotImplementedError

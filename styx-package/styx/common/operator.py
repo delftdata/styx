@@ -176,6 +176,7 @@ class Operator(BaseOperator):
                 self.__networking.abort_chain(t_id, str(resp))
                 success = False
             elif resp is not None:
+                resp: str | Exception
                 self.__networking.add_response(t_id, resp)
         return success
 

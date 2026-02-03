@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from styx.common.logging import logging
 
 if TYPE_CHECKING:
+    from styx.common.base_operator import BaseOperator
     from styx.common.operator import Operator
     from styx.common.types import OperatorPartition
 
@@ -130,7 +131,7 @@ class WorkerPool:
     def schedule_operator_partition(
         self,
         operator_partition: OperatorPartition,
-        operator: Operator,
+        operator: Operator | BaseOperator,
     ) -> None:
         """Add an operator partition using RoundRobin"""
         worker: Worker = self.pop()
@@ -150,7 +151,7 @@ class WorkerPool:
     def update_operator(
         self,
         operator_partition: OperatorPartition,
-        operator: Operator,
+        operator: Operator | BaseOperator,
     ) -> None:
         worker_id = self.operator_partition_to_worker[operator_partition]
         worker = self.peek(worker_id)

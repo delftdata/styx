@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import asyncio
-from asyncio import StreamReader, StreamWriter, Transport
+from asyncio import StreamReader, StreamWriter
 from collections.abc import Awaitable, Callable
 import concurrent.futures
 import contextlib
@@ -48,7 +48,7 @@ HEARTBEAT_CHECK_INTERVAL: int = int(
     os.getenv("HEARTBEAT_CHECK_INTERVAL", "1000"),
 )  # 1000ms
 
-CoordHandler = Callable[[Transport, bytes, concurrent.futures.ProcessPoolExecutor], Awaitable[None]]
+CoordHandler = Callable[[StreamWriter, bytes, concurrent.futures.ProcessPoolExecutor], Awaitable[None]]
 
 
 class RecoveryState(Enum):
@@ -210,7 +210,7 @@ class CoordinatorService:
 
     async def coordinator_controller(
         self,
-        transport: Transport,
+        transport: StreamWriter,
         data: bytes,
         pool: concurrent.futures.ProcessPoolExecutor,
     ) -> None:
@@ -226,7 +226,7 @@ class CoordinatorService:
     # ------------------------
     async def _handle_send_execution_graph(
         self,
-        _: Transport,
+        _: StreamWriter,
         data: bytes,
         __: concurrent.futures.ProcessPoolExecutor,
     ) -> None:
@@ -265,7 +265,7 @@ class CoordinatorService:
 
     async def _handle_migration_repartitioning_done(
         self,
-        _: Transport,
+        _: StreamWriter,
         data: bytes,
         __: concurrent.futures.ProcessPoolExecutor,
     ) -> None:
@@ -292,7 +292,7 @@ class CoordinatorService:
 
     async def _handle_migration_init_done(
         self,
-        _: Transport,
+        _: StreamWriter,
         __: bytes,
         ___: concurrent.futures.ProcessPoolExecutor,
     ) -> None:
@@ -314,7 +314,7 @@ class CoordinatorService:
 
     async def _handle_register_worker(
         self,
-        transport: Transport,
+        transport: StreamWriter,
         data: bytes,
         _: concurrent.futures.ProcessPoolExecutor,
     ) -> None:
@@ -351,7 +351,7 @@ class CoordinatorService:
 
     async def _handle_snap_id(
         self,
-        _: Transport,
+        _: StreamWriter,
         data: bytes,
         pool: concurrent.futures.ProcessPoolExecutor,
     ) -> None:
@@ -392,7 +392,7 @@ class CoordinatorService:
 
     async def _handle_heartbeat(
         self,
-        _: Transport,
+        _: StreamWriter,
         data: bytes,
         __: concurrent.futures.ProcessPoolExecutor,
     ) -> None:
@@ -414,7 +414,7 @@ class CoordinatorService:
 
     async def _handle_ready_after_recovery(
         self,
-        _: Transport,
+        _: StreamWriter,
         data: bytes,
         __: concurrent.futures.ProcessPoolExecutor,
     ) -> None:
@@ -426,7 +426,7 @@ class CoordinatorService:
 
     async def _handle_init_data_complete(
         self,
-        _: Transport,
+        _: StreamWriter,
         __: bytes,
         ___: concurrent.futures.ProcessPoolExecutor,
     ) -> None:

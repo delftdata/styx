@@ -76,7 +76,7 @@ class StatefulFunction(Function):
         self.__deployed_graph = deployed_graph
         self.__operator_lock: asyncio.Lock = operator_lock
 
-    async def __call__(self, *args: dict, **kwargs: dict) -> tuple[object, int, int]:
+    async def __call__(self, *args, **kwargs) -> tuple[object, int, int]:  # noqa: ANN002, ANN003
         """
         Executes the wrapped function and triggers asynchronous remote calls if needed.
 
@@ -185,7 +185,7 @@ class StatefulFunction(Function):
         """The key for this function instance."""
         return self.__key
 
-    async def run(self, *args: dict) -> None:
+    async def run(self, *args) -> None:  # noqa: ANN002
         """Executes the actual function logic. Meant to be overridden by subclasses.
 
         Args:

@@ -127,7 +127,7 @@ class Worker:
             mode=MessagingMode.PROTOCOL_PROTOCOL,
         )
 
-        self.operator_state_backend: LocalStateBackend = ...
+        self.operator_state_backend: LocalStateBackend | None = None
         self.registered_operators: dict[OperatorPartition, Operator] = {}
         self.dns: dict[str, dict[int, tuple[str, int, int]]] = {}
         self.topic_partitions: list[TopicPartition] = []
@@ -136,16 +136,16 @@ class Worker:
         self.local_state: InMemoryOperatorState | Stateless = Stateless()
 
         # Primary tasks used for processing
-        self.heartbeat_proc: multiprocessing.Process = ...
-        self.async_snapshotting_proc: multiprocessing.Process = ...
+        self.heartbeat_proc: multiprocessing.Process | None = None
+        self.async_snapshotting_proc: multiprocessing.Process | None = None
 
         self.function_execution_protocol: AriaProtocol | None = None
 
         self.aio_task_scheduler = AIOTaskScheduler()
         self.protocol_task_scheduler = AIOTaskScheduler()
 
-        self.async_snapshots: AsyncSnapshotsMinio = ...
-        self.protocol_task: asyncio.Task = ...
+        self.async_snapshots: AsyncSnapshotsMinio | None = None
+        self.protocol_task: asyncio.Task | None = None
 
         self.worker_operators: dict[OperatorPartition, Operator] | None = None
 
@@ -404,7 +404,7 @@ class Worker:
                 f" took: {t_stop_end - t_stop_start}",
             )
 
-            self._migration_decode_and_apply_plan(data)
+            await self._migration_decode_and_apply_plan(data)
 
             t_repart_start = timer()
             await self._migration_local_repartition()
@@ -771,7 +771,7 @@ class Worker:
             self.local_state.set_data_from_snapshot(data)
         else:
             logging.error(
-                f"Invalid operator state backend type: {self.operator_state_backend}",
+                "Invalid operator state backend type",
             )
             return
         for operator in self.registered_operators.values():
