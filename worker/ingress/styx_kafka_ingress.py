@@ -151,7 +151,7 @@ class StyxKafkaIngress(BaseIngress):
                         TopicPartition(operator[0], operator[1]),
                         offset + 1,
                     )
-            except (UnknownTopicOrPartitionError, KafkaConnectionError):
+            except UnknownTopicOrPartitionError, KafkaConnectionError:
                 await asyncio.sleep(1)
                 logging.warning(
                     f"Kafka at {self.kafka_url} not ready yet, sleeping for 1 second",

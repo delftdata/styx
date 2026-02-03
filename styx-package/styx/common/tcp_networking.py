@@ -75,7 +75,7 @@ class StyxSocketClient:
                 try:
                     self.writer.write(message)
                     await self.writer.drain()
-                except (OSError, RuntimeError, ConnectionResetError, BrokenPipeError):
+                except OSError, RuntimeError, ConnectionResetError, BrokenPipeError:
                     logging.warning(
                         f"Broken connection in rq-rs, close the old ones and retry. "
                         f"Attempt {i} at {self.target_host}:{self.target_port}",
@@ -108,7 +108,7 @@ class StyxSocketClient:
                     await self.writer.drain()
                     (size,) = unpack(">Q", await self.reader.readexactly(8))
                     resp = await self.reader.readexactly(size)
-                except (OSError, RuntimeError, ConnectionResetError, BrokenPipeError):
+                except OSError, RuntimeError, ConnectionResetError, BrokenPipeError:
                     logging.warning(
                         f"Broken connection in rq-rs, close the old ones and retry. "
                         f"Attempt {i} at {self.target_host}:{self.target_port}",
@@ -134,7 +134,7 @@ class StyxSocketClient:
             if self.writer is not None:
                 self.writer.close()
                 await self.writer.wait_closed()
-        except (ConnectionResetError, BrokenPipeError):
+        except ConnectionResetError, BrokenPipeError:
             logging.warning(
                 f"Worker failure detected {self.target_host}:{self.target_port} "
                 f"[Connection reset by peer] Recovery will be automatically initiated.",

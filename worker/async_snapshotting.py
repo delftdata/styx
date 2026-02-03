@@ -159,7 +159,7 @@ class AsyncSnapshottingProcess:
                     return
                 await queue.put(msg)
 
-        except (asyncio.CancelledError, GeneratorExit):
+        except asyncio.CancelledError, GeneratorExit:
             return
         except Exception:
             logging.exception("Unhandled exception in snapshot reader task")
@@ -189,7 +189,7 @@ class AsyncSnapshottingProcess:
                 finally:
                     queue.task_done()
 
-        except (asyncio.CancelledError, GeneratorExit):
+        except asyncio.CancelledError, GeneratorExit:
             return
         except Exception:
             logging.exception("Unhandled exception in snapshot executor task")
@@ -209,7 +209,7 @@ class AsyncSnapshottingProcess:
                 return await asyncio.wait_for(reader.readexactly(size), timeout=1)
             except TimeoutError:
                 continue
-            except (asyncio.IncompleteReadError, ConnectionResetError):
+            except asyncio.IncompleteReadError, ConnectionResetError:
                 return None
 
     async def _queue_get_with_timeout(

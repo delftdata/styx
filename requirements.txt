@@ -30,4 +30,4 @@ matplotlib==3.10.8
 mkdocs-material==9.7.1
 # tests
 pytest==9.0.2
-ruff==0.14.14
+ruff==0.15.0
