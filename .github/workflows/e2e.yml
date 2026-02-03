@@ -55,10 +55,7 @@ jobs:
         if: always()
         run: |
           mkdir -p artifacts
-          if [ -f worker-logs.log ]; then cp worker-logs.log artifacts/; fi
-          if [ -f coordinator-logs.log ]; then cp coordinator-logs.log artifacts/; fi
-          docker ps -a > artifacts/docker-ps.txt || true
-          docker compose ps > artifacts/compose-ps.txt || true
+          ls worker-log* coordinator-log* 1> /dev/null 2>&1 && cp worker-log* coordinator-log* artifacts/ || echo "No logs found to copy."
 
       - name: Upload artifacts (always)
         if: always()

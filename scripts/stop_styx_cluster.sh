@@ -2,9 +2,11 @@
 
 threads_per_worker=$1
 
+TS=$(date +"%Y%m%d-%H%M%S")
+
 export STYX_WORKER_THREADS="$threads_per_worker"
-docker compose logs worker | sort -t '|' -k1,1 -k2,2 > worker-logs.log
-docker compose logs coordinator > coordinator-logs.log
+docker compose logs worker | sort -t '|' -k1,1 -k2,2 > "worker-logs-${TS}.log"
+docker compose logs coordinator > "coordinator-logs-${TS}.log"
 
 # DELETE PREVIOUS DEPLOYMENT
 docker compose down --volumes --remove-orphans
