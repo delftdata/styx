@@ -826,6 +826,10 @@ class CoordinatorService:
                 worker.worker_ip,
                 worker.worker_port,
             )
+            await self.protocol_networking.close_worker_connections(
+                worker.worker_ip,
+                worker.protocol_port,
+            )
         await self.aio_task_scheduler.close()
         self.aio_task_scheduler = AIOTaskScheduler()
 
