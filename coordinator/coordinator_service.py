@@ -379,7 +379,7 @@ class CoordinatorService:
                 f"started at: {start} | "
                 f"ended at: {end} | "
                 f"took: {snapshot_time}ms | "
-                f"size: {sn_size}"
+                f"size: {sn_size} Bytes"
             )
 
             self.coordinator.register_snapshot(

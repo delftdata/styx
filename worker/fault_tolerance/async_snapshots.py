@@ -64,7 +64,7 @@ class AsyncSnapshotsMinio(BaseSnapshotter):
                     self.current_output_offsets,
                     self.current_epoch_counter,
                     self.current_t_counter,
-                    int(self.total_snapshot_size / (1024 * 1024)),
+                    self.total_snapshot_size,
                 ),
                 msg_type=MessageType.SnapID,
                 serializer=Serializer.MSGPACK,
