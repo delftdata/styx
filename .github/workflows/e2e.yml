@@ -50,12 +50,15 @@ jobs:
         run: |
           pytest -m e2e -q
 
-      # Always collect logs, even on failure
-      - name: Collect docker logs (always)
+      - name: Collect worker and coordinator logs (always)
         if: always()
         run: |
           mkdir -p artifacts
-          ls worker-log* coordinator-log* 1> /dev/null 2>&1 && cp worker-log* coordinator-log* artifacts/ || echo "No logs found to copy."
+          if [ -d logs ]; then
+            cp -r logs artifacts/
+          else
+            echo "No logs folder found to copy."
+          fi
 
       - name: Upload artifacts (always)
         if: always()
