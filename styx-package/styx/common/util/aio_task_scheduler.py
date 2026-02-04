@@ -1,7 +1,10 @@
 import asyncio
-from typing import Awaitable, Optional
+from typing import TYPE_CHECKING
 
 from styx.common.logging import logging
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Coroutine
 
 
 class AIOTaskScheduler:
@@ -17,7 +20,7 @@ class AIOTaskScheduler:
         bound task creation, use a bounded queue upstream (e.g., your control_queue maxsize).
     """
 
-    def __init__(self, max_concurrency: int = 64):
+    def __init__(self, max_concurrency: int = 64) -> None:
         self.background_tasks: set[asyncio.Task] = set()
         self.closed: bool = False
         self._sem = asyncio.Semaphore(max_concurrency)
@@ -35,23 +38,23 @@ class AIOTaskScheduler:
         if exc is not None:
             logging.exception("Background task failed", exc_info=exc)
 
-    def create_task(self, coroutine: Awaitable) -> Optional[asyncio.Task]:
+    def create_task(self, coroutine: Awaitable) -> None:
         """
         Schedule a coroutine to run in the background.
         Returns the created task (or None if scheduler is closed).
         """
         if self.closed:
             logging.warning("Trying to create a task in a closed AIOTaskScheduler!")
-            return None
+            return
 
-        async def runner():
+        async def runner() -> Coroutine:
             async with self._sem:
                 return await coroutine
 
         task = asyncio.create_task(runner())
         self.background_tasks.add(task)
         task.add_done_callback(self._on_done)
-        return task
+        return
 
     async def close(self) -> None:
         """

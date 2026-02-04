@@ -1,30 +1,33 @@
-import asyncio
 from abc import abstractmethod
+import asyncio
 from collections import defaultdict
-from typing import Any
+from typing import TYPE_CHECKING
 
 from styx.common.base_state import BaseOperatorState
-from styx.common.types import OperatorPartition
+
+if TYPE_CHECKING:
+    from styx.common.types import K, OperatorPartition, V
+
 
 class BaseAriaState(BaseOperatorState):
     # read write sets
-    # operator_name: {t_id: set(keys)}
-    read_sets: dict[OperatorPartition, dict[int, set[Any]]]
-    global_read_sets: dict[OperatorPartition, dict[int, set[Any]]]
-    # operator_name: {t_id: {key: value}}
-    write_sets: dict[OperatorPartition, dict[int, dict[Any, Any]]]
-    global_write_sets: dict[OperatorPartition, dict[int, dict[Any, Any]]]
+    # operator_name: |t_id: set|keys||
+    read_sets: dict[OperatorPartition, dict[int, set[K]]]
+    global_read_sets: dict[OperatorPartition, dict[int, set[K]]]
+    # operator_name: |t_id: |key: value||
+    write_sets: dict[OperatorPartition, dict[int, dict[K, V]]]
+    global_write_sets: dict[OperatorPartition, dict[int, dict[K, V]]]
     # the reads and writes with the lowest t_id
-    # operator_name: {key: t_id}
-    writes: dict[OperatorPartition, dict[Any, list[int]]]
-    # operator_name: {key: t_id}
-    reads: dict[OperatorPartition, dict[Any, list[int]]]
-    global_reads: dict[OperatorPartition, dict[Any, list[int]]]
+    # operator_name: |key: t_id|
+    writes: dict[OperatorPartition, dict[K, list[int]]]
+    # operator_name: |key: t_id|
+    reads: dict[OperatorPartition, dict[K, list[int]]]
+    global_reads: dict[OperatorPartition, dict[K, list[int]]]
     # Calvin snapshot things
-    # tid: {operator_name: {key, value}}
-    fallback_commit_buffer: dict[int, dict[OperatorPartition, dict[Any, Any]]]
+    # tid: | operator_name: |key, value|
+    fallback_commit_buffer: dict[int, dict[OperatorPartition, dict[K, V]]]
 
-    def __init__(self, operator_partitions: set[OperatorPartition]):
+    def __init__(self, operator_partitions: set[OperatorPartition]) -> None:
         super().__init__(operator_partitions)
         self.write_sets = {operator_partition: {} for operator_partition in self.operator_partitions}
         self.writes = {operator_partition: {} for operator_partition in self.operator_partitions}
@@ -35,7 +38,14 @@ class BaseAriaState(BaseOperatorState):
         self.global_read_sets = {operator_partition: {} for operator_partition in self.operator_partitions}
         self.fallback_commit_buffer = defaultdict(lambda: defaultdict(dict))
 
-    def put(self, key, value, t_id: int, operator_name: str, partition: int):
+    def put(
+        self,
+        key: K,
+        value: V,
+        t_id: int,
+        operator_name: str,
+        partition: int,
+    ) -> None:
         operator_partition: OperatorPartition = (operator_name, partition)
         if t_id in self.write_sets[operator_partition]:
             self.write_sets[operator_partition][t_id][key] = value
@@ -46,7 +56,14 @@ class BaseAriaState(BaseOperatorState):
         else:
             self.writes[operator_partition][key] = [t_id]
 
-    def put_immediate(self, key, value, t_id: int, operator_name: str, partition: int):
+    def put_immediate(
+        self,
+        key: K,
+        value: V,
+        t_id: int,
+        operator_name: str,
+        partition: int,
+    ) -> None:
         operator_partition: OperatorPartition = (operator_name, partition)
         if t_id in self.fallback_commit_buffer:
             if operator_partition in self.fallback_commit_buffer[t_id]:
@@ -56,40 +73,50 @@ class BaseAriaState(BaseOperatorState):
         else:
             self.fallback_commit_buffer[t_id] = {operator_partition: {key: value}}
 
-    def set_global_read_write_sets(self, global_read_reservations, global_write_set, global_read_set):
+    def set_global_read_write_sets(
+        self,
+        global_read_reservations: dict[OperatorPartition, dict[K, list[int]]],
+        global_write_set: dict[OperatorPartition, dict[int, dict[K, V]]],
+        global_read_set: dict[OperatorPartition, dict[int, set[K]]],
+    ) -> None:
         self.global_reads = global_read_reservations
         self.global_write_sets = global_write_set
         self.global_read_sets = global_read_set
 
     @abstractmethod
-    def batch_insert(self, kv_pairs: dict, operator_name: str, partition: int):
+    def batch_insert(self, kv_pairs: dict, operator_name: str, partition: int) -> None:
         raise NotImplementedError
 
     @abstractmethod
-    def commit_fallback_transaction(self, t_id: int):
+    def commit_fallback_transaction(self, t_id: int) -> None:
         raise NotImplementedError
 
     @abstractmethod
-    def get(self, key, t_id: int, operator_name: str, partition: int):
+    def get(self, key: K, t_id: int, operator_name: str, partition: int) -> V:
         raise NotImplementedError
 
     @abstractmethod
-    def get_immediate(self, key, t_id: int, operator_name: str, partition: int):
+    def get_immediate(self, key: K, t_id: int, operator_name: str, partition: int) -> V:
         raise NotImplementedError
 
     @abstractmethod
-    def delete(self, key, operator_name: str, partition: int):
+    def delete(self, key: K, operator_name: str, partition: int) -> None:
         raise NotImplementedError
 
     @abstractmethod
-    def exists(self, key, operator_name: str, partition: int):
+    def exists(self, key: K, operator_name: str, partition: int) -> bool:
         raise NotImplementedError
 
     @abstractmethod
     def commit(self, aborted_from_remote: set[int]) -> set[int]:
         raise NotImplementedError
 
-    def deal_with_reads(self, key, t_id: int, operator_partition: OperatorPartition):
+    def deal_with_reads(
+        self,
+        key: K,
+        t_id: int,
+        operator_partition: OperatorPartition,
+    ) -> None:
         if key in self.reads[operator_partition]:
             self.reads[operator_partition][key].append(t_id)
         else:
@@ -100,14 +127,13 @@ class BaseAriaState(BaseOperatorState):
             self.read_sets[operator_partition][t_id] = {key}
 
     @staticmethod
-    def has_conflicts(t_id: int, keys: set[Any], reservations: dict[Any, int]):
-        for key in keys:
-            if key in reservations and reservations[key] < t_id:
-                return True
-        return False
+    def has_conflicts(t_id: int, keys: set[K], reservations: dict[K, int]) -> bool:
+        return any(key in reservations and reservations[key] < t_id for key in keys)
 
     @staticmethod
-    def min_rw_reservations(reservations: dict[OperatorPartition, dict[Any, list[int]]]) -> dict[OperatorPartition, dict[Any, int]]:
+    def min_rw_reservations(
+        reservations: dict[OperatorPartition, dict[K, list[int]]],
+    ) -> dict[OperatorPartition, dict[K, int]]:
         new__reservations = {}
         for operator_partition, reservation in reservations.items():
             new__reservations[operator_partition] = {key: min(t_ids) for key, t_ids in reservation.items() if t_ids}
@@ -128,9 +154,13 @@ class BaseAriaState(BaseOperatorState):
             t_ids: set[int] = set(read_set.keys()).union(set(write_set.keys()))
             for t_id in t_ids:
                 rs = read_set.get(t_id, set())
-                ws = write_set.get(t_id, dict())
+                ws = write_set.get(t_id, {})
                 read_write_set = rs.union(ws)
-                if self.has_conflicts(t_id, read_write_set, minimized_writes[operator_partition]):
+                if self.has_conflicts(
+                    t_id,
+                    read_write_set,
+                    minimized_writes[operator_partition],
+                ):
                     aborted_transactions.add(t_id)
         return aborted_transactions
 
@@ -145,10 +175,12 @@ class BaseAriaState(BaseOperatorState):
         aborted_transactions = set()
         merged_reads = self.min_rw_reservations(self.global_reads)
         minimized_writes = self.min_rw_reservations(self.writes)
-        for operator_name in self.write_sets.keys():
+        for operator_name in self.write_sets:
             write_set = self.global_write_sets[operator_name]
             read_set = self.global_read_sets[operator_name]
-            t_ids: set[int] = set(self.write_sets[operator_name].keys()) | set(self.read_sets[operator_name].keys())
+            t_ids: set[int] = set(self.write_sets[operator_name].keys()) | set(
+                self.read_sets[operator_name].keys(),
+            )
             for t_id in t_ids:
                 ws = write_set.get(t_id, set())
                 waw = self.has_conflicts(t_id, ws, minimized_writes[operator_name])
@@ -173,7 +205,7 @@ class BaseAriaState(BaseOperatorState):
         """
         aborted_transactions = set()
         minimized_writes = self.min_rw_reservations(self.writes)
-        for operator_partition in self.write_sets.keys():
+        for operator_partition in self.write_sets:
             t_ids: set[int] = set(self.write_sets[operator_partition].keys())
             for t_id in t_ids:
                 ws = self.write_sets[operator_partition].get(t_id, set())
@@ -182,7 +214,7 @@ class BaseAriaState(BaseOperatorState):
                     aborted_transactions.add(t_id)
         return aborted_transactions
 
-    def cleanup(self):
+    def cleanup(self) -> None:
         for operator_partition in self.operator_partitions:
             self.write_sets[operator_partition].clear()
             self.writes[operator_partition].clear()
@@ -193,8 +225,10 @@ class BaseAriaState(BaseOperatorState):
             self.global_read_sets[operator_partition].clear()
         self.fallback_commit_buffer.clear()
 
-    def get_dep_transactions(self,
-                             t_ids_to_reschedule: set[int]) -> tuple[dict[int, set[int]], dict[int, asyncio.Event]]:
+    def get_dep_transactions(
+        self,
+        t_ids_to_reschedule: set[int],
+    ) -> tuple[dict[int, set[int]], dict[int, asyncio.Event]]:
         """
         Returns a dict[int, set[int]] where key is the t_id and the value is a set of the transaction ids it depends on.
         """
@@ -211,7 +245,7 @@ class BaseAriaState(BaseOperatorState):
                 combined_accesses[operator_name][key].extend(t_ids)
 
         # Preprocess combined accesses
-        for operator_name, access_dict in combined_accesses.items():
+        for access_dict in combined_accesses.values():
             for t_ids in access_dict.values():
                 valid_t_ids_accessed_key = t_ids_to_reschedule & set(t_ids)
                 for t_id in valid_t_ids_accessed_key:
@@ -221,7 +255,7 @@ class BaseAriaState(BaseOperatorState):
 
         return t_id_dependencies, tid_locks
 
-    def remove_aborted_from_rw_sets(self, global_logic_aborts: set[int]):
+    def remove_aborted_from_rw_sets(self, global_logic_aborts: set[int]) -> None:
         """
         Here we delete the t_ids of the aborted transactions from the rw sets and reservations as if they never existed.
         """
@@ -230,24 +264,34 @@ class BaseAriaState(BaseOperatorState):
 
         # Remove aborted t_ids from read_sets and write_sets
         self.read_sets = {
-            operator_partition: {tid: value for tid, value in self.read_sets[operator_partition].items()
-                            if tid not in global_logic_aborts}
+            operator_partition: {
+                tid: value
+                for tid, value in self.read_sets[operator_partition].items()
+                if tid not in global_logic_aborts
+            }
             for operator_partition in self.operator_partitions
         }
         self.write_sets = {
-            operator_partition: {tid: value for tid, value in self.write_sets[operator_partition].items()
-                            if tid not in global_logic_aborts}
+            operator_partition: {
+                tid: value
+                for tid, value in self.write_sets[operator_partition].items()
+                if tid not in global_logic_aborts
+            }
             for operator_partition in self.operator_partitions
         }
 
         # Update reads and writes dictionaries
         self.reads = {
-            operator_partition: {key: [tid for tid in t_ids if tid not in global_logic_aborts]
-                            for key, t_ids in self.reads[operator_partition].items()}
+            operator_partition: {
+                key: [tid for tid in t_ids if tid not in global_logic_aborts]
+                for key, t_ids in self.reads[operator_partition].items()
+            }
             for operator_partition in self.operator_partitions
         }
         self.writes = {
-            operator_partition: {key: [tid for tid in t_ids if tid not in global_logic_aborts]
-                            for key, t_ids in self.writes[operator_partition].items()}
+            operator_partition: {
+                key: [tid for tid in t_ids if tid not in global_logic_aborts]
+                for key, t_ids in self.writes[operator_partition].items()
+            }
             for operator_partition in self.operator_partitions
         }

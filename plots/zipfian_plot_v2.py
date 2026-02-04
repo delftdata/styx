@@ -1,9 +1,9 @@
+from matplotlib import rcParams
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib import rcParams, rc
 
-rcParams['figure.figsize'] = [14, 8]
-plt.rcParams.update({'font.size': 22})
+rcParams["figure.figsize"] = [14, 8]
+plt.rcParams.update({"font.size": 22})
 
 x_labels = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99, 0.999]
 
@@ -97,25 +97,25 @@ plt.grid(linestyle="--", linewidth=1.5)
 plt.plot(x, y_styx_50, "-o", color="#882255", label="Styx@2K 50p",
          linewidth=line_width, markersize=marker_size)
 plt.plot(x, y_styx_99, "--", marker="o", color="#882255", label="Styx@2K 99p",
-         linewidth=line_width, markersize=marker_size, markerfacecolor='none')
+         linewidth=line_width, markersize=marker_size, markerfacecolor="none")
 plt.plot(x[beldi_50_mask], y_beldi_50[beldi_50_mask], "-^", color="#BD7105", label="Beldi 50p",
          linewidth=line_width, markersize=marker_size)
 plt.plot(x[beldi_99_mask], y_beldi_99[beldi_99_mask], "--", marker="^", color="#BD7105", label="Beldi 99p",
-         linewidth=line_width, markersize=marker_size, markerfacecolor='none')
+         linewidth=line_width, markersize=marker_size, markerfacecolor="none")
 plt.plot(x[statefun_50_mask], y_statefun_50[statefun_50_mask], "-P", color="#005F20", label="T-Statefun@700 50p",
          linewidth=line_width, markersize=marker_size)
 plt.plot(x[statefun_99_mask], y_statefun_99[statefun_99_mask], "--", marker="P", color="#005F20",
-         label="T-Statefun@700 99p", linewidth=line_width, markersize=marker_size, markerfacecolor='none')
+         label="T-Statefun@700 99p", linewidth=line_width, markersize=marker_size, markerfacecolor="none")
 plt.plot(x[boki_50_mask], y_boki_50[boki_50_mask], "-d", color="#332288", label="Boki 50p",
          linewidth=line_width, markersize=marker_size)
 plt.plot(x[boki_99_mask], y_boki_99[boki_99_mask], "--", marker="d", color="#332288", label="Boki 99p",
-         linewidth=line_width, markersize=marker_size, markerfacecolor='none')
+         linewidth=line_width, markersize=marker_size, markerfacecolor="none")
 
 # plt.ylim([0, 3])
 plt.ylabel("Latency (ms)")
 plt.xlabel("Zipfian const")
-plt.legend(bbox_to_anchor=(0.5, 1.2), loc="center", ncol=4, prop={'size': 21})
-plt.yscale('log', base=10)
+plt.legend(bbox_to_anchor=(0.5, 1.2), loc="center", ncol=4, prop={"size": 21})
+plt.yscale("log", base=10)
 plt.ylim([10, 10000])
 plt.tight_layout()
 plt.savefig("zipfian.pdf")

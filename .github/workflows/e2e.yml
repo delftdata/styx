@@ -1,4 +1,3 @@
-# .github/workflows/e2e.yml
 name: e2e
 
 on:
@@ -12,7 +11,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  e2e-ycsb:
+  e2e-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
@@ -51,15 +50,15 @@ jobs:
         run: |
           pytest -m e2e -q
 
-      # Always collect logs, even on failure
-      - name: Collect docker logs (always)
+      - name: Collect worker and coordinator logs (always)
         if: always()
         run: |
           mkdir -p artifacts
-          if [ -f worker-logs.log ]; then cp worker-logs.log artifacts/; fi
-          if [ -f coordinator-logs.log ]; then cp coordinator-logs.log artifacts/; fi
-          docker ps -a > artifacts/docker-ps.txt || true
-          docker compose ps > artifacts/compose-ps.txt || true
+          if [ -d logs ]; then
+            cp -r logs artifacts/
+          else
+            echo "No logs folder found to copy."
+          fi
 
       - name: Upload artifacts (always)
         if: always()

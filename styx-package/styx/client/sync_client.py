@@ -1,22 +1,30 @@
 import logging
+import socket
 import threading
 import time
+from typing import TYPE_CHECKING
 import uuid
 import warnings
-import socket
-from typing import Type, Any
 
-from confluent_kafka import Producer, KafkaException, Consumer, Message
-from confluent_kafka.admin import ClusterMetadata
-from minio import Minio
+from confluent_kafka import Consumer, KafkaException, Message, Producer
 
-from .base_client import BaseStyxClient
-from .styx_future import StyxFuture
-from ..common.base_operator import BaseOperator
-from ..common.serialization import Serializer, msgpack_deserialization, cloudpickle_deserialization
-from ..common.stateflow_graph import StateflowGraph
-from ..common.message_types import MessageType
-from ..common.tcp_networking import NetworkingManager
+from styx.client.base_client import BaseStyxClient
+from styx.client.styx_future import StyxFuture
+from styx.common.message_types import MessageType
+from styx.common.serialization import (
+    Serializer,
+    cloudpickle_deserialization,
+    msgpack_deserialization,
+)
+from styx.common.stateflow_graph import StateflowGraph
+from styx.common.tcp_networking import NetworkingManager
+
+if TYPE_CHECKING:
+    from confluent_kafka.admin import ClusterMetadata
+    from minio import Minio
+
+    from styx.common.base_operator import BaseOperator
+    from styx.common.types import K
 
 
 class SyncStyxClient(BaseStyxClient):
@@ -29,11 +37,13 @@ class SyncStyxClient(BaseStyxClient):
 
     _kafka_producer: Producer
 
-    def __init__(self,
-                 styx_coordinator_adr: str,
-                 styx_coordinator_port: int,
-                 kafka_url: str,
-                 minio: Minio | None = None):
+    def __init__(
+        self,
+        styx_coordinator_adr: str,
+        styx_coordinator_port: int,
+        kafka_url: str,
+        minio: Minio | None = None,
+    ) -> None:
         """Initializes a synchronous Styx client.
 
         Args:
@@ -45,18 +55,18 @@ class SyncStyxClient(BaseStyxClient):
         self._kafka_url = kafka_url
         self._futures: dict[bytes, StyxFuture] = {}
         self.running_result_consumer = False
-        self.result_consumer_process: threading.Thread = ...
+        self.result_consumer_process: threading.Thread | None = None
         self.running_metadata_consumer = False
-        self.metadata_consumer_process: threading.Thread = ...
+        self.metadata_consumer_process: threading.Thread | None = None
         self.running_polling_thread = False
-        self.polling_thread: threading.Thread = ...
+        self.polling_thread: threading.Thread | None = None
         self.kafka_consumer_config = {
             "bootstrap.servers": self._kafka_url,
             "group.id": str(uuid.uuid4()),
             "fetch.min.bytes": 1,
             "enable.auto.commit": False,
             "auto.offset.reset": "earliest",
-            }
+        }
         self.kafka_producer_config = {
             "bootstrap.servers": self._kafka_url,
             "acks": "all",
@@ -64,11 +74,11 @@ class SyncStyxClient(BaseStyxClient):
             "compression.type": "none",
             "enable.idempotence": True,
             "max.in.flight.requests.per.connection": 1,
-            "client.id": str(uuid.uuid4())
+            "client.id": str(uuid.uuid4()),
         }
         self.graph_known_event: threading.Event = threading.Event()
 
-    def get_operator_partition(self, key: Any, operator: BaseOperator) -> int:
+    def get_operator_partition(self, key: K, operator: BaseOperator) -> int:
         """Returns the partition for a given key/operator pair.
 
         Args:
@@ -82,31 +92,39 @@ class SyncStyxClient(BaseStyxClient):
             self.graph_known_event.wait()
         return self._current_active_graph.get_operator(operator).which_partition(key)
 
-    def start_futures_consumer_thread(self):
+    def start_futures_consumer_thread(self) -> None:
         """Starts a thread to consume function results and resolve futures."""
-        self.result_consumer_process = threading.Thread(target=self.start_consuming_results, daemon=True)
+        self.result_consumer_process = threading.Thread(
+            target=self.start_consuming_results,
+            daemon=True,
+        )
         self.running_result_consumer = True
         self.result_consumer_process.start()
 
-    def start_metadata_consumer_thread(self):
+    def start_metadata_consumer_thread(self) -> None:
         """Starts a thread to consume metadata and update the active graph."""
-        self.metadata_consumer_process = threading.Thread(target=self.start_consuming_metadata, daemon=True)
+        self.metadata_consumer_process = threading.Thread(
+            target=self.start_consuming_metadata,
+            daemon=True,
+        )
         self.running_metadata_consumer = True
         self.metadata_consumer_process.start()
 
-    def start_polling_thread(self):
+    def start_polling_thread(self) -> None:
         self.polling_thread = threading.Thread(target=self._poll_loop, daemon=True)
         self.running_polling_thread = True
         self.polling_thread.start()
 
-    def _poll_loop(self):
+    def _poll_loop(self) -> None:
         while self.running_polling_thread:
             if hasattr(self, "_kafka_producer"):
-                self._kafka_producer.poll(0.01)  # Poll with timeout to serve delivery callbacks
+                self._kafka_producer.poll(
+                    0.01,
+                )  # Poll with timeout to serve delivery callbacks
             else:
                 time.sleep(0.1)
 
-    def close(self):
+    def close(self) -> None:
         """Closes the client, terminating consumers and flushing producers."""
         self.running_result_consumer = False
         self.running_metadata_consumer = False
@@ -114,7 +132,7 @@ class SyncStyxClient(BaseStyxClient):
         self.flush()
         del self._kafka_producer
 
-    def start_consuming_results(self):
+    def start_consuming_results(self) -> None:
         """Consumes results from Kafka and fulfills corresponding futures.
 
         Blocks until the graph is known, then subscribes to egress topics
@@ -134,12 +152,14 @@ class SyncStyxClient(BaseStyxClient):
                     wait_output_topics = True
             if not wait_output_topics:
                 break
-            logging.warning(f"Waiting 1 sec for egress topics to be created by the Styx coordinator "
-                            f"| topics: {md.topics}")
+            logging.warning(
+                "Waiting 1 sec for egress topics to be created by the Styx coordinator | topics: %s",
+                md.topics,
+            )
             time.sleep(1)
             md: ClusterMetadata = function_results_consumer.list_topics()
-        topics_to_subscribe = [topic for topic in md.topics if topic.endswith('--OUT')]
-        logging.warning(f"Subscribed to topics: {topics_to_subscribe}")
+        topics_to_subscribe = [topic for topic in md.topics if topic.endswith("--OUT")]
+        logging.warning("Subscribed to topics: %s", topics_to_subscribe)
         function_results_consumer.subscribe(topics_to_subscribe)
         while self.running_result_consumer:
             # poll every 10ms (this will add at least 10 ms latency to the futures, but it makes the client lightweight)
@@ -149,11 +169,13 @@ class SyncStyxClient(BaseStyxClient):
             if msg.error():
                 continue
             if msg.key() in self._futures:
-                self._futures[msg.key()].set(response_val=msgpack_deserialization(msg.value()),
-                                             out_timestamp=msg.timestamp()[1])
+                self._futures[msg.key()].set(
+                    response_val=msgpack_deserialization(msg.value()),
+                    out_timestamp=msg.timestamp()[1],
+                )
         function_results_consumer.close()
 
-    def start_consuming_metadata(self):
+    def start_consuming_metadata(self) -> None:
         """Consumes metadata from Kafka and updates the current graph.
 
         Blocks until the `styx-metadata` topic exists, then listens
@@ -161,12 +183,14 @@ class SyncStyxClient(BaseStyxClient):
         """
         metadata_consumer = Consumer(**self.kafka_consumer_config)
         md: ClusterMetadata = metadata_consumer.list_topics()
-        while 'styx-metadata' not in md.topics:
-            logging.warning(f"Waiting 1 sec for metadata topic to be created by the Styx coordinator "
-                            f"| topics: {md.topics}")
+        while "styx-metadata" not in md.topics:
+            logging.warning(
+                "Waiting 1 sec for metadata topic to be created by the Styx coordinator | topics: %s",
+                md.topics,
+            )
             time.sleep(1)
             md: ClusterMetadata = metadata_consumer.list_topics()
-        metadata_consumer.subscribe(['styx-metadata'])
+        metadata_consumer.subscribe(["styx-metadata"])
         while self.running_metadata_consumer:
             # poll every 100ms
             msg: Message = metadata_consumer.poll(0.1)
@@ -180,7 +204,7 @@ class SyncStyxClient(BaseStyxClient):
                 self.graph_known_event.set()
         metadata_consumer.close()
 
-    def open(self, consume: bool = True):
+    def open(self, consume: bool = True) -> None:
         """Opens the Kafka producer and starts consumer threads.
 
         Args:
@@ -192,22 +216,27 @@ class SyncStyxClient(BaseStyxClient):
                 self._kafka_producer = Producer(**self.kafka_producer_config)
                 break
             except KafkaException as e:
-                warnings.warn(f'Kafka at {self._kafka_url} not ready yet due to {e}, sleeping for 1 second')
+                warnings.warn(
+                    f"Kafka at {self._kafka_url} not ready yet due to {e}, sleeping for 1 second",
+                    stacklevel=2,
+                )
                 time.sleep(1)
         if consume:
             self.start_futures_consumer_thread()
         self.start_polling_thread()
 
-    def flush(self):
+    def flush(self) -> None:
         """Flushes the Kafka producer buffer to ensure all messages are sent.
 
         Raises:
             AssertionError: If flushing fails to empty the queue.
         """
         queue_size = self._kafka_producer.flush()
-        assert queue_size == 0
+        if queue_size > 0:
+            msg = f"Failed to empty Kafka producer buffer, queue size: {queue_size}"
+            raise AssertionError(msg)
 
-    def delivery_callback(self, err, msg):
+    def delivery_callback(self, err: str, msg: Message) -> None:
         """Handles Kafka delivery report callbacks.
 
         Updates internal timestamps and resolves futures if applicable.
@@ -217,18 +246,20 @@ class SyncStyxClient(BaseStyxClient):
             msg: Kafka message delivered.
         """
         if err is not None:
-            logging.warning("Delivery failed for User record {}: {}".format(msg.key(), err))
+            logging.warning("Delivery failed for User record %s: %s", msg.key(), err)
         else:
             self._delivery_timestamps[msg.key()] = msg.timestamp()[1]
             if msg.key() in self._futures:
                 self._futures[msg.key()].set_in_timestamp(msg.timestamp()[1])
 
-    def send_event(self,
-                   operator: BaseOperator,
-                   key: Any,
-                   function: Type | str,
-                   params: tuple = tuple(),
-                   serializer: Serializer = Serializer.MSGPACK) -> StyxFuture:
+    def send_event(
+        self,
+        operator: BaseOperator,
+        key: K,
+        function: type | str,
+        params: tuple = (),
+        serializer: Serializer = Serializer.MSGPACK,
+    ) -> StyxFuture:
         """Sends a single event to an operator.
 
         Args:
@@ -243,29 +274,37 @@ class SyncStyxClient(BaseStyxClient):
         """
         if not self.graph_known_event.is_set():
             self.graph_known_event.wait()
-        request_id, serialized_value, partition = self._prepare_kafka_message(key,
-                                                                              operator,
-                                                                              function,
-                                                                              params,
-                                                                              serializer)
+        request_id, serialized_value, partition = self._prepare_kafka_message(
+            key,
+            operator,
+            function,
+            params,
+            serializer,
+        )
         self._futures[request_id] = StyxFuture(request_id=request_id)
         while True:
             try:
-                self._kafka_producer.produce(operator.name,
-                                             key=request_id,
-                                             value=serialized_value,
-                                             partition=partition,
-                                             on_delivery=self.delivery_callback)
+                self._kafka_producer.produce(
+                    operator.name,
+                    key=request_id,
+                    value=serialized_value,
+                    partition=partition,
+                    on_delivery=self.delivery_callback,
+                )
                 break
             except BufferError:
                 time.sleep(0.001)  # wait 1ms and retry
         return self._futures[request_id]
 
-    def set_graph(self, graph: StateflowGraph):
+    def set_graph(self, graph: StateflowGraph) -> None:
         self._current_active_graph = graph
         self.graph_known_event.set()
 
-    def submit_dataflow(self, stateflow_graph: StateflowGraph, external_modules: tuple = None):
+    def submit_dataflow(
+        self,
+        stateflow_graph: StateflowGraph,
+        external_modules: tuple | None = None,
+    ) -> None:
         """Submits a dataflow graph to the Styx coordinator.
 
         Args:
@@ -275,9 +314,22 @@ class SyncStyxClient(BaseStyxClient):
         self._verify_dataflow_input(stateflow_graph, external_modules)
         self._current_active_graph = stateflow_graph
         self.graph_known_event.set()
-        msg = NetworkingManager.encode_message(msg=(stateflow_graph, ),
-                                               msg_type=MessageType.SendExecutionGraph,
-                                               serializer=Serializer.CLOUDPICKLE)
+        msg = NetworkingManager.encode_message(
+            msg=(stateflow_graph,),
+            msg_type=MessageType.SendExecutionGraph,
+            serializer=Serializer.CLOUDPICKLE,
+        )
+        s = socket.socket()
+        s.connect((self._styx_coordinator_adr, self._styx_coordinator_port))
+        s.send(msg)
+        s.close()
+
+    def notify_init_data_complete(self) -> None:
+        msg = NetworkingManager.encode_message(
+            msg=b"",
+            msg_type=MessageType.InitDataComplete,
+            serializer=Serializer.NONE,
+        )
         s = socket.socket()
         s.connect((self._styx_coordinator_adr, self._styx_coordinator_port))
         s.send(msg)

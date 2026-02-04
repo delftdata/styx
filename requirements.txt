@@ -30,3 +30,5 @@ matplotlib==3.10.8
 mkdocs-material==9.7.1
 # tests
 pytest==9.0.2
+# make sure to have the same ruff verseion as in .github/workflows/ruff.yml line 30
+ruff==0.15.0

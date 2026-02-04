@@ -1,10 +1,9 @@
 import matplotlib.pyplot as plt
 import pandas as pd
 
+input_msgs = pd.read_csv("client_requests.csv")
 
-input_msgs = pd.read_csv('client_requests.csv')
-
-timestamps = sorted(list(pd.read_csv('client_requests.csv')['timestamp']))
+timestamps = sorted(list(pd.read_csv("client_requests.csv")["timestamp"]))
 
 starting_timestamp = timestamps[0]
 

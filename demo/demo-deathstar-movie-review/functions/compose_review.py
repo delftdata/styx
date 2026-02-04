@@ -1,7 +1,7 @@
 from styx.common.operator import Operator
 from styx.common.stateful_function import StatefulFunction
 
-compose_review_operator = Operator('compose_review')
+compose_review_operator = Operator("compose_review")
 # key: req_id
 
 

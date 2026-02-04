@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 
 @dataclass
-class StateflowWorker(object):
+class StateflowWorker:
     host: str
     port: int
     protocol_port: int

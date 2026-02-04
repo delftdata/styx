@@ -1,8 +1,8 @@
 import json
 import math
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 
 
 def main(
@@ -11,51 +11,51 @@ def main(
         warmup_seconds,
         save_dir,
 ):
-    print('Calculating metrics...')
+    print("Calculating metrics...")
 
     exp_name = f"ycsb_migration_{input_rate * client_threads}"
 
-    origin_input_msgs = pd.read_csv(f'{save_dir}/client_requests.csv',
-                                    dtype={'request_id': bytes,
-                                        'timestamp': np.uint64}).sort_values('timestamp')
+    origin_input_msgs = pd.read_csv(f"{save_dir}/client_requests.csv",
+                                    dtype={"request_id": bytes,
+                                        "timestamp": np.uint64}).sort_values("timestamp")
 
-    duplicate_requests = not origin_input_msgs['request_id'].is_unique
+    duplicate_requests = not origin_input_msgs["request_id"].is_unique
 
 
-    output_msgs = pd.read_csv(f'{save_dir}/output.csv', dtype={'request_id': bytes,
-                                                            'timestamp': np.uint64},
-                            low_memory=False).sort_values('timestamp')
+    output_msgs = pd.read_csv(f"{save_dir}/output.csv", dtype={"request_id": bytes,
+                                                            "timestamp": np.uint64},
+                            low_memory=False).sort_values("timestamp")
     print(
-        f'Found {len(output_msgs)} output messages with {len(output_msgs['response'].dropna())} non-empty responses.'
+        f"Found {len(output_msgs)} output messages with {len(output_msgs['response'].dropna())} non-empty responses."
     )
 
-    exactly_once_output = output_msgs['request_id'].is_unique
+    exactly_once_output = output_msgs["request_id"].is_unique
 
     # remove warmup from input
-    input_msgs = origin_input_msgs.loc[(origin_input_msgs['timestamp'] -
-                                        origin_input_msgs['timestamp'][0] >= warmup_seconds * 1000)]
+    input_msgs = origin_input_msgs.loc[(origin_input_msgs["timestamp"] -
+                                        origin_input_msgs["timestamp"][0] >= warmup_seconds * 1000)]
     print(
-        f'Removed {len(origin_input_msgs) - len(input_msgs)} input messages '
-        f'due to an initial warmup period of {warmup_seconds} seconds.'
+        f"Removed {len(origin_input_msgs) - len(input_msgs)} input messages "
+        f"due to an initial warmup period of {warmup_seconds} seconds."
     )
 
     # Perform a left join to include all rows from client_df
-    joined = input_msgs.merge(output_msgs, on='request_id', how='left', suffixes=('_client', '_output'))
+    joined = input_msgs.merge(output_msgs, on="request_id", how="left", suffixes=("_client", "_output"))
 
     print(
-        f'Joined {len(joined)} messages from {len(input_msgs)} input messages '
-        f'and {len(output_msgs)} output messages.'
+        f"Joined {len(joined)} messages from {len(input_msgs)} input messages "
+        f"and {len(output_msgs)} output messages."
     )
-    missed_requests = joined[joined['timestamp_output'].isna()]
+    missed_requests = joined[joined["timestamp_output"].isna()]
     print(f"missed_requests: {missed_requests}")
     missed = len(missed_requests)
     print(
-        f'Missed {missed} messages after the join for which no response '
-         'was found.'
+        f"Missed {missed} messages after the join for which no response "
+         "was found."
     )
 
     joined = joined.dropna()
-    runtime = joined['timestamp_output'] - joined['timestamp_client']
+    runtime = joined["timestamp_output"] - joined["timestamp_client"]
 
     start_time = -math.inf
     throughput = {}
@@ -64,7 +64,7 @@ def main(
     # 1 second (ms) (i.e. bucket size)
     granularity = 1000
 
-    for t in output_msgs['timestamp']:
+    for t in output_msgs["timestamp"]:
         if t - start_time > granularity:
             bucket_id += 1
             start_time = t
@@ -74,7 +74,7 @@ def main(
 
     throughput_vals = list(throughput.values())
 
-    req_ids = output_msgs['request_id']
+    req_ids = output_msgs["request_id"]
     dup = output_msgs[req_ids.isin(req_ids[req_ids.duplicated()])].sort_values("request_id")
 
 
@@ -105,6 +105,6 @@ def main(
         "duplicate_messages": len(dup)
     }
 
-    print(f'Done. Persisted metrics in {save_dir}/{exp_name}.json')
-    with open(f'{save_dir}/{exp_name}.json', 'w', encoding='utf-8') as f:
+    print(f"Done. Persisted metrics in {save_dir}/{exp_name}.json")
+    with open(f"{save_dir}/{exp_name}.json", "w", encoding="utf-8") as f:
         json.dump(res_dict, f, ensure_ascii=False, indent=4)

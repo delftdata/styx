@@ -1,25 +1,30 @@
+from abc import ABC
 import asyncio
 import dataclasses
 import threading
-from abc import ABC
+from typing import TYPE_CHECKING
 
-from styx.common.exceptions import FutureAlreadySet, FutureTimedOut
+from styx.common.exceptions import FutureAlreadySetError, FutureTimedOutError
+
+if TYPE_CHECKING:
+    from styx.common.types import V
 
 
 @dataclasses.dataclass
-class StyxResponse(object):
+class StyxResponse:
     """Encapsulates a response from a Styx function invocation.
 
     Attributes:
         request_id (bytes): The unique identifier of the request.
         in_timestamp (int): The time the request was sent, in ms.
         out_timestamp (int): The time the response was received, in ms.
-        response (any): The actual response value returned.
+        response (V): The actual response value returned.
     """
+
     request_id: bytes
     in_timestamp: int = -1
     out_timestamp: int = -1
-    response: any = None
+    response: V = None
 
     @property
     def styx_latency_ms(self) -> float:
@@ -38,11 +43,17 @@ class BaseFuture(ABC):
         _val (StyxResponse): Encapsulated response and timestamps.
         _condition: Event object (threading or asyncio) to signal completion.
     """
+
     _timeout: int
     _condition: threading.Event | asyncio.Event
     _val: StyxResponse
 
-    def __init__(self, request_id: bytes, timeout_sec: int, is_async: bool = False):
+    def __init__(
+        self,
+        request_id: bytes,
+        timeout_sec: int,
+        is_async: bool = False,
+    ) -> None:
         """Initializes a future for a given request.
 
         Args:
@@ -55,7 +66,7 @@ class BaseFuture(ABC):
         self._timeout = timeout_sec
 
     @property
-    def request_id(self):
+    def request_id(self) -> bytes:
         """bytes: The request ID associated with this future."""
         return self._val.request_id
 
@@ -75,19 +86,22 @@ class BaseFuture(ABC):
         """
         return self._condition.is_set()
 
-    def set(self, response_val: any, out_timestamp: int):
+    def set(self, response_val: V, out_timestamp: int) -> None:
         """Fulfills the future with a response.
 
         Args:
-            response_val (any): The value to store as the response.
+            response_val (V): The value to store as the response.
             out_timestamp (int): The time the response was received.
 
         Raises:
-            FutureAlreadySet: If the future was already fulfilled.
+            FutureAlreadySetError: If the future was already fulfilled.
         """
         if self._condition.is_set():
-            raise FutureAlreadySet(f"{self._val.request_id} Trying to set Future to |{response_val}|"
-                                   f" Future has already been set to |{self._val.response}|")
+            msg = (
+                f"{self._val.request_id} Trying to set Future to |{response_val}|"
+                f" Future has already been set to |{self._val.response}|"
+            )
+            raise FutureAlreadySetError(msg)
         self._val.response = response_val
         self._val.out_timestamp = out_timestamp
         self._condition.set()
@@ -96,7 +110,7 @@ class BaseFuture(ABC):
 class StyxFuture(BaseFuture):
     """Blocking future for retrieving Styx function results synchronously."""
 
-    def __init__(self, request_id: bytes, timeout_sec: int = 30):
+    def __init__(self, request_id: bytes, timeout_sec: int = 30) -> None:
         """Initializes a synchronous future.
 
         Args:
@@ -112,19 +126,19 @@ class StyxFuture(BaseFuture):
             StyxResponse | None: The received response.
 
         Raises:
-            FutureTimedOut: If the future is not fulfilled within the timeout.
+            FutureTimedOutError: If the future is not fulfilled within the timeout.
         """
         success = self._condition.wait(timeout=self._timeout)
         if not success:
-            raise FutureTimedOut(f"Future for request: {self._val.request_id}"
-                                 f" timed out after {self._timeout} seconds.")
+            msg = f"Future for request: {self._val.request_id} timed out after {self._timeout} seconds."
+            raise FutureTimedOutError(msg)
         return self._val
 
 
 class StyxAsyncFuture(BaseFuture):
     """Async future for retrieving Styx function results with asyncio."""
 
-    def __init__(self, request_id: bytes, timeout_sec: int = 30):
+    def __init__(self, request_id: bytes, timeout_sec: int = 30) -> None:
         """Initializes an asynchronous future.
 
         Args:
@@ -140,11 +154,11 @@ class StyxAsyncFuture(BaseFuture):
             StyxResponse | None: The received response.
 
         Raises:
-            FutureTimedOut: If the future is not fulfilled within the timeout.
+            FutureTimedOutError: If the future is not fulfilled within the timeout.
         """
         try:
             await asyncio.wait_for(self._condition.wait(), self._timeout)
-        except asyncio.TimeoutError:
-            raise FutureTimedOut(f"Future for request: {self._val.request_id}"
-                                 f" timed out after {self._timeout} seconds.")
+        except TimeoutError as e:
+            msg = f"Future for request: {self._val.request_id} timed out after {self._timeout} seconds."
+            raise FutureTimedOutError(msg) from e
         return self._val

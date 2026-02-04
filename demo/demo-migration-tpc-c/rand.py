@@ -2,11 +2,10 @@
 # Adapted from MongoDB-labs py-tpcc package:
 # https://github.com/mongodb-labs/py-tpcc/blob/master/pytpcc/util/rand.py
 # -----------------------------------------------------------------------
-import random
 from math import floor
+import random
 
 from nurand import NURandC, make_for_load
-
 
 SYLLABLES: list[str] = ["BAR", "OUGHT", "ABLE", "PRI", "PRES", "ESE", "ANTI", "CALLY", "ATION", "EING"]
 
@@ -59,7 +58,7 @@ def fixed_point(decimal_places: int, minimum: float, maximum: float) -> float:
     assert minimum < maximum
 
     multiplier = 1
-    for i in range(0, decimal_places):
+    for i in range(decimal_places):
         multiplier *= 10
 
     int_min = int(minimum * multiplier + 0.5)
@@ -70,7 +69,7 @@ def fixed_point(decimal_places: int, minimum: float, maximum: float) -> float:
 
 def select_unique_ids(num_unique: int, minimum: int, maximum: int) -> set:
     rows: set = set()
-    for i in range(0, num_unique):
+    for i in range(num_unique):
         index = None
         while index is None or index in rows:
             index = number(minimum, maximum)
@@ -83,14 +82,14 @@ def a_string(minimum_length: int, maximum_length: int) -> str:
     """
     A random alphabetic string with length in range [minimum_length, maximum_length].
     """
-    return random_string(minimum_length, maximum_length, 'a', 26)
+    return random_string(minimum_length, maximum_length, "a", 26)
 
 
 def n_string(minimum_length: int, maximum_length: int) -> str:
     """
     A random numeric string with length in range [minimum_length, maximum_length].
     """
-    return random_string(minimum_length, maximum_length, '0', 10)
+    return random_string(minimum_length, maximum_length, "0", 10)
 
 
 def random_string(minimum_length: int, maximum_length: int, base, num_characters: int) -> str:
@@ -109,7 +108,7 @@ def make_last_name(num: int) -> str:
     global SYLLABLES
     assert 0 <= num <= 999
 
-    indices = [floor(num / 100), floor((num / 10)) % 10, num % 10]
+    indices = [floor(num / 100), floor(num / 10) % 10, num % 10]
     return "".join(map(lambda x: SYLLABLES[x], indices))
 
 
@@ -119,7 +118,6 @@ def make_random_last_name(max_cid: int) -> str:
     """
     min_cid: int = 999
 
-    if (max_cid - 1) < min_cid:
-        min_cid = max_cid - 1
+    min_cid = min(min_cid, max_cid - 1)
 
     return make_last_name(nu_rand(255, 0, min_cid))

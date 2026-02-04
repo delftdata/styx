@@ -53,7 +53,7 @@ class ZipfGenerator:
             n, theta_val = params
             self.__count_for_zeta = n
             return self.zeta_static(n, theta_val)
-        elif len(params) == 4:
+        if len(params) == 4:
             st, n, theta_val, initial_sum = params
             self.__count_for_zeta = n
             return self.zeta_static(n, theta_val, theta_val, initial_sum)
@@ -64,7 +64,7 @@ class ZipfGenerator:
             st = 0
             initial_sum = 0
             return self.zeta_sum(st, n, theta, initial_sum)
-        elif len(params) == 4:
+        if len(params) == 4:
             st, n, theta, initial_sum = params
             return self.zeta_sum(st, n, theta, initial_sum)
 

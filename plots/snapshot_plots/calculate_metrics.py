@@ -1,57 +1,57 @@
+from matplotlib import rcParams
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
-from matplotlib import rcParams
-import pandas as pd
 import numpy as np
+import pandas as pd
 
-plt.rcParams.update({'font.size': 20})
-rcParams['figure.figsize'] = [8, 8]
+plt.rcParams.update({"font.size": 20})
+rcParams["figure.figsize"] = [8, 8]
 
 n_keys = 1_000_000
 # n_keys = 100
 starting_money = 1_000_000
 
-input_msgs = pd.read_csv('client_requests.csv', dtype={'request_id': bytes,
-                                                       'timestamp': np.uint64}).sort_values('timestamp')
-output_msgs = pd.read_csv('output.csv', dtype={'request_id': bytes,
-                                               'timestamp': np.uint64}, low_memory=False).sort_values('timestamp')
+input_msgs = pd.read_csv("client_requests.csv", dtype={"request_id": bytes,
+                                                       "timestamp": np.uint64}).sort_values("timestamp")
+output_msgs = pd.read_csv("output.csv", dtype={"request_id": bytes,
+                                               "timestamp": np.uint64}, low_memory=False).sort_values("timestamp")
 
 output_run_messages = output_msgs
 
-joined = pd.merge(input_msgs, output_msgs, on='request_id', how='outer')
+joined = pd.merge(input_msgs, output_msgs, on="request_id", how="outer")
 
-runtime = joined['timestamp_y'] - joined['timestamp_x']
+runtime = joined["timestamp_y"] - joined["timestamp_x"]
 runtime_no_nan = runtime
-print(f'min latency: {min(runtime_no_nan)}ms')
-print(f'max latency: {max(runtime_no_nan)}ms')
-print(f'average latency: {np.average(runtime_no_nan)}ms')
-print(f'99%: {np.percentile(runtime_no_nan, 99)}ms')
-print(f'95%: {np.percentile(runtime_no_nan, 95)}ms')
-print(f'90%: {np.percentile(runtime_no_nan, 90)}ms')
-print(f'75%: {np.percentile(runtime_no_nan, 75)}ms')
-print(f'60%: {np.percentile(runtime_no_nan, 60)}ms')
-print(f'50%: {np.percentile(runtime_no_nan, 50)}ms')
-print(f'25%: {np.percentile(runtime_no_nan, 25)}ms')
-print(f'10%: {np.percentile(runtime_no_nan, 10)}ms')
+print(f"min latency: {min(runtime_no_nan)}ms")
+print(f"max latency: {max(runtime_no_nan)}ms")
+print(f"average latency: {np.average(runtime_no_nan)}ms")
+print(f"99%: {np.percentile(runtime_no_nan, 99)}ms")
+print(f"95%: {np.percentile(runtime_no_nan, 95)}ms")
+print(f"90%: {np.percentile(runtime_no_nan, 90)}ms")
+print(f"75%: {np.percentile(runtime_no_nan, 75)}ms")
+print(f"60%: {np.percentile(runtime_no_nan, 60)}ms")
+print(f"50%: {np.percentile(runtime_no_nan, 50)}ms")
+print(f"25%: {np.percentile(runtime_no_nan, 25)}ms")
+print(f"10%: {np.percentile(runtime_no_nan, 10)}ms")
 print(np.argmax(runtime_no_nan))
 print(np.argmin(runtime_no_nan))
 
-missed = joined[joined['response'].isna()]
+missed = joined[joined["response"].isna()]
 
 if len(missed) > 0:
-    print('--------------------')
-    print('\nMISSED MESSAGES!\n')
-    print('--------------------')
+    print("--------------------")
+    print("\nMISSED MESSAGES!\n")
+    print("--------------------")
     print(missed)
-    print('--------------------')
+    print("--------------------")
 else:
-    print('\nNO MISSED MESSAGES!\n')
+    print("\nNO MISSED MESSAGES!\n")
 
 
 snapshot_starts: dict[int, int] = {}
 snapshot_ends: dict[int, int] = {}
 
-with open('coordinator_logs.txt') as file:
+with open("coordinator_logs.txt") as file:
     for line in file:
         split = line.split("WARNING:")[-1].split("|")
         worker_id = int(split[0].strip().split(" ")[-1])
@@ -95,14 +95,14 @@ def calculate_throughput(output_timestamps: list[int], granularity_ms: int,
     end_time = output_timestamps[-1]
     bucket_boundaries = list(range(start_time, end_time, granularity_ms))
     bucket_boundaries = [(bucket_boundaries[i], bucket_boundaries[i + 1]) for i in range(len(bucket_boundaries) - 1)]
-    bucket_counts: dict[int, int] = {i: 0 for i in range(len(bucket_boundaries))}
-    bucket_counts_input: dict[int, int] = {i: 0 for i in range(len(bucket_boundaries))}
+    bucket_counts: dict[int, int] = dict.fromkeys(range(len(bucket_boundaries)), 0)
+    bucket_counts_input: dict[int, int] = dict.fromkeys(range(len(bucket_boundaries)), 0)
     for t in output_timestamps:
         for i, boundaries in enumerate(bucket_boundaries):
             if boundaries[0] <= t < boundaries[1]:
                 bucket_counts[i] += 1 * second_coefficient
 
-    for t in input_msgs['timestamp']:
+    for t in input_msgs["timestamp"]:
         for i, boundaries in enumerate(bucket_boundaries):
             if boundaries[0] <= t < boundaries[1]:
                 bucket_counts_input[i] += 1 * second_coefficient
@@ -122,32 +122,32 @@ def calculate_throughput(output_timestamps: list[int], granularity_ms: int,
                 normalized_sn_ends.append(((t - boundaries[0]) / granularity_ms) + i)
 
     _, ax = plt.subplots()
-    ax.plot(bucket_counts.values(), linewidth=2.5, label='Output Throughput')
-    ax.plot(bucket_counts_input.values(), linewidth=2.5, label='Input Throughput', alpha=0.7)
+    ax.plot(bucket_counts.values(), linewidth=2.5, label="Output Throughput")
+    ax.plot(bucket_counts_input.values(), linewidth=2.5, label="Input Throughput", alpha=0.7)
     ax.vlines(normalized_sn_starts,
-              ymin=0, ymax=15000, colors='green', linestyle='--', linewidth=3, label='Snapshot Start')
+              ymin=0, ymax=15000, colors="green", linestyle="--", linewidth=3, label="Snapshot Start")
     ax.vlines(normalized_sn_ends,
-              ymin=0, ymax=15000, colors='red', linestyle='dotted', linewidth=3, label='Snapshot End')
+              ymin=0, ymax=15000, colors="red", linestyle="dotted", linewidth=3, label="Snapshot End")
     # ax.axhline(y=3200, color='orange', linestyle='-')
-    ax.set_xlabel('Time (seconds)')
-    ax.set_ylabel('K Transactions per Second')
+    ax.set_xlabel("Time (seconds)")
+    ax.set_ylabel("K Transactions per Second")
     ax.set_xlim([1.5, 6.5])
     ax.set_ylim([2100, 3900])
     ax.yaxis.set_major_formatter(mticker.FuncFormatter(update_throughput_ticks_float))
     # ax.xaxis.set_major_formatter(mticker.FuncFormatter(update_ticks))
     ax.legend(bbox_to_anchor=(0.5, 1.08), loc="center", ncol=2)
-    plt.grid(linestyle='--', linewidth=0.5)
+    plt.grid(linestyle="--", linewidth=0.5)
     plt.savefig("throughput_snapshot.pdf")
     plt.show()
     return bucket_counts, normalized_sn_ends, normalized_sn_starts
 
 
-bc, normalized_sn_ends, normalized_sn_starts = calculate_throughput(list(output_run_messages['timestamp']),
+bc, normalized_sn_ends, normalized_sn_starts = calculate_throughput(list(output_run_messages["timestamp"]),
                                                                     1000,
                                                                     snapshot_starts,
                                                                     snapshot_ends)
 
-timestamps = list(output_run_messages['timestamp'])
+timestamps = list(output_run_messages["timestamp"])
 latencies = list(runtime)
 start_time = timestamps[0]
 end_time = timestamps[-1]
@@ -164,7 +164,7 @@ for i, t in enumerate(timestamps):
 
 for k, v in bucket_latencies.items():
     if not v:
-        bucket_latencies[k].append(np.nan)
+        v.append(np.nan)
 
 bucket_latencies_99: dict[int, float] = {k: np.percentile(v, 99) for k, v in bucket_latencies.items() if v}
 bucket_latencies_50: dict[int, float] = {k: np.percentile(v, 50) for k, v in bucket_latencies.items() if v}
@@ -188,19 +188,19 @@ for t in sn_ends:
 
 
 _, ax = plt.subplots()
-ax.plot(bucket_latencies_99.keys(), bucket_latencies_99.values(), linewidth=2.5, label='99p')
-ax.plot(bucket_latencies_50.keys(), bucket_latencies_50.values(), linewidth=2.5, label='50p')
+ax.plot(bucket_latencies_99.keys(), bucket_latencies_99.values(), linewidth=2.5, label="99p")
+ax.plot(bucket_latencies_50.keys(), bucket_latencies_50.values(), linewidth=2.5, label="50p")
 ax.vlines(normalized_sn_starts, ymin=0, ymax=1000,
-          colors='green', linestyle='--', linewidth=3, label='Snapshot Start')
+          colors="green", linestyle="--", linewidth=3, label="Snapshot Start")
 ax.vlines(normalized_sn_ends, ymin=0, ymax=1000,
-          colors='red', linestyle='dotted', linewidth=3, label='Snapshot End')
-ax.set_xlabel('Time (seconds)')
-ax.set_ylabel('Latency (ms)')
+          colors="red", linestyle="dotted", linewidth=3, label="Snapshot End")
+ax.set_xlabel("Time (seconds)")
+ax.set_ylabel("Latency (ms)")
 ax.xaxis.set_major_formatter(mticker.FuncFormatter(update_ticks))
 # ax.yaxis.set_major_formatter(mticker.FuncFormatter(update_latency_ticks))
 ax.set_ylim([0, 40])
 ax.set_xlim([15, 65])
-plt.grid(linestyle='--', linewidth=0.5)
+plt.grid(linestyle="--", linewidth=0.5)
 ax.legend(bbox_to_anchor=(0.5, 1.08), loc="center", ncol=2)
 plt.savefig("latency_snapshot.pdf")
 plt.show()

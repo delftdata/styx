@@ -1,7 +1,7 @@
 from styx.common.operator import Operator
 from styx.common.stateful_function import StatefulFunction
 
-ycsb_operator = Operator('ycsb')
+ycsb_operator = Operator("ycsb")
 
 # key (int): value tuple[10] (bytes 100)
 

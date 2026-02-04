@@ -1,9 +1,9 @@
+from matplotlib import rcParams
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib import rcParams, rc
 
-rcParams['figure.figsize'] = [12, 5]
-plt.rcParams.update({'font.size': 18})
+rcParams["figure.figsize"] = [12, 5]
+plt.rcParams.update({"font.size": 18})
 
 x = np.array([100,
               300,
@@ -41,21 +41,21 @@ plt.grid(linestyle="--", linewidth=1.5)
 plt.plot(x[w1_50_mask], y_w1_50[w1_50_mask], "-o", color="#4B0082", label="W=1 50p",
          linewidth=line_width, markersize=marker_size)
 plt.plot(x[w1_99_mask], y_w1_99[w1_99_mask], "--", marker="o", color="#4B0082", label="W=1 99p",
-         linewidth=line_width, markersize=marker_size, markerfacecolor='none')
+         linewidth=line_width, markersize=marker_size, markerfacecolor="none")
 plt.plot(x[w10_50_mask], y_w10_50[w10_50_mask], "-^", color="#8B008B", label="W=10 50p",
          linewidth=line_width, markersize=marker_size)
 plt.plot(x[w10_99_mask], y_w10_99[w10_99_mask], "--", marker="^", color="#8B008B", label="W=10 99p",
-         linewidth=line_width, markersize=marker_size, markerfacecolor='none')
+         linewidth=line_width, markersize=marker_size, markerfacecolor="none")
 plt.plot(x[w100_50_mask], y_w100_50[w100_50_mask], "-d", color="#B65FCF", label="W=100 50p",
          linewidth=line_width, markersize=marker_size)
 plt.plot(x[w100_99_mask], y_w100_99[w100_99_mask], "--", marker="d", color="#B65FCF", label="W=100 99p",
-         linewidth=line_width, markersize=marker_size, markerfacecolor='none')
+         linewidth=line_width, markersize=marker_size, markerfacecolor="none")
 plt.legend(bbox_to_anchor=(0.5, 1.2), loc="center", ncol=3)
 # plt.ylim([1, 100000])
 # plt.xlim([100, 50000])
 plt.ylabel("Latency (ms)")
 plt.xlabel("Input Throughput (transactions/s)")
-plt.yscale('log', base=10)
+plt.yscale("log", base=10)
 # plt.xticks([i for i in x if i not in [18000, 42000]],
 #            labels)
 # plt.xscale('log', base=10)

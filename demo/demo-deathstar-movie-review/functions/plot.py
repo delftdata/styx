@@ -1,7 +1,7 @@
 from styx.common.operator import Operator
 from styx.common.stateful_function import StatefulFunction
 
-plot_operator = Operator('plot')
+plot_operator = Operator("plot")
 # key: movie_id
 
 

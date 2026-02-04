@@ -1,9 +1,9 @@
+from matplotlib import rcParams
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib import rcParams, rc
 
-rcParams['figure.figsize'] = [10, 9]
-plt.rcParams.update({'font.size': 14})
+rcParams["figure.figsize"] = [10, 9]
+plt.rcParams.update({"font.size": 14})
 
 x_labels = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99, 0.999]
 
@@ -57,8 +57,8 @@ ax1.set_ylim([1000, 14000])
 # ax1.ylabel("Latency (ms)")
 # ax1.xlabel("Input Throughput (transactions/s)")
 
-fig.supxlabel('Zipfian const')
-fig.supylabel('Latency (ms)')
+fig.supxlabel("Zipfian const")
+fig.supylabel("Latency (ms)")
 
 
 

@@ -22,6 +22,7 @@ epoch_size=${10}
 [ -n "${13}" ] && use_composite_keys=${13}
 [ -n "${14}" ] && use_fallback_cache=${14}
 [ -n "${15}" ] && regenerate_tpcc_data=${15}
+kill_at="-1" # This means that we are not going to kill any containers using this script
 
 echo "============= Running Experiment ================="
 echo "workload_name: $workload_name"
@@ -50,13 +51,13 @@ if [[ $workload_name == "ycsbt" ]]; then
     # To check if the state is correct within Styx, expensive to run together with large scale experiments, use for debug
     # values true | false
     run_with_validation=false
-    python demo/demo-ycsb/client.py "$client_threads" "$n_keys" "$n_part" "$zipf_const" "$input_rate" "$total_time" "$saving_dir" "$warmup_seconds" "$run_with_validation"
+    python demo/demo-ycsb/client.py "$client_threads" "$n_keys" "$n_part" "$zipf_const" "$input_rate" "$total_time" "$saving_dir" "$warmup_seconds" "$run_with_validation" "$kill_at"
 elif [[ $workload_name == "dhr" ]]; then
     # Deathstar Hotel Reservation
-    python demo/demo-deathstar-hotel-reservation/pure_kafka_demo.py "$saving_dir" "$client_threads" "$n_part" "$input_rate" "$total_time" "$warmup_seconds"
+    python demo/demo-deathstar-hotel-reservation/pure_kafka_demo.py "$saving_dir" "$client_threads" "$n_part" "$input_rate" "$total_time" "$warmup_seconds" "$kill_at"
 elif [[ $workload_name == "dmr" ]]; then
     # Deathstar Movie Review
-    python demo/demo-deathstar-movie-review/pure_kafka_demo.py "$saving_dir" "$client_threads" "$n_part" "$input_rate" "$total_time" "$warmup_seconds"
+    python demo/demo-deathstar-movie-review/pure_kafka_demo.py "$saving_dir" "$client_threads" "$n_part" "$input_rate" "$total_time" "$warmup_seconds" "$kill_at"
 elif [[ $workload_name == "tpcc" ]]; then
     # TPC-C
     DATA_DIR="demo/demo-tpc-c/data_${n_keys}"
@@ -86,7 +87,7 @@ elif [[ $workload_name == "tpcc" ]]; then
     python demo/demo-tpc-c/pure_kafka_demo.py \
         "$saving_dir" "$client_threads" "$n_part" \
         "$input_rate" "$total_time" "$warmup_seconds" \
-        "$n_keys" "$enable_compression" "$use_composite_keys" "$use_fallback_cache"
+        "$n_keys" "$enable_compression" "$use_composite_keys" "$use_fallback_cache" "$kill_at"
 else
     echo "Benchmark not supported!"
 fi

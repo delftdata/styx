@@ -1,7 +1,7 @@
+import argparse
 import os
 
 import pandas as pd
-import argparse
 
 # -----------------------------
 # Parse command-line arguments
@@ -109,7 +109,7 @@ if "ycsbt_uni" in scenarios:
     for input_rate, n_threads in input_throughput:
         file_name = f"ycsbt_uni_{input_rate * n_threads}.json"
         if file_name not in ycsbt_results:
-            lines.append(('ycsbt', input_rate, n_keys, partitions, zipf_const, n_threads,
+            lines.append(("ycsbt", input_rate, n_keys, partitions, zipf_const, n_threads,
                           experiment_time, warmup_time, 1_000, True, True, True))
 
 # ZIPF
@@ -139,7 +139,7 @@ if "ycsbt_zipf" in scenarios:
         for zipf_const in zipf_const_list:
             file_name = f"ycsbt_zipf_{zipf_const}_{input_rate * n_threads}.json"
             if file_name not in ycsbt_results:
-                lines.append(('ycsbt', input_rate, n_keys, partitions,
+                lines.append(("ycsbt", input_rate, n_keys, partitions,
                               zipf_const, n_threads, experiment_time, warmup_time, 100, True, True, True))
 
 
@@ -172,7 +172,7 @@ if "dhr" in scenarios:
     for input_rate, n_threads in input_throughput:
         file_name = f"d_hotel_reservation_{input_rate * n_threads}.json"
         if file_name not in d_hotel_results:
-            lines.append(('dhr', input_rate, -1, partitions, 0.0, n_threads, experiment_time, warmup_time, 1_000, True, True, True))
+            lines.append(("dhr", input_rate, -1, partitions, 0.0, n_threads, experiment_time, warmup_time, 1_000, True, True, True))
 
 
 # deathstar movie review
@@ -199,7 +199,7 @@ if "dmr" in scenarios:
     for input_rate, n_threads in input_throughput:
         file_name = f"d_movie_review_{input_rate * n_threads}.json"
         if file_name not in d_movie_results:
-            lines.append(('dmr', input_rate, -1, partitions, 0.0, n_threads, experiment_time, warmup_time, 1_000, True, True, True))
+            lines.append(("dmr", input_rate, -1, partitions, 0.0, n_threads, experiment_time, warmup_time, 1_000, True, True, True))
 
 
 # tpcc
@@ -244,7 +244,7 @@ if "tpcc" in scenarios:
 
                 if file_name not in tpcc_results:
                     lines.append((
-                        'tpcc',
+                        "tpcc",
                         input_rate,
                         n_w,
                         partitions,
@@ -259,4 +259,4 @@ if "tpcc" in scenarios:
                     ))
 
 df = pd.DataFrame(lines)
-df.to_csv(os.path.join(script_path, 'styx_experiments_config.csv'), index=False, header=False)
+df.to_csv(os.path.join(script_path, "styx_experiments_config.csv"), index=False, header=False)

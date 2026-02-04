@@ -2,8 +2,8 @@ import json
 import math
 import sys
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 
 
 def main(
@@ -12,35 +12,32 @@ def main(
         warmup_seconds,
         client_threads,
 ):
-    n_keys = 2000
     exp_name = f"d_movie_review_{input_rate * client_threads}"
 
-    origin_input_msgs = pd.read_csv(f'{save_dir}/client_requests.csv',
-                                    dtype={'request_id': bytes,
-                                           'timestamp': np.uint64}).sort_values('timestamp')
+    origin_input_msgs = pd.read_csv(f"{save_dir}/client_requests.csv",
+                                    dtype={"request_id": bytes,
+                                           "timestamp": np.uint64}).sort_values("timestamp")
 
-    duplicate_requests = not origin_input_msgs['request_id'].is_unique
+    duplicate_requests = not origin_input_msgs["request_id"].is_unique
 
 
-    output_msgs = pd.read_csv(f'{save_dir}/output.csv',
-                              dtype={'request_id': bytes,
-                                     'timestamp': np.uint64}, low_memory=False).sort_values('timestamp')
+    output_msgs = pd.read_csv(f"{save_dir}/output.csv",
+                              dtype={"request_id": bytes,
+                                     "timestamp": np.uint64}, low_memory=False).sort_values("timestamp")
 
-    exactly_once_output = output_msgs['request_id'].is_unique
-
-    output_run_messages = output_msgs.iloc[n_keys:]
+    exactly_once_output = output_msgs["request_id"].is_unique
 
     # remove warmup from input
-    input_msgs = origin_input_msgs.loc[(origin_input_msgs['timestamp'] -
-                                        origin_input_msgs['timestamp'][0] >= warmup_seconds * 1000)]
+    input_msgs = origin_input_msgs.loc[(origin_input_msgs["timestamp"] -
+                                        origin_input_msgs["timestamp"][0] >= warmup_seconds * 1000)]
 
     # Perform a left join to include all rows from client_df
-    joined = input_msgs.merge(output_run_messages, on='request_id', how='left', suffixes=('_client', '_output'))
+    joined = input_msgs.merge(output_msgs, on="request_id", how="left", suffixes=("_client", "_output"))
 
-    missed = len(joined[joined['timestamp_output'].isna()])
+    missed = len(joined[joined["timestamp_output"].isna()])
 
     joined = joined.dropna()
-    runtime = joined['timestamp_output'] - joined['timestamp_client']
+    runtime = joined["timestamp_output"] - joined["timestamp_client"]
 
 
     start_time = -math.inf
@@ -50,7 +47,7 @@ def main(
     # 1 second (ms) (i.e. bucket size)
     granularity = 1000
 
-    for t in output_msgs['timestamp']:
+    for t in output_msgs["timestamp"]:
         if t - start_time > granularity:
             bucket_id += 1
             start_time = t
@@ -60,7 +57,7 @@ def main(
 
     throughput_vals = list(throughput.values())
 
-    req_ids = output_msgs['request_id']
+    req_ids = output_msgs["request_id"]
     dup = output_msgs[req_ids.isin(req_ids[req_ids.duplicated()])].sort_values("request_id")
 
 
@@ -91,11 +88,11 @@ def main(
         "duplicate_messages": len(dup)
     }
 
-    with open(f'{save_dir}/{exp_name}.json', 'w', encoding='utf-8') as f:
+    with open(f"{save_dir}/{exp_name}.json", "w", encoding="utf-8") as f:
         json.dump(res_dict, f, ensure_ascii=False, indent=4)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
 
     main(
         sys.argv[1],

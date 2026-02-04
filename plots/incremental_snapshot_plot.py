@@ -1,18 +1,16 @@
-from collections import defaultdict
 
+from matplotlib import rcParams
 import matplotlib.pyplot as plt
-import numpy as np
-from matplotlib import rcParams, rc
 
-rcParams['figure.figsize'] = [12, 5]
-plt.rcParams.update({'font.size': 18})
+rcParams["figure.figsize"] = [12, 5]
+plt.rcParams.update({"font.size": 18})
 
 
 def parse_log_file(f_name: str):
     avg_sn_time: dict[int, float] = {}
     prev_id = 0
     cache = []
-    with open(f_name, "r") as f:
+    with open(f_name) as f:
         while True:
             line = f.readline()
             if not line:
@@ -58,14 +56,14 @@ marker_size = 8
 plt.grid(linestyle="--", linewidth=1.5)
 plt.plot(x, latencies, "-", color="#882255",
          linewidth=line_width, markersize=marker_size)
-plt.axvline(x=10, color='#005F20', label='Start bulk load ~ 20GB', linewidth=line_width, linestyle="--")
-plt.axvline(x=start_load_time, color='#332288', label='Start TPC-C@ 1K TPS', linewidth=line_width, linestyle="--")
+plt.axvline(x=10, color="#005F20", label="Start bulk load ~ 20GB", linewidth=line_width, linestyle="--")
+plt.axvline(x=start_load_time, color="#332288", label="Start TPC-C@ 1K TPS", linewidth=line_width, linestyle="--")
 plt.legend(loc="upper left")
 # plt.ylim([1, 1000])
 # plt.xlim([start_load_time, x[-1]])
 plt.ylabel("Snapshotting time (ms)")
 plt.xlabel("Runtime (s)")
-plt.yscale('log', base=10)
+plt.yscale("log", base=10)
 # plt.xscale('log', base=10)
 plt.tight_layout()
 plt.savefig("incremental_snapshots.pdf")

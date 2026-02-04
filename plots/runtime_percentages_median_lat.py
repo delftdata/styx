@@ -1,13 +1,12 @@
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
-import numpy as np
 from matplotlib import rcParams
+import matplotlib.pyplot as plt
+import numpy as np
 
 sys_name = "SysX"
 
-rcParams['figure.figsize'] = [12, 5]
+rcParams["figure.figsize"] = [12, 5]
 # plt.rcParams["figure.autolayout"] = True
-plt.rcParams.update({'font.size': 20})
+plt.rcParams.update({"font.size": 20})
 
 beldi_med_lat = 147.15
 boki_med_lat = 32.88

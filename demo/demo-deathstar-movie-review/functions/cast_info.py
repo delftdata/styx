@@ -1,7 +1,7 @@
 from styx.common.operator import Operator
 from styx.common.stateful_function import StatefulFunction
 
-cast_info_operator = Operator('cast_info')
+cast_info_operator = Operator("cast_info")
 # Global state query
 
 

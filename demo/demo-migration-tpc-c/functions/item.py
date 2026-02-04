@@ -1,7 +1,7 @@
 from styx.common.operator import Operator
 from styx.common.stateful_function import StatefulFunction
 
-item_operator = Operator('item')
+item_operator = Operator("item")
 
 # Key -> i_id
 
@@ -31,15 +31,15 @@ async def get_item(ctx: StatefulFunction,
     if item_data is None:
         # TPC-C 2.4.3.4 (page 31) says "Item number is not valid" must be displayed when new order rolls back.
         # 1% of transactions roll back defined by TPC-C 5.5.1.5 this is an expected exception
-        raise TPCCException(f'Item number is not valid')
+        raise TPCCException("Item number is not valid")
 
-    i_brand_generic = item_data['I_DATA'].find("original") != -1
-    i_name = item_data['I_NAME']
-    i_price = item_data['I_PRICE']
-    stock_key = f'{i_w_id}:{ctx.key}'
+    i_brand_generic = item_data["I_DATA"].find("original") != -1
+    i_name = item_data["I_NAME"]
+    i_price = item_data["I_PRICE"]
+    stock_key = f"{i_w_id}:{ctx.key}"
     ctx.call_remote_async(
-        'stock',
-        'update_stock',
+        "stock",
+        "update_stock",
         stock_key,
         (
             frontend_key,

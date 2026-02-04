@@ -1,5 +1,4 @@
-from .async_client import AsyncStyxClient
-from .sync_client import SyncStyxClient
+from styx.client.async_client import AsyncStyxClient
+from styx.client.sync_client import SyncStyxClient
 
-__all__ = ["AsyncStyxClient",
-           "SyncStyxClient"]
+__all__ = ["AsyncStyxClient", "SyncStyxClient"]

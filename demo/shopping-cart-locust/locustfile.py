@@ -1,9 +1,7 @@
 import random
 
-from locust import HttpUser, SequentialTaskSet, constant, task
-
 from init_orders import NUMBER_OF_ORDERS
-
+from locust import HttpUser, SequentialTaskSet, constant, task
 
 ORDER_URL = "http://localhost:8001"
 

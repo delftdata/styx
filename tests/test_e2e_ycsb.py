@@ -1,186 +1,22 @@
+from dataclasses import dataclass
 import json
 import logging
 import os
-import socket
-import subprocess
-import time
 from pathlib import Path
-import threading
 
 import pytest
 
+from tests.helpers import run_and_stream, wait_port
 
 log = logging.getLogger("e2e.ycsb")
 
 
-def wait_port(host: str, port: int, timeout_s: float = 120.0) -> None:
-    deadline = time.time() + timeout_s
-    last_err = None
-    while time.time() < deadline:
-        try:
-            with socket.create_connection((host, port), timeout=1.0):
-                return
-        except OSError as e:
-            last_err = e
-            time.sleep(0.5)
-    raise TimeoutError(f"Timed out waiting for {host}:{port} (last error: {last_err})")
-
-
-def run_and_stream(cmd, *, cwd: str, env: dict, timeout: float, banner: str):
-    log.info("=" * 100)
-    log.info("RUNNING: %s", banner)
-    log.info("CMD: %s", " ".join(cmd))
-    log.info("CWD: %s", cwd)
-    log.info("=" * 100)
-
-    proc = subprocess.Popen(
-        cmd,
-        cwd=cwd,
-        env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        bufsize=1,
-    )
-
-    output_lines: list[str] = []
-
-    try:
-        assert proc.stdout is not None
-        start = time.time()
-        for line in proc.stdout:
-            output_lines.append(line)
-            log.info("[subprocess] %s", line.rstrip("\n"))
-
-            if (time.time() - start) > timeout:
-                proc.kill()
-                raise TimeoutError(f"Timeout while running {banner} (>{timeout}s)")
-    finally:
-        try:
-            proc.stdout.close() if proc.stdout else None
-        except Exception:
-            pass
-
-    rc = proc.wait(timeout=30)
-
-    log.info("=" * 100)
-    log.info("FINISHED: %s (rc=%s)", banner, rc)
-    log.info("=" * 100)
-
-    return rc, "".join(output_lines)
-
-
-def run_and_stream_with_timed_action(
-    cmd,
-    *,
-    cwd: str,
-    env: dict,
-    timeout: float,
-    banner: str,
-    action_at_s: float,
-    action_cmd: list[str],
-    action_banner: str,
-):
-    """
-    Streams stdout like run_and_stream, but triggers action_cmd at action_at_s seconds
-    after process start, regardless of stdout activity.
-    """
-    log.info("=" * 100)
-    log.info("RUNNING: %s", banner)
-    log.info("CMD: %s", " ".join(cmd))
-    log.info("CWD: %s", cwd)
-    log.info("=" * 100)
-
-    proc = subprocess.Popen(
-        cmd,
-        cwd=cwd,
-        env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        bufsize=1,
-    )
-
-    output_lines: list[str] = []
-    action_done = threading.Event()
-    action_result = {"rc": None, "out": ""}
-
-    def _timer_action():
-        # Sleep independently of stdout streaming
-        time.sleep(action_at_s)
-        if proc.poll() is not None:
-            # Process already finished; nothing to do.
-            action_done.set()
-            return
-
-        log.info("=" * 100)
-        log.info("TIMED ACTION: %s", action_banner)
-        log.info("CMD: %s", " ".join(action_cmd))
-        log.info("=" * 100)
-
-        run = subprocess.run(
-            action_cmd,
-            cwd=cwd,
-            env=env,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-        )
-        action_result["rc"] = run.returncode
-        action_result["out"] = run.stdout or ""
-
-        log.info("TIMED ACTION FINISHED: rc=%s", action_result["rc"])
-        if action_result["out"].strip():
-            for l in action_result["out"].splitlines():
-                log.info("[timed-action] %s", l)
-
-        action_done.set()
-
-    t = threading.Thread(target=_timer_action, name="e2e-timed-action", daemon=True)
-    t.start()
-
-    try:
-        assert proc.stdout is not None
-        start = time.time()
-
-        for line in proc.stdout:
-            output_lines.append(line)
-            log.info("[subprocess] %s", line.rstrip("\n"))
-
-            if (time.time() - start) > timeout:
-                proc.kill()
-                raise TimeoutError(f"Timeout while running {banner} (>{timeout}s)")
-
-    finally:
-        try:
-            proc.stdout.close() if proc.stdout else None
-        except Exception:
-            pass
-
-    rc = proc.wait(timeout=30)
-
-    # Ensure the action thread has had a chance to run (or decide not to)
-    action_done.wait(timeout=5)
-
-    log.info("=" * 100)
-    log.info("FINISHED: %s (rc=%s)", banner, rc)
-    if action_result["rc"] is None:
-        log.info("TIMED ACTION SUMMARY: %s was NOT run (process ended before %ss)", action_banner, action_at_s)
-    else:
-        log.info("TIMED ACTION SUMMARY: %s rc=%s", action_banner, action_result["rc"])
-    log.info("=" * 100)
-
-    # If the timed action ran and failed, fail the test even if the client returned 0
-    if action_result["rc"] not in (None, 0):
-        raise AssertionError(
-            f"Timed action failed (rc={action_result['rc']}): {action_banner}\nOutput:\n{action_result['out']}"
-        )
-
-    return rc, "".join(output_lines)
-
-
-
-def _assert_metrics(results_dir: Path, zipf_const: float, input_rate: int, client_threads: int):
+def _assert_metrics(
+    results_dir: Path,
+    zipf_const: float,
+    input_rate: int,
+    client_threads: int,
+) -> None:
     if zipf_const > 0:
         exp_name = f"ycsbt_zipf_{zipf_const}_{input_rate * client_threads}"
     else:
@@ -201,116 +37,189 @@ def _assert_metrics(results_dir: Path, zipf_const: float, input_rate: int, clien
     assert metrics.get("exactly_once_output") is True, metrics
     assert metrics.get("total_consistent") is True, metrics
     assert metrics.get("are_we_consistent") is True, metrics
+    assert int(metrics.get("missed messages")) == 0, metrics
+
+
+@dataclass(frozen=True)
+class _ClusterParams:
+    n_partitions: int = 4
+    epoch_size: int = 1000
+    threads_per_worker: int = 1
+    enable_compression: str = "true"
+    use_composite_keys: str = "true"
+    use_fallback_cache: str = "true"
+
+
+@dataclass(frozen=True)
+class _ClientParams:
+    client_threads: int = 2
+    n_keys: int = 10_000
+    zipf_const: float = 0.0
+    input_rate: int = 200
+    total_time: int = 10
+    warmup_seconds: int = 1
+    run_with_validation: str = "true"
+    kill_at: int = -1  # <0 disables killing; client checks `0 <= kill_at == second`
+
+
+@dataclass(frozen=True)
+class _Paths:
+    repo_root: Path
+    demo_dir: Path
+    start_script: Path
+    stop_script: Path
+
+
+def _resolve_paths() -> _Paths:
+    repo_root = Path(__file__).resolve().parents[1]
+    demo_dir = repo_root / "demo" / "demo-ycsb"
+    start_script = repo_root / "scripts" / "start_styx_cluster.sh"
+    stop_script = repo_root / "scripts" / "stop_styx_cluster.sh"
+
+    assert demo_dir.exists(), f"Expected demo dir at {demo_dir}"
+    assert start_script.exists(), f"Missing: {start_script}"
+    assert stop_script.exists(), f"Missing: {stop_script}"
+
+    return _Paths(
+        repo_root=repo_root,
+        demo_dir=demo_dir,
+        start_script=start_script,
+        stop_script=stop_script,
+    )
+
+
+def _make_results_dir(tmp_path: Path) -> Path:
+    results_dir = tmp_path / "results"
+    results_dir.mkdir(parents=True, exist_ok=True)
+    log.info("Results dir: %s", results_dir)
+    return results_dir
+
+
+def _start_cmd(paths: _Paths, p: _ClusterParams) -> list[str]:
+    return [
+        "bash",
+        str(paths.start_script),
+        str(p.n_partitions),
+        str(p.epoch_size),
+        str(p.n_partitions),
+        str(p.threads_per_worker),
+        p.enable_compression,
+        p.use_composite_keys,
+        p.use_fallback_cache,
+    ]
+
+
+def _stop_cmd(paths: _Paths, p: _ClusterParams) -> list[str]:
+    return ["bash", str(paths.stop_script), str(p.threads_per_worker)]
+
+
+def _client_cmd(results_dir: Path, cluster: _ClusterParams, client: _ClientParams) -> list[str]:
+    # client.py expects argv[10] = kill_at
+    return [
+        "python",
+        "client.py",
+        str(client.client_threads),
+        str(client.n_keys),
+        str(cluster.n_partitions),
+        str(client.zipf_const),
+        str(client.input_rate),
+        str(client.total_time),
+        str(results_dir),
+        str(client.warmup_seconds),
+        client.run_with_validation,
+        str(client.kill_at),
+    ]
+
+
+def _start_cluster_and_wait(paths: _Paths, env: dict, cluster: _ClusterParams) -> None:
+    rc, out = run_and_stream(
+        _start_cmd(paths, cluster),
+        cwd=str(paths.repo_root),
+        env=env,
+        timeout=20 * 60,
+        banner="START STYX CLUSTER",
+        log=log,
+    )
+    if rc != 0:
+        raise AssertionError(f"start_styx_cluster.sh failed (rc={rc}). Output:\n{out}")
+
+    log.info("Waiting for Kafka external listener (127.0.0.1:9092)...")
+    wait_port("127.0.0.1", 9092, timeout_s=180)
+    log.info("Kafka port is up.")
+
+    log.info("Waiting for Styx coordinator published port (127.0.0.1:8886)...")
+    wait_port("127.0.0.1", 8886, timeout_s=240)
+    log.info("Coordinator port is up.")
+
+
+def _run_client(
+    *,
+    paths: _Paths,
+    env: dict,
+    results_dir: Path,
+    cluster: _ClusterParams,
+    client: _ClientParams,
+    timeout_s: int = 20 * 60,
+) -> None:
+    rc, out = run_and_stream(
+        _client_cmd(results_dir, cluster, client),
+        cwd=str(paths.demo_dir),
+        env=env,
+        timeout=timeout_s,
+        banner="RUN YCSB CLIENT",
+        log=log,
+    )
+    if rc != 0:
+        raise AssertionError(f"client.py failed (rc={rc}). Output:\n{out}")
+
+
+def _assert_artifacts_and_metrics(results_dir: Path, client: _ClientParams) -> None:
+    client_csv = results_dir / "client_requests.csv"
+    output_csv = results_dir / "output.csv"
+    log.info("Checking artifacts: %s and %s", client_csv, output_csv)
+
+    assert client_csv.exists(), f"Missing artifact: {client_csv}"
+    assert output_csv.exists(), f"Missing artifact: {output_csv}"
+
+    _assert_metrics(results_dir, client.zipf_const, client.input_rate, client.client_threads)
+
+
+def _stop_cluster(paths: _Paths, env: dict, cluster: _ClusterParams, *, timeout_s: int) -> None:
+    rc, out = run_and_stream(
+        _stop_cmd(paths, cluster),
+        cwd=str(paths.repo_root),
+        env=env,
+        timeout=timeout_s,
+        banner="STOP STYX CLUSTER",
+        log=log,
+    )
+    if rc != 0:
+        log.warning("stop_styx_cluster.sh failed (rc=%s). Output:\n%s", rc, out)
 
 
 @pytest.mark.e2e
 def test_styx_e2e_ycsb(tmp_path: Path):
-    repo_root = Path(__file__).resolve().parents[1]
-    demo_dir = repo_root / "demo" / "demo-ycsb"
-    assert demo_dir.exists(), f"Expected demo dir at {demo_dir}"
+    paths = _resolve_paths()
+    results_dir = _make_results_dir(tmp_path)
 
-    start_script = repo_root / "scripts" / "start_styx_cluster.sh"
-    stop_script = repo_root / "scripts" / "stop_styx_cluster.sh"
-    assert start_script.exists(), f"Missing: {start_script}"
-    assert stop_script.exists(), f"Missing: {stop_script}"
-
-    results_dir = tmp_path / "results"
-    results_dir.mkdir(parents=True, exist_ok=True)
-    log.info("Results dir: %s", results_dir)
-
-    n_partitions = 4
-    epoch_size = 1000
-    threads_per_worker = 1
-    enable_compression = "true"
-    use_composite_keys = "true"
-    use_fallback_cache = "true"
-
-    client_threads = 2
-    n_keys = 10_000
-    zipf_const = 0.0
-    input_rate = 200
-    total_time = 10
-    warmup_seconds = 1
-    run_with_validation = "true"
+    cluster = _ClusterParams()
+    client = _ClientParams(total_time=10, kill_at=-1)
 
     env = os.environ.copy()
 
-    start_cmd = [
-        "bash",
-        str(start_script),
-        str(n_partitions),
-        str(epoch_size),
-        str(n_partitions),
-        str(threads_per_worker),
-        enable_compression,
-        use_composite_keys,
-        use_fallback_cache,
-    ]
-
-    stop_cmd = ["bash", str(stop_script), str(threads_per_worker)]
-
     try:
-        rc, out = run_and_stream(
-            start_cmd,
-            cwd=str(repo_root),
+        _start_cluster_and_wait(paths, env, cluster)
+        _run_client(
+            paths=paths,
             env=env,
-            timeout=20 * 60,
-            banner="START STYX CLUSTER",
+            results_dir=results_dir,
+            cluster=cluster,
+            client=client,
+            timeout_s=20 * 60,
         )
-        if rc != 0:
-            raise AssertionError(f"start_styx_cluster.sh failed (rc={rc}). Output:\n{out}")
-
-        log.info("Waiting for Kafka external listener (127.0.0.1:9092)...")
-        wait_port("127.0.0.1", 9092, timeout_s=180)
-        log.info("Kafka port is up.")
-
-        log.info("Waiting for Styx coordinator published port (127.0.0.1:8886)...")
-        wait_port("127.0.0.1", 8886, timeout_s=240)
-        log.info("Coordinator port is up.")
-
-        client_cmd = [
-            "python",
-            "client.py",
-            str(client_threads),
-            str(n_keys),
-            str(n_partitions),
-            str(zipf_const),
-            str(input_rate),
-            str(total_time),
-            str(results_dir),
-            str(warmup_seconds),
-            run_with_validation,
-        ]
-
-        rc, out = run_and_stream(
-            client_cmd,
-            cwd=str(demo_dir),
-            env=env,
-            timeout=20 * 60,
-            banner="RUN YCSB CLIENT",
-        )
-        if rc != 0:
-            raise AssertionError(f"client.py failed (rc={rc}). Output:\n{out}")
-
-        client_csv = results_dir / "client_requests.csv"
-        output_csv = results_dir / "output.csv"
-        log.info("Checking artifacts: %s and %s", client_csv, output_csv)
-
-        assert client_csv.exists(), f"Missing artifact: {client_csv}"
-        assert output_csv.exists(), f"Missing artifact: {output_csv}"
-
-        _assert_metrics(results_dir, zipf_const, input_rate, client_threads)
-
+        _assert_artifacts_and_metrics(results_dir, client)
     finally:
-        rc, out = run_and_stream(
-            stop_cmd,
-            cwd=str(repo_root),
-            env=env,
-            timeout=10 * 60,
-            banner="STOP STYX CLUSTER",
-        )
-        if rc != 0:
-            log.warning("stop_styx_cluster.sh failed (rc=%s). Output:\n%s", rc, out)
+        _stop_cluster(paths, env, cluster, timeout_s=10 * 60)
 
 
 @pytest.mark.e2e
@@ -318,117 +227,26 @@ def test_styx_e2e_ycsb_kill_worker_midrun(tmp_path: Path):
     """
     Same scenario/params, but:
       - total_time = 60 seconds
-      - at t=30s after client start: docker kill styx-worker-1
+      - kill at second=40 inside client.py (proc 0 only)
     """
-    repo_root = Path(__file__).resolve().parents[1]
-    demo_dir = repo_root / "demo" / "demo-ycsb"
-    assert demo_dir.exists(), f"Expected demo dir at {demo_dir}"
+    paths = _resolve_paths()
+    results_dir = _make_results_dir(tmp_path)
 
-    start_script = repo_root / "scripts" / "start_styx_cluster.sh"
-    stop_script = repo_root / "scripts" / "stop_styx_cluster.sh"
-    assert start_script.exists(), f"Missing: {start_script}"
-    assert stop_script.exists(), f"Missing: {stop_script}"
-
-    results_dir = tmp_path / "results"
-    results_dir.mkdir(parents=True, exist_ok=True)
-    log.info("Results dir: %s", results_dir)
-
-    n_partitions = 4
-    epoch_size = 1000
-    threads_per_worker = 1
-    enable_compression = "true"
-    use_composite_keys = "true"
-    use_fallback_cache = "true"
-
-    client_threads = 2
-    n_keys = 10_000
-    zipf_const = 0.0
-    input_rate = 200
-    total_time = 60
-    warmup_seconds = 1
-    run_with_validation = "true"
+    cluster = _ClusterParams()
+    client = _ClientParams(total_time=60, kill_at=20, warmup_seconds=10)
 
     env = os.environ.copy()
 
-    start_cmd = [
-        "bash",
-        str(start_script),
-        str(n_partitions),
-        str(epoch_size),
-        str(n_partitions),
-        str(threads_per_worker),
-        enable_compression,
-        use_composite_keys,
-        use_fallback_cache,
-    ]
-
-    stop_cmd = ["bash", str(stop_script), str(threads_per_worker)]
-
     try:
-        rc, out = run_and_stream(
-            start_cmd,
-            cwd=str(repo_root),
+        _start_cluster_and_wait(paths, env, cluster)
+        _run_client(
+            paths=paths,
             env=env,
-            timeout=20 * 60,
-            banner="START STYX CLUSTER",
+            results_dir=results_dir,
+            cluster=cluster,
+            client=client,
+            timeout_s=30 * 60,  # headroom for recovery
         )
-        if rc != 0:
-            raise AssertionError(f"start_styx_cluster.sh failed (rc={rc}). Output:\n{out}")
-
-        log.info("Waiting for Kafka external listener (127.0.0.1:9092)...")
-        wait_port("127.0.0.1", 9092, timeout_s=180)
-        log.info("Kafka port is up.")
-
-        log.info("Waiting for Styx coordinator published port (127.0.0.1:8886)...")
-        wait_port("127.0.0.1", 8886, timeout_s=240)
-        log.info("Coordinator port is up.")
-
-        client_cmd = [
-            "python",
-            "client.py",
-            str(client_threads),
-            str(n_keys),
-            str(n_partitions),
-            str(zipf_const),
-            str(input_rate),
-            str(total_time),
-            str(results_dir),
-            str(warmup_seconds),
-            run_with_validation,
-        ]
-
-        # Kill styx-worker-1 at 30s after client starts.
-        kill_cmd = ["docker", "kill", "styx-worker-1"]
-
-        rc, out = run_and_stream_with_timed_action(
-            client_cmd,
-            cwd=str(demo_dir),
-            env=env,
-            timeout=30 * 60,  # give headroom for recovery
-            banner="RUN YCSB CLIENT (KILL worker at 30s)",
-            action_at_s=40.0,
-            action_cmd=kill_cmd,
-            action_banner="docker kill styx-worker-1",
-        )
-        if rc != 0:
-            raise AssertionError(f"client.py failed (rc={rc}). Output:\n{out}")
-
-        client_csv = results_dir / "client_requests.csv"
-        output_csv = results_dir / "output.csv"
-        log.info("Checking artifacts: %s and %s", client_csv, output_csv)
-
-        assert client_csv.exists(), f"Missing artifact: {client_csv}"
-        assert output_csv.exists(), f"Missing artifact: {output_csv}"
-
-        _assert_metrics(results_dir, zipf_const, input_rate, client_threads)
-
+        _assert_artifacts_and_metrics(results_dir, client)
     finally:
-        rc, out = run_and_stream(
-            stop_cmd,
-            cwd=str(repo_root),
-            env=env,
-            timeout=15 * 60,
-            banner="STOP STYX CLUSTER",
-        )
-        if rc != 0:
-            log.warning("stop_styx_cluster.sh failed (rc=%s). Output:\n%s", rc, out)
+        _stop_cluster(paths, env, cluster, timeout_s=15 * 60)
