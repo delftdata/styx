@@ -8,12 +8,13 @@ services:
     ports:
       - "8886:8888"
       - "8000:8000"
-    env_file:
-      - env/minio.env
     environment:
       - KAFKA_URL=kafka1:19092
       - HEARTBEAT_LIMIT=5000
       - HEARTBEAT_CHECK_INTERVAL=500
+      - S3_ENDPOINT=http://rustfs:9000
+      - S3_ACCESS_KEY=rustfsadmin
+      - S3_SECRET_KEY=rustfsadmin
     depends_on:
       - prometheus
       - grafana
@@ -50,9 +51,9 @@ services:
       - KAFKA_URL=kafka1:19092
       - DISCOVERY_HOST=coordinator
       - DISCOVERY_PORT=8888
-    env_file:
-      - env/minio.env
-#    cpus: ${STYX_WORKER_THREADS}
+      - S3_ENDPOINT=http://rustfs:9000
+      - S3_ACCESS_KEY=rustfsadmin
+      - S3_SECRET_KEY=rustfsadmin
     depends_on:
       - coordinator
 

@@ -12,7 +12,7 @@ from styx.common.tcp_networking import NetworkingManager
 from styx.common.util.aio_task_scheduler import AIOTaskScheduler
 import uvloop
 
-from worker.fault_tolerance.async_snapshots import AsyncSnapshotsMinio
+from worker.fault_tolerance.async_snapshots import AsyncSnapshotsS3
 
 if TYPE_CHECKING:
     from styx.common.types import KVPairs, OperatorPartition
@@ -47,7 +47,7 @@ class AsyncSnapshottingProcess:
         )
         self.delta_maps: dict[OperatorPartition, KVPairs] = {}
         self.worker_id = worker_id
-        self.async_snapshots = AsyncSnapshotsMinio(self.worker_id)
+        self.async_snapshots = AsyncSnapshotsS3(self.worker_id)
 
     def process_delta(self, delta: dict[OperatorPartition, KVPairs]) -> None:
         for operator_partition, kv_pairs in delta.items():

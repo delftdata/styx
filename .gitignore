@@ -129,8 +129,6 @@ dmypy.json
 
 .idea
 
-minio-volume
-
 *.csv
 *.json
 *.pdf

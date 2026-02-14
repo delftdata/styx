@@ -1,6 +1,5 @@
 import asyncio
 from copy import deepcopy
-import io
 import os
 from typing import TYPE_CHECKING
 
@@ -25,7 +24,7 @@ from worker_pool import Worker, WorkerPool
 if TYPE_CHECKING:
     import concurrent.futures
 
-    from minio import Minio
+    from botocore.client import BaseClient as S3Client
     from styx.common.tcp_networking import NetworkingManager
     from styx.common.types import OperatorPartition
 
@@ -37,9 +36,9 @@ KAFKA_URL: str = os.getenv("KAFKA_URL", None)
 
 
 class Coordinator:
-    def __init__(self, networking: NetworkingManager, minio_client: Minio) -> None:
+    def __init__(self, networking: NetworkingManager, s3_client: S3Client) -> None:
         self.networking = networking
-        self.minio_client = minio_client
+        self.s3_client = s3_client
         self.graph_submitted: bool = False
         self.prev_completed_snapshot_id: int = -1
         self.completed_input_offsets: dict[OperatorPartition, int] = {}
@@ -193,7 +192,7 @@ class Coordinator:
         current_completed_snapshot: int = self.get_current_completed_snapshot_id()
         if current_completed_snapshot != self.prev_completed_snapshot_id:
             logging.warning(f"Cluster completed snapshot: {current_completed_snapshot}")
-            # if we reached a complete snapshot we could compact its deltas with the previous one
+            # if we reached a complete snapshot, we could compact its deltas with the previous one
             sn_data: bytes = zstd_msgpack_serialization(
                 (
                     self.completed_input_offsets,
@@ -202,11 +201,10 @@ class Coordinator:
                     self.completed_t_counter,
                 ),
             )
-            self.minio_client.put_object(
-                SNAPSHOT_BUCKET_NAME,
-                f"sequencer/{current_completed_snapshot}.bin",
-                io.BytesIO(sn_data),
-                len(sn_data),
+            self.s3_client.put_object(
+                Bucket=SNAPSHOT_BUCKET_NAME,
+                Key=f"sequencer/{current_completed_snapshot}.bin",
+                Body=sn_data,
             )
             self.prev_completed_snapshot_id = current_completed_snapshot
             if COMPACT_SNAPSHOTS:

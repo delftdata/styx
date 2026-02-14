@@ -13,6 +13,8 @@ import time
 from timeit import default_timer as timer
 from typing import Any
 
+import boto3
+
 import calculate_metrics
 from graph import (
     customer_idx_operator,
@@ -29,7 +31,6 @@ from graph import (
     warehouse_operator,
 )
 import kafka_output_consumer
-from minio import Minio
 import pandas as pd
 import rand
 from setuptools._distutils.util import strtobool
@@ -441,8 +442,14 @@ def benchmark_runner(proc_num) -> dict[bytes, dict]:
 
 
 def main():
-    minio = Minio("localhost:9000", access_key="minio", secret_key="minio123", secure=False)
-    styx_client = SyncStyxClient(STYX_HOST, STYX_PORT, kafka_url=KAFKA_URL, minio=minio)
+    s3 = boto3.client(
+        "s3",
+        endpoint_url="http://localhost:9000",
+        aws_access_key_id="rustfsadmin",
+        aws_secret_access_key="rustfsadmin",
+        region_name="us-east-1"
+    )
+    styx_client = SyncStyxClient(STYX_HOST, STYX_PORT, kafka_url=KAFKA_URL, s3=s3)
     tpc_c_init(styx_client)
     del styx_client
     print("Data populated waiting for 1 minute")

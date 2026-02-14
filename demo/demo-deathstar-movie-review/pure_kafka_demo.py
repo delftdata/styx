@@ -2,7 +2,7 @@ import hashlib
 import multiprocessing
 import subprocess
 
-from minio import Minio
+import boto3
 
 multiprocessing.set_start_method("fork", force=True)
 from multiprocessing import Pool
@@ -233,8 +233,14 @@ def benchmark_runner(proc_num) -> dict[bytes, dict]:
 
 
 def main():
-    minio = Minio("localhost:9000", access_key="minio", secret_key="minio123", secure=False)
-    styx_client = SyncStyxClient(STYX_HOST, STYX_PORT, kafka_url=KAFKA_URL, minio=minio)
+    s3 = boto3.client(
+        "s3",
+        endpoint_url="http://localhost:9000",
+        aws_access_key_id="rustfsadmin",
+        aws_secret_access_key="rustfsadmin",
+        region_name="us-east-1"
+    )
+    styx_client = SyncStyxClient(STYX_HOST, STYX_PORT, kafka_url=KAFKA_URL, s3=s3)
     styx_client.open(consume=False)
 
     deathstar_init(styx_client)

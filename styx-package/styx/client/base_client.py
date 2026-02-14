@@ -1,9 +1,9 @@
 from abc import ABC, abstractmethod
-import io
 from types import ModuleType
 from typing import TYPE_CHECKING
 import uuid
 
+import botocore
 from cloudpickle import cloudpickle
 
 from styx.common.base_networking import BaseNetworking
@@ -19,11 +19,24 @@ from styx.common.serialization import (
 from styx.common.stateflow_graph import StateflowGraph
 
 if TYPE_CHECKING:
-    from minio import Minio
+    from botocore.client import BaseClient as S3Client
 
     from styx.client.styx_future import StyxAsyncFuture, StyxFuture
     from styx.common.base_operator import BaseOperator
     from styx.common.types import K, KVPairs
+
+
+SNAPSHOT_BUCKET = "styx-snapshots"
+
+
+def _ensure_bucket_exists(s3: S3Client, bucket: str) -> None:
+    try:
+        s3.create_bucket(Bucket=bucket)
+    except botocore.exceptions.ClientError as e:
+        code = e.response.get("Error", {}).get("Code", "")
+        if code in {"BucketAlreadyOwnedByYou", "BucketAlreadyExists", "AlreadyExists", "409"}:
+            return
+        raise
 
 
 class BaseStyxClient(ABC):
@@ -31,15 +44,15 @@ class BaseStyxClient(ABC):
         self,
         styx_coordinator_adr: str,
         styx_coordinator_port: int,
-        minio: Minio | None = None,
+        s3: S3Client | None = None,
     ) -> None:
         self._styx_coordinator_adr: str = styx_coordinator_adr
         self._styx_coordinator_port: int = styx_coordinator_port
         self._delivery_timestamps: dict[bytes, int] = {}
         self._current_active_graph: StateflowGraph | None = None
-        self.minio = minio
-        if self.minio is not None and not self.minio.bucket_exists("styx-snapshots"):
-            self.minio.make_bucket("styx-snapshots")
+        self.s3 = s3
+        if self.s3 is not None:
+            _ensure_bucket_exists(self.s3, SNAPSHOT_BUCKET)
 
     @property
     def delivery_timestamps(self) -> dict[bytes, int]:
@@ -138,16 +151,23 @@ class BaseStyxClient(ABC):
         partition: int,
         key_value_pairs: KVPairs,
     ) -> None:
+        if self.s3 is None:
+            msg = "No S3 client configured (s3=None); cannot init_data()"
+            raise RuntimeError(msg)
+
         snapshot_name = f"data/{operator.name}/{partition}/0.bin"
         sn_data: bytes = zstd_msgpack_serialization(key_value_pairs)
-        self.minio.put_object(
-            "styx-snapshots",
-            snapshot_name,
-            io.BytesIO(sn_data),
-            len(sn_data),
+        self.s3.put_object(
+            Bucket=SNAPSHOT_BUCKET,
+            Key=snapshot_name,
+            Body=sn_data,
         )
 
     def init_metadata(self, graph: StateflowGraph) -> None:
+        if self.s3 is None:
+            msg = "No S3 client configured (s3=None); cannot init_metadata()"
+            raise RuntimeError(msg)
+
         topic_partition_offsets = {
             (operator_name, partition): -1
             for operator_name, operator in graph.nodes.items()
@@ -160,14 +180,14 @@ class BaseStyxClient(ABC):
         }
         epoch_counter = 0
         t_counter = 0
+
         sn_data: bytes = zstd_msgpack_serialization(
             (topic_partition_offsets, output_offsets, epoch_counter, t_counter),
         )
-        self.minio.put_object(
-            "styx-snapshots",
-            "sequencer/0.bin",
-            io.BytesIO(sn_data),
-            len(sn_data),
+        self.s3.put_object(
+            Bucket=SNAPSHOT_BUCKET,
+            Key="sequencer/0.bin",
+            Body=sn_data,
         )
 
     @abstractmethod

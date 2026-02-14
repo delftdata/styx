@@ -23,9 +23,6 @@ pip install -r requirements.txt
 *   [`demo`](https://github.com/delftdata/styx/tree/main/benchmark) 
     The YCSB-T, Deathstar, TPC-C and scalability benchmarks we used for the experiments.
 
-*   [`env`](https://github.com/delftdata/styx/tree/main/env)
-    env folder for the docker-compose Minio container.
-
 *   [`grafana`](https://github.com/delftdata/styx/tree/main/grafana)
     The confinguration files for the deployment of our visualization dashboards.
 
@@ -123,7 +120,7 @@ The options for `[WORKLOAD_NAME]` are `ycsbt` for YCSB-T, `dhr` for deathstar ho
 ## Alternative way of execution
 
 **Alternatively**, you can also handle the individual components of Styx as follows. First, you need to deploy 
-the Kafka cluster and the MinIO storage. And use any of the clients in the `/demo` folder.
+the Kafka cluster and the S3 storage (Rustfs). And use any of the clients in the `/demo` folder.
 
 ### Kafka
 
@@ -133,11 +130,11 @@ To clear kafka: `docker compose -f docker-compose-kafka.yml down --volumes`
 
 ---
 
-### MinIO
+### S3 (Rustfs)
 
-To run MinIO: `docker-compose up -f docker-compose-minio.yml up`
+To run self-hosted S3: `docker-compose up -f docker-compose-s3.yml up`
 
-To clear MinIO: `docker-compose -f docker-compose-minio.yml down --volumes`
+To clear self-hosted S3: `docker-compose -f docker-compose-s3.yml down --volumes`
 
 ---
   

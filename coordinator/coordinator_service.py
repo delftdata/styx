@@ -14,9 +14,9 @@ from timeit import default_timer as timer
 from typing import TYPE_CHECKING
 
 from aria_sync_metadata import AriaSyncMetadata
+import boto3
+import botocore
 from coordinator_metadata import Coordinator
-from minio import Minio
-import minio.error
 from prometheus_client import Gauge, start_http_server
 from styx.common.logging import logging
 from styx.common.message_types import MessageType
@@ -36,9 +36,10 @@ if TYPE_CHECKING:
 SERVER_PORT = 8888
 PROTOCOL_PORT = 8889
 
-MINIO_URL: str = f"{os.environ['MINIO_HOST']}:{os.environ['MINIO_PORT']}"
-MINIO_ACCESS_KEY: str = os.environ["MINIO_ROOT_USER"]
-MINIO_SECRET_KEY: str = os.environ["MINIO_ROOT_PASSWORD"]
+S3_ENDPOINT: str = os.environ["S3_ENDPOINT"]
+S3_ACCESS_KEY: str = os.environ["S3_ACCESS_KEY"]
+S3_SECRET_KEY: str = os.environ["S3_SECRET_KEY"]
+S3_REGION: str = os.getenv("S3_REGION", "us-east-1")
 
 PROTOCOL = Protocols.Aria
 
@@ -64,13 +65,14 @@ class CoordinatorService:
             size=4,
             mode=MessagingMode.PROTOCOL_PROTOCOL,
         )
-        self.minio_client: Minio = Minio(
-            MINIO_URL,
-            access_key=MINIO_ACCESS_KEY,
-            secret_key=MINIO_SECRET_KEY,
-            secure=False,
+        self.s3_client = boto3.client(
+            "s3",
+            endpoint_url=S3_ENDPOINT,
+            aws_access_key_id=S3_ACCESS_KEY,
+            aws_secret_access_key=S3_SECRET_KEY,
+            region_name=S3_REGION,
         )
-        self.coordinator = Coordinator(self.networking, self.minio_client)
+        self.coordinator = Coordinator(self.networking, self.s3_client)
         self.aio_task_scheduler = AIOTaskScheduler()
         self.aio_task_scheduler_coord = AIOTaskScheduler()
 
@@ -904,16 +906,17 @@ class CoordinatorService:
                 await self.snapshotting_task
             self.snapshotting_task = None
 
-    def init_snapshot_minio_bucket(self) -> None:
+    def init_snapshot_bucket(self) -> None:
         try:
-            if not self.minio_client.bucket_exists(SNAPSHOT_BUCKET_NAME):
-                self.minio_client.make_bucket(SNAPSHOT_BUCKET_NAME)
-        except minio.error.S3Error:
-            # BUCKET ALREADY EXISTS
-            pass
+            self.s3_client.create_bucket(Bucket=SNAPSHOT_BUCKET_NAME)
+        except botocore.exceptions.ClientError as e:
+            code = e.response.get("Error", {}).get("Code", "")
+            if code in {"BucketAlreadyOwnedByYou", "BucketAlreadyExists"}:
+                return
+            raise
 
     async def main(self) -> None:
-        self.init_snapshot_minio_bucket()
+        self.init_snapshot_bucket()
         self.aio_task_scheduler_coord.create_task(self.heartbeat_monitor_coroutine())
         self.snapshotting_task = asyncio.create_task(self.send_snapshot_marker())
         await self.tcp_service()

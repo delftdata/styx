@@ -30,7 +30,6 @@ import contextlib
 
 from aiokafka import AIOKafkaConsumer, TopicPartition
 from aiokafka.errors import KafkaConnectionError, UnknownTopicOrPartitionError
-from minio import Minio
 from styx.common.local_state_backends import LocalStateBackend
 from styx.common.logging import logging
 from styx.common.message_types import MessageType
@@ -41,7 +40,7 @@ from styx.common.util.aio_task_scheduler import AIOTaskScheduler
 import uvloop
 
 from worker.async_snapshotting import AsyncSnapshottingProcess
-from worker.fault_tolerance.async_snapshots import AsyncSnapshotsMinio
+from worker.fault_tolerance.async_snapshots import AsyncSnapshotsS3
 from worker.operator_state.aria.in_memory_state import InMemoryOperatorState
 from worker.operator_state.stateless import Stateless
 from worker.transactional_protocols.aria import AriaProtocol
@@ -54,9 +53,6 @@ DISCOVERY_HOST: str = os.environ["DISCOVERY_HOST"]
 DISCOVERY_PORT: int = int(os.environ["DISCOVERY_PORT"])
 INGRESS_TYPE = os.getenv("INGRESS_TYPE", None)
 
-MINIO_URL: str = f"{os.environ['MINIO_HOST']}:{os.environ['MINIO_PORT']}"
-MINIO_ACCESS_KEY: str = os.environ["MINIO_ROOT_USER"]
-MINIO_SECRET_KEY: str = os.environ["MINIO_ROOT_PASSWORD"]
 KAFKA_URL: str = os.environ["KAFKA_URL"]
 HEARTBEAT_INTERVAL: int = int(os.getenv("HEARTBEAT_INTERVAL", "500"))  # 500ms
 SNAPSHOT_BUCKET_NAME: str = os.getenv("SNAPSHOT_BUCKET_NAME", "styx-snapshots")
@@ -144,17 +140,10 @@ class Worker:
         self.aio_task_scheduler = AIOTaskScheduler()
         self.protocol_task_scheduler = AIOTaskScheduler()
 
-        self.async_snapshots: AsyncSnapshotsMinio | None = None
+        self.async_snapshots: AsyncSnapshotsS3 | None = None
         self.protocol_task: asyncio.Task | None = None
 
         self.worker_operators: dict[OperatorPartition, Operator] | None = None
-
-        self.minio_client: Minio = Minio(
-            MINIO_URL,
-            access_key=MINIO_ACCESS_KEY,
-            secret_key=MINIO_SECRET_KEY,
-            secure=False,
-        )
 
         self.migration_repartitioning_done: asyncio.Event = asyncio.Event()
         self.migration_completed: asyncio.Event = asyncio.Event()
@@ -363,7 +352,7 @@ class Worker:
         self._update_peers(peers)
         self._build_registered_operators(self.worker_operators)
 
-        self.async_snapshots = AsyncSnapshotsMinio(
+        self.async_snapshots = AsyncSnapshotsS3(
             self.id,
             n_assigned_partitions=len(self.registered_operators),
         )
@@ -654,7 +643,7 @@ class Worker:
 
         self._build_registered_operators(self.worker_operators)
 
-        self.async_snapshots = AsyncSnapshotsMinio(
+        self.async_snapshots = AsyncSnapshotsS3(
             self.id,
             n_assigned_partitions=len(self.registered_operators),
         )
