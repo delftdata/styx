@@ -8,9 +8,10 @@ import sys
 import time
 from timeit import default_timer as timer
 
+import boto3
+
 import calculate_metrics
 import kafka_output_consumer
-from minio import Minio
 import pandas as pd
 from styx.client.sync_client import SyncStyxClient
 from styx.common.local_state_backends import LocalStateBackend
@@ -168,8 +169,14 @@ def main():
         print("Impossible to run this benchmark with one key")
         return
 
-    minio = Minio("localhost:9000", access_key="minio", secret_key="minio123", secure=False)
-    styx_client = SyncStyxClient(STYX_HOST, STYX_PORT, kafka_url=KAFKA_URL, minio=minio)
+    s3 = boto3.client(
+        "s3",
+        endpoint_url="http://localhost:9000",
+        aws_access_key_id="rustfsadmin",
+        aws_secret_access_key="rustfsadmin",
+        region_name="us-east-1"
+    )
+    styx_client = SyncStyxClient(STYX_HOST, STYX_PORT, kafka_url=KAFKA_URL, s3=s3)
     ycsb_init(styx_client, ycsb_operator)
     del styx_client
     time.sleep(5)

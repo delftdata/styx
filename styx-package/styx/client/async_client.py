@@ -19,7 +19,7 @@ from styx.common.stateflow_graph import StateflowGraph
 from styx.common.tcp_networking import NetworkingManager
 
 if TYPE_CHECKING:
-    from minio import Minio
+    from botocore.client import BaseClient as S3Client
 
     from styx.common.base_operator import BaseOperator
     from styx.common.types import K
@@ -38,7 +38,7 @@ class AsyncStyxClient(BaseStyxClient):
         styx_coordinator_adr: str,
         styx_coordinator_port: int,
         kafka_url: str,
-        minio: Minio | None = None,
+        s3: S3Client | None = None,
     ) -> None:
         """Initializes an asynchronous Styx client.
 
@@ -47,7 +47,7 @@ class AsyncStyxClient(BaseStyxClient):
             styx_coordinator_port (int): Port of the Styx coordinator.
             kafka_url (str): Kafka bootstrap server URL.
         """
-        super().__init__(styx_coordinator_adr, styx_coordinator_port, minio)
+        super().__init__(styx_coordinator_adr, styx_coordinator_port, s3)
         self._kafka_url = kafka_url
         self._futures: dict[bytes, StyxAsyncFuture] = {}
         self._result_consumer_task: asyncio.Task | None = None

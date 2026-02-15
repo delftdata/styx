@@ -1,10 +1,9 @@
-import io
 import os
 import socket
 import time
 from typing import TYPE_CHECKING
 
-from minio import Minio
+import boto3
 from styx.common.message_types import MessageType
 from styx.common.serialization import Serializer, zstd_msgpack_deserialization
 from styx.common.tcp_networking import NetworkingManager
@@ -15,17 +14,33 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
     from concurrent.futures import Future
 
+    from botocore.client import BaseClient as S3Client
     from styx.common.types import KVPairs, OperatorPartition
 
 COORDINATOR_HOST: str = os.environ["DISCOVERY_HOST"]
 COORDINATOR_PORT: int = int(os.environ["DISCOVERY_PORT"])
-MINIO_URL: str = f"{os.environ['MINIO_HOST']}:{os.environ['MINIO_PORT']}"
-MINIO_ACCESS_KEY: str = os.environ["MINIO_ROOT_USER"]
-MINIO_SECRET_KEY: str = os.environ["MINIO_ROOT_PASSWORD"]
+
+# Keep current env var names for minimal diff (works for RustFS too)
+S3_ENDPOINT: str = os.environ["S3_ENDPOINT"]
+S3_ACCESS_KEY: str = os.environ["S3_ACCESS_KEY"]
+S3_SECRET_KEY: str = os.environ["S3_SECRET_KEY"]
+S3_REGION: str = os.getenv("S3_REGION", "us-east-1")
+
 SNAPSHOT_BUCKET_NAME: str = os.getenv("SNAPSHOT_BUCKET_NAME", "styx-snapshots")
+SEQUENCER_PREFIX = "sequencer/"
 
 
-class AsyncSnapshotsMinio(BaseSnapshotter):
+def _mk_s3_client() -> S3Client:
+    return boto3.client(
+        "s3",
+        endpoint_url=S3_ENDPOINT,
+        aws_access_key_id=S3_ACCESS_KEY,
+        aws_secret_access_key=S3_SECRET_KEY,
+        region_name=S3_REGION,
+    )
+
+
+class AsyncSnapshotsS3(BaseSnapshotter):
     def __init__(
         self,
         worker_id: int,
@@ -97,17 +112,11 @@ class AsyncSnapshotsMinio(BaseSnapshotter):
 
     @staticmethod
     def store_snapshot(snapshot_name: str, sn_data: bytes) -> bool:
-        minio_client: Minio = Minio(
-            MINIO_URL,
-            access_key=MINIO_ACCESS_KEY,
-            secret_key=MINIO_SECRET_KEY,
-            secure=False,
-        )
-        minio_client.put_object(
-            SNAPSHOT_BUCKET_NAME,
-            snapshot_name,
-            io.BytesIO(sn_data),
-            len(sn_data),
+        s3 = _mk_s3_client()
+        s3.put_object(
+            Bucket=SNAPSHOT_BUCKET_NAME,
+            Key=snapshot_name,
+            Body=sn_data,
         )
         return True
 
@@ -126,77 +135,75 @@ class AsyncSnapshotsMinio(BaseSnapshotter):
         if snapshot_id == -1:
             return {}, {}, {}, 0, 0
 
-        minio_client: Minio = Minio(
-            MINIO_URL,
-            access_key=MINIO_ACCESS_KEY,
-            secret_key=MINIO_SECRET_KEY,
-            secure=False,
-        )
+        s3 = _mk_s3_client()
+        data = self._load_operator_state(s3, snapshot_id, registered_operators)
+        tp_offsets, tp_out_offsets, epoch, t_counter = self._load_sequencer_state(s3, snapshot_id)
+        return data, tp_offsets, tp_out_offsets, epoch, t_counter
 
+    def _load_operator_state(
+        self,
+        s3: S3Client,
+        snapshot_id: int,
+        registered_operators: Iterable[OperatorPartition],
+    ) -> dict[OperatorPartition, KVPairs]:
         data: dict[OperatorPartition, KVPairs] = {}
-
         for operator_partition in registered_operators:
             operator_name, partition = operator_partition
-            # Get the delta files in the correct order 0 <- 1 <- 2 ...
-            snapshot_files: list[str] = [
-                sn_file.object_name
-                for sn_file in minio_client.list_objects(
-                    bucket_name=SNAPSHOT_BUCKET_NAME,
-                    prefix=f"data/{operator_name}/{partition}/",
-                    recursive=True,
-                )
-                if sn_file.object_name.endswith(".bin")
-            ]
-            snapshot_merge_order: list[tuple[int, str]] = sorted(
-                [(int(snapshot_file.split("/")[-1].split(".")[0]), snapshot_file) for snapshot_file in snapshot_files],
-                key=lambda item: item[0],
-            )
-            for sn_id, sn_name in snapshot_merge_order:
-                if sn_id > snapshot_id:
-                    # recover only from a stable snapshot
-                    continue
-                partition_data = zstd_msgpack_deserialization(
-                    minio_client.get_object(SNAPSHOT_BUCKET_NAME, sn_name).data,
-                )
+            prefix = f"data/{operator_name}/{partition}/"
+
+            for _, key in self._iter_snapshot_files(s3, prefix, snapshot_id):
+                partition_data = self._get_zstd_msgpack(s3, key)
                 if operator_partition in data and partition_data:
                     data[operator_partition].update(partition_data)
                 else:
                     data[operator_partition] = partition_data
-        # Sequencer
-        snapshot_files: list[str] = [
-            sn_file.object_name
-            for sn_file in minio_client.list_objects(
-                bucket_name=SNAPSHOT_BUCKET_NAME,
-                prefix="sequencer/",
-                recursive=True,
-            )
-            if sn_file.object_name.endswith(".bin")
-        ]
-        snapshot_merge_order: list[tuple[int, str]] = sorted(
-            [(int(snapshot_file.split("/")[-1].split(".")[0]), snapshot_file) for snapshot_file in snapshot_files],
-            key=lambda item: item[0],
-        )
+        return data
+
+    def _load_sequencer_state(
+        self,
+        s3: S3Client,
+        snapshot_id: int,
+    ) -> tuple[dict[OperatorPartition, int], dict[OperatorPartition, int], int, int]:
         topic_partition_offsets: dict[OperatorPartition, int] = {}
         topic_partition_output_offsets: dict[OperatorPartition, int] = {}
-        epoch: int = 0
-        t_counter: int = 0
-        for sn_id, sn_name in snapshot_merge_order:
-            if sn_id > snapshot_id:
-                # recover only from a stable snapshot
-                continue
+        epoch = 0
+        t_counter = 0
+
+        for _, key in self._iter_snapshot_files(s3, SEQUENCER_PREFIX, snapshot_id):
             (
                 topic_partition_offsets,
                 topic_partition_output_offsets,
                 epoch,
                 t_counter,
-            ) = zstd_msgpack_deserialization(
-                minio_client.get_object(SNAPSHOT_BUCKET_NAME, sn_name).data,
-            )
-        # The recovered snapshot will have the latest metadata and merged operator state
-        return (
-            data,
-            topic_partition_offsets,
-            topic_partition_output_offsets,
-            epoch,
-            t_counter,
-        )
+            ) = self._get_zstd_msgpack(s3, key)
+
+        return topic_partition_offsets, topic_partition_output_offsets, epoch, t_counter
+
+    def _iter_snapshot_files(
+        self,
+        s3: S3Client,
+        prefix: str,
+        max_snapshot_id: int,
+    ) -> list[tuple[int, str]]:
+        keys = self._list_bin_keys(s3, prefix)
+        pairs = []
+        for key in keys:
+            sn_id = int(key.split("/")[-1].split(".")[0])
+            if sn_id <= max_snapshot_id:
+                pairs.append((sn_id, key))
+        pairs.sort(key=lambda item: item[0])
+        return pairs
+
+    def _list_bin_keys(self, s3: S3Client, prefix: str) -> list[str]:
+        paginator = s3.get_paginator("list_objects_v2")
+        out: list[str] = []
+        for page in paginator.paginate(Bucket=SNAPSHOT_BUCKET_NAME, Prefix=prefix):
+            for obj in page.get("Contents", []):
+                key = obj["Key"]
+                if key.endswith(".bin"):
+                    out.append(key)
+        return out
+
+    def _get_zstd_msgpack(self, s3: S3Client, key: str) -> object | dict:
+        resp = s3.get_object(Bucket=SNAPSHOT_BUCKET_NAME, Key=key)
+        return zstd_msgpack_deserialization(resp["Body"].read())

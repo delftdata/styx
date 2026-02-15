@@ -29,7 +29,7 @@ docker system prune -f --volumes >/dev/null
 # START NEW DEPLOYMENT
 docker compose -f docker-compose-kafka.yml up -d >/dev/null
 sleep 5
-docker compose -f docker-compose-minio.yml up -d >/dev/null
+docker compose -f docker-compose-s3.yml up -d >/dev/null
 sleep 10
 export STYX_WORKER_THREADS="$threads_per_worker"
 docker compose build \
