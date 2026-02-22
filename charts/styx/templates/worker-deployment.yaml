@@ -1,0 +1,63 @@
+{{- $worker := (.Values.worker | default dict) -}}
+{{- $workerSvc := ($worker.service | default dict) -}}
+{{- $img := ($worker.image | default dict) -}}
+{{- $env := ($worker.env | default dict) -}}
+{{- $resources := ($worker.resources | default dict) -}}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "styx.fullname" . }}-worker
+  labels:
+    {{- include "styx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: worker
+spec:
+  replicas: {{ default 1 $worker.replicas }}
+  selector:
+    matchLabels:
+      {{- include "styx.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: worker
+  template:
+    metadata:
+      labels:
+        {{- include "styx.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: worker
+    spec:
+      serviceAccountName: {{ include "styx.fullname" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: worker
+          image: "{{ default "dev/styx" $img.repository }}:{{ default "latest" $img.tag }}"
+          imagePullPolicy: {{ default "IfNotPresent" $img.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ default 8000 $workerSvc.port }}
+          env:
+            - name: INGRESS_TYPE
+              value: {{ default "KAFKA" $env.INGRESS_TYPE | quote }}
+            - name: KAFKA_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "styx.fullname" . }}-config
+                  key: KAFKA_URL
+            - name: S3_ENDPOINT
+              value: {{ default "" .Values.rustfs.endpoint | quote }}
+            - name: S3_ACCESS_KEY
+              value: {{ default "" .Values.rustfs.accessKey | quote }}
+            - name: S3_SECRET_KEY
+              value: {{ default "" .Values.rustfs.secretKey | quote }}
+            - name: DISCOVERY_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "styx.fullname" . }}-config
+                  key: DISCOVERY_HOST
+            - name: DISCOVERY_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "styx.fullname" . }}-config
+                  key: DISCOVERY_PORT
+          resources:
+            {{- toYaml $resources | nindent 12 }}

@@ -1,0 +1,23 @@
+{{- $coord := (.Values.coordinator | default dict) -}}
+{{- $coordSvc := ($coord.service | default dict) -}}
+{{- $ports := ($coord.ports | default dict) -}}
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "styx.fullname" . }}-coordinator
+  labels:
+    {{- include "styx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: coordinator
+spec:
+  type: {{ default "ClusterIP" $coordSvc.type }}
+  selector:
+    {{- include "styx.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: coordinator
+  ports:
+    - name: discovery
+      port: {{ default 8888 $ports.discovery }}
+      targetPort: discovery
+    - name: http
+      port: {{ default 8000 $ports.http }}
+      targetPort: http

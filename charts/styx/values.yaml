@@ -1,0 +1,48 @@
+global:
+  security:
+    allowInsecureImages: true
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+coordinator:
+  image:
+    repository: dev/styx-coordinator
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicas: 1
+  ports:
+    discovery: 8888
+    http: 8000
+  env:
+    HEARTBEAT_LIMIT: "5000"
+    HEARTBEAT_CHECK_INTERVAL: "500"
+  resources: {}
+  service:
+    type: ClusterIP
+
+worker:
+  replicas: 1
+  image:
+    repository: dev/styx
+    tag: latest
+    pullPolicy: IfNotPresent
+  env:
+    INGRESS_TYPE: KAFKA
+  service:
+    type: ClusterIP
+    port: 8000
+
+kafka:
+  url: "styx-kafka:9092"
+
+rustfs:
+  endpoint: "http://styx-rustfs:9000"
+  accessKey: "rustfsadmin"
+  secretKey: "rustfsadmin"
+  bucket: "styx-snapshots"
+
+monitoring:
+  enabled: true
+  metricsPath: /metrics

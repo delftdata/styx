@@ -1,0 +1,57 @@
+{{- $coord := (.Values.coordinator | default dict) -}}
+{{- $img := ($coord.image | default dict) -}}
+{{- $ports := ($coord.ports | default dict) -}}
+{{- $env := ($coord.env | default dict) -}}
+{{- $resources := ($coord.resources | default dict) -}}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "styx.fullname" . }}-coordinator
+  labels:
+    {{- include "styx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: coordinator
+spec:
+  replicas: {{ default 1 $coord.replicas }}
+  selector:
+    matchLabels:
+      {{- include "styx.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: coordinator
+  template:
+    metadata:
+      labels:
+        {{- include "styx.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: coordinator
+    spec:
+      serviceAccountName: {{ include "styx.fullname" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: coordinator
+          image: "{{ default "dev/styx-coordinator" $img.repository }}:{{ default "latest" $img.tag }}"
+          imagePullPolicy: {{ default "IfNotPresent" $img.pullPolicy }}
+          ports:
+            - name: discovery
+              containerPort: {{ default 8888 $ports.discovery }}
+            - name: http
+              containerPort: {{ default 8000 $ports.http }}
+          env:
+            - name: KAFKA_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "styx.fullname" . }}-config
+                  key: KAFKA_URL
+            - name: S3_ENDPOINT
+              value: {{ default "" .Values.rustfs.endpoint | quote }}
+            - name: S3_ACCESS_KEY
+              value: {{ default "" .Values.rustfs.accessKey | quote }}
+            - name: S3_SECRET_KEY
+              value: {{ default "" .Values.rustfs.secretKey | quote }}
+            - name: HEARTBEAT_LIMIT
+              value: {{ default "5000" $env.HEARTBEAT_LIMIT | quote }}
+            - name: HEARTBEAT_CHECK_INTERVAL
+              value: {{ default "500" $env.HEARTBEAT_CHECK_INTERVAL | quote }}
+          resources:
+            {{- toYaml $resources | nindent 12 }}

@@ -1,0 +1,21 @@
+{{- $mon := (.Values.monitoring | default dict) -}}
+{{- if (default false $mon.enabled) }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "styx.fullname" . }}
+  labels:
+    {{- include "styx.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/name: {{ include "styx.name" . }}
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+  endpoints:
+    - port: http
+      path: {{ default "/metrics" $mon.metricsPath }}
+      interval: 15s
+{{- end }}
