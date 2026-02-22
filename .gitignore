@@ -145,10 +145,11 @@ grafana-enterprise-11.5.1.darwin-amd64.tar.gz
 !grafana/dashboards/styx.json
 !grafana/dashboards/server_specific.json
 !grafana/*
+!charts/grafana/files/grafana/dashboards/server_specific.json
+!charts/grafana/files/grafana/dashboards/styx.json
+!charts/grafana/*
 
 logs
 
 charts/styx-cluster/Chart.lock
 charts/styx-cluster/charts
-
-!charts/*.json
