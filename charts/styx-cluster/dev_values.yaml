@@ -33,6 +33,7 @@ styx:
     replicas: 2
     env:
       INGRESS_TYPE: KAFKA
+      WORKER_THREADS: "2"
     resources: {}
     service:
       type: ClusterIP

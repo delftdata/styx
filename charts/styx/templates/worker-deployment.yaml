@@ -3,6 +3,7 @@
 {{- $img := ($worker.image | default dict) -}}
 {{- $env := ($worker.env | default dict) -}}
 {{- $resources := ($worker.resources | default dict) -}}
+{{- $nThreads := int (default "1" $env.WORKER_THREADS) -}}
 {{- $wait := (.Values.wait | default dict) -}}
 {{- $waitMode := (default "tcp" $wait.mode) -}}
 {{- $waitK8s := ($wait.k8s | default dict) -}}
@@ -130,6 +131,12 @@ spec:
           ports:
             - name: http
               containerPort: {{ default 8000 $workerSvc.port }}
+            {{- range $i := until $nThreads }}
+            - name: ctl-{{ $i }}
+              containerPort: {{ add 5000 $i }}
+            - name: proto-{{ $i }}
+              containerPort: {{ add 6000 $i }}
+            {{- end }}
           env:
             - name: INGRESS_TYPE
               value: {{ default "KAFKA" $env.INGRESS_TYPE | quote }}
