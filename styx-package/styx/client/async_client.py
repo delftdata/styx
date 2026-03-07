@@ -258,6 +258,21 @@ class AsyncStyxClient(BaseStyxClient):
             msg_type=MessageType.SendExecutionGraph,
         )
 
+    async def update_dataflow(
+        self,
+        stateflow_graph: StateflowGraph,
+        external_modules: tuple | None = None,
+    ) -> None:
+        self._verify_dataflow_input(stateflow_graph, external_modules)
+        self._current_active_graph = stateflow_graph
+        self.graph_known_event.set()
+        await self._networking_manager.send_message(
+            self._styx_coordinator_adr,
+            self._styx_coordinator_port,
+            msg=(stateflow_graph,),
+            msg_type=MessageType.UpdateExecutionGraph,
+        )
+
     async def notify_init_data_complete(self) -> None:
         await self._networking_manager.send_message(
             self._styx_coordinator_adr,

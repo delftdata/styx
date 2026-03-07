@@ -200,6 +200,65 @@ class BaseStyxClient(ABC):
         stateflow_graph: StateflowGraph,
         external_modules: tuple | None = None,
     ) -> None:
+        """
+        Submit a new Stateflow dataflow for initial deployment.
+
+        This method deploys a fresh dataflow graph to the runtime. It
+        initializes operators, state partitions, and communication channels
+        according to the provided ``stateflow_graph`` specification.
+
+        This method is intended for the first deployment of a dataflow. If a
+        dataflow is already running and needs to be modified, use
+        :meth:`update_dataflow` instead.
+
+        Args:
+            stateflow_graph (StateflowGraph):
+                The compiled Stateflow graph describing operators, edges,
+                partitioning, and execution semantics.
+            external_modules (tuple | None, optional):
+                Optional collection of external Python modules that should be
+                shipped to the runtime and made available to operators. This
+                is typically used when operators depend on user-defined code
+                outside the core package.
+
+        Raises:
+            RuntimeError:
+                If the dataflow cannot be deployed.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def update_dataflow(
+        self,
+        stateflow_graph: StateflowGraph,
+        external_modules: tuple | None = None,
+    ) -> None:
+        """
+        Update an existing Stateflow dataflow.
+
+        This method applies modifications to a previously deployed dataflow.
+        Updates may include:
+
+        - Changing operator implementations
+        - Adjusting operator parallelism
+        - Shipping updated external modules
+
+        The runtime is responsible for performing the update safely,
+        potentially involving state migration, rescaling, or rolling
+        redeployment of operator instances.
+
+        Args:
+            stateflow_graph (StateflowGraph):
+                The updated Stateflow graph describing the desired dataflow
+                structure and configuration.
+            external_modules (tuple | None, optional):
+                Optional collection of updated external Python modules to
+                distribute alongside the new operator definitions.
+
+        Raises:
+            RuntimeError:
+                If the update fails or cannot be applied consistently.
+        """
         raise NotImplementedError
 
     @abstractmethod

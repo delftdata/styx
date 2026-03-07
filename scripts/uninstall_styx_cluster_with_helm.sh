@@ -8,6 +8,7 @@ DELETE_NAMESPACE=${DELETE_NAMESPACE:-true}
 COORDINATOR_IMAGE=${COORDINATOR_IMAGE:-styx-coordinator}
 WORKER_IMAGE=${WORKER_IMAGE:-styx-worker}
 TAG=${TAG:-dev}
+DEPLOY_MODE=${DEPLOY_MODE:-k8s-minikube}   # k8s-minikube | k8s-cluster
 
 echo "Uninstalling Helm release '$RELEASE_NAME' from namespace '$NAMESPACE'..."
 helm uninstall "$RELEASE_NAME" -n "$NAMESPACE" || true
@@ -17,8 +18,10 @@ if [[ "$DELETE_NAMESPACE" == "true" ]]; then
   kubectl delete namespace "$NAMESPACE" || true
 fi
 
-echo "Removing images from minikube..."
-minikube image rm "${COORDINATOR_IMAGE}:${TAG}"
-minikube image rm "${WORKER_IMAGE}:${TAG}"
+if [[ "$DEPLOY_MODE" == "k8s-minikube" ]]; then
+  echo "Removing images from minikube..."
+  minikube image rm "${COORDINATOR_IMAGE}:${TAG}"
+  minikube image rm "${WORKER_IMAGE}:${TAG}"
+fi
 
 echo "Done."

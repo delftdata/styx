@@ -48,6 +48,8 @@ SNAPSHOT_FREQUENCY_SEC = int(os.getenv("SNAPSHOT_FREQUENCY_SEC", "30"))
 HEARTBEAT_CHECK_INTERVAL: int = int(
     os.getenv("HEARTBEAT_CHECK_INTERVAL", "1000"),
 )  # 1000ms
+S3_INIT_RETRY_SEC: float = float(os.getenv("S3_INIT_RETRY_SEC", "2"))
+S3_INIT_MAX_RETRIES: int = int(os.getenv("S3_INIT_MAX_RETRIES", "30"))
 
 CoordHandler = Callable[[StreamWriter, bytes, concurrent.futures.ProcessPoolExecutor], Awaitable[None]]
 
@@ -172,6 +174,7 @@ class CoordinatorService:
 
         self.networking_locks: dict[MessageType, asyncio.Lock] = {
             MessageType.SendExecutionGraph: asyncio.Lock(),
+            MessageType.UpdateExecutionGraph: asyncio.Lock(),
             MessageType.MigrationRepartitioningDone: asyncio.Lock(),
             MessageType.MigrationDone: asyncio.Lock(),
             MessageType.MigrationInitDone: asyncio.Lock(),
@@ -201,6 +204,7 @@ class CoordinatorService:
 
         self._coordinator_handlers_map: dict[MessageType, CoordHandler] = {
             MessageType.SendExecutionGraph: self._handle_send_execution_graph,
+            MessageType.UpdateExecutionGraph: self._handle_update_execution_graph,
             MessageType.MigrationRepartitioningDone: self._handle_migration_repartitioning_done,
             MessageType.MigrationInitDone: self._handle_migration_init_done,
             MessageType.RegisterWorker: self._handle_register_worker,
@@ -236,15 +240,43 @@ class CoordinatorService:
         async with self.networking_locks[mt]:
             (graph,) = self.networking.decode_message(data)
 
-            if self.coordinator.graph_submitted and not self.migration_in_progress:
-                await self._start_migration(graph)
-            elif not self.coordinator.graph_submitted:
+            if not self.coordinator.graph_submitted:
                 await self._submit_initial_graph(graph)
             else:
-                logging.warning("Another migration request is currently in progress!")
+                logging.warning(
+                    "Another graph is deployed! You have to use the update API! "
+                    "(Graph multitenancy is currently not supported)"
+                )
                 return
 
             logging.info("Submitted Stateflow Graph to Workers")
+
+    async def _handle_update_execution_graph(
+        self,
+        _: StreamWriter,
+        data: bytes,
+        __: concurrent.futures.ProcessPoolExecutor,
+    ) -> None:
+        mt = MessageType.SendExecutionGraph
+        async with self.networking_locks[mt]:
+            (graph,) = self.networking.decode_message(data)
+            if not self.coordinator.graph_submitted:
+                logging.warning("No graph exists in the cluster, cannot initiate an update!")
+                return
+            compatible, migration_required = graph.compare_with(self.coordinator.submitted_graph)
+            if not compatible:
+                logging.warning("Graph is incompatible!")
+                return
+            if not self.migration_in_progress:
+                if migration_required:
+                    await self._start_migration(graph)
+                else:
+                    await self._update_the_deployed_graph_code(graph)
+            else:
+                logging.warning("A migration is currently in progress! Cannot update the cluster at the moment...")
+                return
+
+            logging.info("Submitted Stateflow Graph Update to Workers")
 
     async def _start_migration(self, graph: StateflowGraph) -> None:
         # Gracefully stop the transactional protocol in the next epoch
@@ -259,6 +291,10 @@ class CoordinatorService:
 
         n_workers = len(self.coordinator.worker_pool.get_participating_workers())
         self.migration_metadata = MigrationMetadata(n_workers)
+
+    async def _update_the_deployed_graph_code(self, graph: StateflowGraph) -> None:
+        # TODO add the functionality to update the code in the next epoch
+        logging.warning("Graph code updates not implemented yet! %s", graph)
 
     async def _submit_initial_graph(self, graph: StateflowGraph) -> None:
         await self.coordinator.submit_stateflow_graph(graph)
@@ -666,7 +702,7 @@ class CoordinatorService:
 
     async def tcp_service(self) -> None:
         self.puller_task = asyncio.create_task(self.start_puller())
-        logging.info(f"Coordinator Server listening at 0.0.0.0:{SERVER_PORT}")
+        logging.warning(f"Coordinator Server listening at 0.0.0.0:{SERVER_PORT}")
         with concurrent.futures.ProcessPoolExecutor(1) as pool:
 
             async def request_handler(
@@ -907,18 +943,40 @@ class CoordinatorService:
             self.snapshotting_task = None
 
     def init_snapshot_bucket(self) -> None:
-        try:
-            self.s3_client.create_bucket(Bucket=SNAPSHOT_BUCKET_NAME)
-        except botocore.exceptions.ClientError as e:
-            code = e.response.get("Error", {}).get("Code", "")
-            if code in {"BucketAlreadyOwnedByYou", "BucketAlreadyExists"}:
+        attempts = 0
+        while True:
+            try:
+                self.s3_client.create_bucket(Bucket=SNAPSHOT_BUCKET_NAME)
+            except botocore.exceptions.EndpointConnectionError:
+                attempts += 1
+                if S3_INIT_MAX_RETRIES and attempts >= S3_INIT_MAX_RETRIES:
+                    raise RuntimeError(
+                        "Could not connect to S3 after "
+                        f"{attempts} attempts (endpoint={S3_ENDPOINT})"
+                    )
+                logging.warning(
+                    f"Could not establish connection to S3 (endpoint={S3_ENDPOINT}). "
+                    f"Sleeping for {S3_INIT_RETRY_SEC:.1f} seconds and retrying..."
+                )
+                time.sleep(S3_INIT_RETRY_SEC)
+                continue
+            except botocore.exceptions.ClientError as e:
+                code = e.response.get("Error", {}).get("Code", "")
+                if code in {"BucketAlreadyOwnedByYou", "BucketAlreadyExists"}:
+                    return  # Bucket is already there
+                # Other client errors should not be retried
+                raise
+            else:
                 return
-            raise
 
     async def main(self) -> None:
+        logging.warning("Coordinator Booted Successfully")
         self.init_snapshot_bucket()
+        logging.warning("Coordinator Connected to S3")
         self.aio_task_scheduler_coord.create_task(self.heartbeat_monitor_coroutine())
+        logging.warning("Coordinator Heartbeat Sentinel online")
         self.snapshotting_task = asyncio.create_task(self.send_snapshot_marker())
+        logging.warning("Coordinator Snapshotting online")
         await self.tcp_service()
 
 

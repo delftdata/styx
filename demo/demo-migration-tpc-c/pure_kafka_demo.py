@@ -45,9 +45,9 @@ SECOND_TO_TAKE_MIGRATION = 60
 sleeps_per_second = 100
 sleep_time = 0.0085
 seconds = int(sys.argv[6])
-STYX_HOST: str = "localhost"
-STYX_PORT: int = 8886
-KAFKA_URL = "localhost:9092"
+STYX_HOST: str = os.getenv("STYX_HOST", "localhost")
+STYX_PORT: int = int(os.getenv("STYX_PORT", "8886"))
+KAFKA_URL: str = os.getenv("KAFKA_URL", "localhost:9092")
 warmup_seconds = int(sys.argv[7])
 N_W = int(sys.argv[8])
 START_N_PARTITIONS = min(N_W, START_N_PARTITIONS)
@@ -77,7 +77,9 @@ script_path = os.path.dirname(os.path.realpath(__file__))
 
 flush_interval = 1000
 
-g = StateflowGraph("tpcc_benchmark", operator_state_backend=LocalStateBackend.DICT)
+g = StateflowGraph("tpcc_benchmark",
+                   operator_state_backend=LocalStateBackend.DICT,
+                   max_operator_parallelism=max(START_N_PARTITIONS, END_N_PARTITIONS))
 ####################################################################################################################
 customer_operator.set_n_partitions(START_N_PARTITIONS)
 district_operator.set_n_partitions(START_N_PARTITIONS)
@@ -533,7 +535,7 @@ def benchmark_runner(proc_num) -> dict[bytes, dict]:
             new_g.add_operators(customer_operator, district_operator, history_operator, item_operator, new_order_operator,
                             order_operator, order_line_operator, stock_operator, warehouse_operator,
                             new_order_txn_operator, customer_idx_operator, payment_txn_operator)
-            styx.submit_dataflow(new_g)
+            styx.update_dataflow(new_g)
     end = timer()
     print(f"Average latency per second: {(end - start) / seconds}")
     styx.close()
@@ -545,10 +547,10 @@ def benchmark_runner(proc_num) -> dict[bytes, dict]:
 def main():
     s3 = boto3.client(
         "s3",
-        endpoint_url="http://localhost:9000",
-        aws_access_key_id="rustfsadmin",
-        aws_secret_access_key="rustfsadmin",
-        region_name="us-east-1"
+        endpoint_url=os.getenv("S3_ENDPOINT", "http://localhost:9000"),
+        aws_access_key_id=os.getenv("S3_ACCESS_KEY", "rustfsadmin"),
+        aws_secret_access_key=os.getenv("S3_SECRET_KEY", "rustfsadmin"),
+        region_name=os.getenv("S3_REGION", "us-east-1")
     )
     styx_client = SyncStyxClient(STYX_HOST, STYX_PORT, kafka_url=KAFKA_URL, s3=s3)
     tpc_c_init(styx_client)

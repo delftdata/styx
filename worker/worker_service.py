@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import random
 from asyncio import StreamReader, StreamWriter
 from collections import defaultdict
 import concurrent.futures
@@ -66,7 +67,6 @@ PROTOCOL_WORKERS: int = int(os.getenv("PROTOCOL_WORKERS", "100"))
 PROTOCOL = Protocols.Aria
 
 # TODO Check dynamic r/w sets
-# TODO networking can take a lot of optimization (i.e., batching, backpreasure e.t.c.)
 # TODO when compactions happen recovery should hold and vice versa
 
 
@@ -184,6 +184,7 @@ class Worker:
 
         self._message_handlers: dict[MessageType, Callable[[bytes, MessageType], Awaitable[None]]] = {
             MessageType.ReceiveExecutionPlan: self._handle_receive_execution_plan,
+            MessageType.UpdateExecutionGraph: self._handle_update_execution_plan,
             MessageType.InitMigration: self._handle_init_migration,
             MessageType.ReceiveMigrationHashes: self._handle_receive_migration_hashes,
             MessageType.RequestRemoteKey: self._handle_request_remote_key,
@@ -359,12 +360,13 @@ class Worker:
 
         await self._send_snap_assigned(snapshot_id=snapshot_id)
 
+        logging.warning("Retrieving Snapshot from S3")
         (snap_data, _in_off, _out_off, epoch, t_counter) = self.async_snapshots.retrieve_snapshot(
             snapshot_id,
             self.registered_operators.keys(),
         )
         self.attach_state_to_operators_after_snapshot(snap_data)
-
+        logging.warning("State attached to operators")
         self.function_execution_protocol = AriaProtocol(
             worker_id=self.id,
             peers=self.peers,
@@ -377,8 +379,13 @@ class Worker:
             epoch_counter=epoch,
             t_counter=t_counter,
         )
+        logging.warning("Starting Function Execution Protocol")
         self.function_execution_protocol.start()
         self.function_execution_protocol.started.set()
+
+    async def _handle_update_execution_plan(self, data: bytes, _: MessageType) -> None:
+        # TODO add code
+        logging.warning("Graph code updates not implemented yet! %s", data)
 
     async def _handle_init_migration(self, data: bytes, _: MessageType) -> None:
         try:
@@ -884,16 +891,76 @@ class Worker:
             await server.serve_forever()
 
     async def register_to_coordinator(self) -> None:
-        self.id = await self.networking.send_message_request_response(
-            DISCOVERY_HOST,
-            DISCOVERY_PORT,
-            msg=(self.networking.host_name, self.server_port, self.protocol_port),
-            msg_type=MessageType.RegisterWorker,
-            serializer=Serializer.MSGPACK,
-        )
-        logging.warning(f"Worker id received from coordinator: {self.id}")
-        self.protocol_networking.set_worker_id(self.id)
-        self.networking.set_worker_id(self.id)
+        """
+        Production-grade retry:
+          - Exponential backoff with full jitter
+          - Optional infinite retries (recommended for bootstrapping)
+          - Cancellation-aware (won't swallow CancelledError)
+          - Caps backoff to avoid unbounded sleeps
+          - Logs with attempt counters and next delay
+        """
+
+        # ---- policy knobs  ----
+        infinite_retries: bool = True          # for worker bootstrapping this is often correct
+        max_retries: int = 30                  # used only if infinite_retries=False
+        base_delay_s: float = 0.5              # initial backoff
+        max_delay_s: float = 30.0              # cap backoff
+        timeout_s: float | None = 5.0          # per-attempt timeout; set None to disable
+        # -----------------------
+
+        attempt = 0
+        while True:
+            attempt += 1
+            try:
+                coro = self.networking.send_message_request_response(
+                    DISCOVERY_HOST,
+                    DISCOVERY_PORT,
+                    msg=(self.networking.host_name, self.server_port, self.protocol_port),
+                    msg_type=MessageType.RegisterWorker,
+                    serializer=Serializer.MSGPACK,
+                )
+
+                if timeout_s is not None:
+                    self.id = await asyncio.wait_for(coro, timeout=timeout_s)
+                else:
+                    self.id = await coro
+
+                logging.warning(f"Worker id received from coordinator: {self.id}")
+                self.protocol_networking.set_worker_id(self.id)
+                self.networking.set_worker_id(self.id)
+                return
+
+            except asyncio.CancelledError:
+                # Never swallow cancellation; let shutdowns be fast/clean.
+                raise
+
+            except Exception as e:
+                # Stop if finite retries and we've exhausted them.
+                if not infinite_retries and attempt >= max_retries:
+                    logging.exception(
+                        f"Failed to register to coordinator after {attempt} attempts."
+                    )
+                    raise
+
+                # Exponential backoff with *full jitter*:
+                # sleep = random(0, min(max_delay, base * 2^(attempt-1)))
+                cap = min(max_delay_s, base_delay_s * (2 ** (attempt - 1)))
+                delay = random.uniform(0.0, cap)
+
+                # Use exception() occasionally to keep a stacktrace in logs without spamming too hard.
+                # (You can tune this: e.g., every N attempts.)
+                if attempt == 1 or attempt % 10 == 0:
+                    logging.exception(
+                        f"Register attempt {attempt} failed; retrying in {delay:.2f}s (cap={cap:.2f}s).",
+                        exc_info=e,
+                    )
+                else:
+                    logging.warning(
+                        f"Register attempt {attempt} failed ({type(e).__name__}: {e}); "
+                        f"retrying in {delay:.2f}s (cap={cap:.2f}s)."
+                    )
+
+                await asyncio.sleep(delay)
 
     @staticmethod
     async def heartbeat_coroutine(worker_id: int, worker_pid: int) -> None:
@@ -935,7 +1002,9 @@ class Worker:
                 args=(self.snapshotting_port, self.id),
             )
             self.async_snapshotting_proc.start()
+            logging.warning("Worker snapshotting process online")
             self.heartbeat_proc.start()
+            logging.warning("Worker heartbeat process online")
 
             # Start queue workers:
             # - control_queue: single worker for ordered control-plane traffic

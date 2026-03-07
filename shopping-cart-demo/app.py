@@ -31,7 +31,9 @@ async def hello(_):
 @app.post("/submit/<n_partitions>")
 async def submit_dataflow_graph(_, n_partitions: int):
     n_partitions: int = int(n_partitions)
-    g = StateflowGraph("wdm-project", operator_state_backend=LocalStateBackend.DICT)
+    g = StateflowGraph("wdm-project",
+                       operator_state_backend=LocalStateBackend.DICT,
+                       max_operator_parallelism=n_partitions)
 
     order_operator.set_n_partitions(n_partitions)
     stock_operator.set_n_partitions(n_partitions)

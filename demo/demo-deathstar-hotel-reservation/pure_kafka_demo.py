@@ -1,4 +1,5 @@
 import multiprocessing
+import os
 import subprocess
 
 import boto3
@@ -36,12 +37,14 @@ sleeps_per_second = 100
 sleep_time = 0.0085
 seconds = int(sys.argv[5])
 warmup_seconds = int(sys.argv[6])
-STYX_HOST: str = "localhost"
-STYX_PORT: int = 8886
-KAFKA_URL = "localhost:9092"
+STYX_HOST: str = os.getenv("STYX_HOST", "localhost")
+STYX_PORT: int = int(os.getenv("STYX_PORT", "8886"))
+KAFKA_URL: str = os.getenv("KAFKA_URL", "localhost:9092")
 kill_at = int(sys.argv[7]) if len(sys.argv) > 7 else -1
 
-g = StateflowGraph("deathstar_hotel_reservations", operator_state_backend=LocalStateBackend.DICT)
+g = StateflowGraph("deathstar_hotel_reservations",
+                   operator_state_backend=LocalStateBackend.DICT,
+                   max_operator_parallelism=N_PARTITIONS)
 ####################################################################################################################
 flight_operator.set_n_partitions(N_PARTITIONS)
 geo_operator.set_n_partitions(N_PARTITIONS)
@@ -310,10 +313,10 @@ def benchmark_runner(proc_num) -> dict[bytes, dict]:
 def main():
     s3 = boto3.client(
         "s3",
-        endpoint_url="http://localhost:9000",
-        aws_access_key_id="rustfsadmin",
-        aws_secret_access_key="rustfsadmin",
-        region_name="us-east-1"
+        endpoint_url=os.getenv("S3_ENDPOINT", "http://localhost:9000"),
+        aws_access_key_id=os.getenv("S3_ACCESS_KEY", "rustfsadmin"),
+        aws_secret_access_key=os.getenv("S3_SECRET_KEY", "rustfsadmin"),
+        region_name=os.getenv("S3_REGION", "us-east-1")
     )
     styx_client = SyncStyxClient(STYX_HOST, STYX_PORT, kafka_url=KAFKA_URL, s3=s3)
     styx_client.open(consume=False)

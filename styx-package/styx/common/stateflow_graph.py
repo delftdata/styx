@@ -1,3 +1,4 @@
+import logging
 from typing import TYPE_CHECKING
 
 from styx.common.operator import BaseOperator, Operator
@@ -16,7 +17,9 @@ class StateflowGraph:
     and enables operator lookup and iteration.
     """
 
-    def __init__(self, name: str, operator_state_backend: LocalStateBackend) -> None:
+    def __init__(
+        self, name: str, operator_state_backend: LocalStateBackend, max_operator_parallelism: int = 10
+    ) -> None:
         """Initializes the StateflowGraph.
 
         Args:
@@ -26,6 +29,7 @@ class StateflowGraph:
         self.name: str = name
         self.operator_state_backend: LocalStateBackend = operator_state_backend
         self.nodes: dict[str, BaseOperator | Operator] = {}
+        self.max_operator_parallelism: int = max_operator_parallelism
 
     def add_operator(self, operator: BaseOperator | Operator) -> None:
         """Adds a single operator to the graph.
@@ -94,3 +98,64 @@ class StateflowGraph:
             )
         nodes_str = "\n  ".join(node_descriptions)
         return f"StateflowGraph '{self.name}' with nodes:\n  {nodes_str}"
+
+    def compare_with(self, other: StateflowGraph) -> tuple[bool, bool]:
+        """Compare this graph with another graph and detect structural changes.
+
+        This method is intended to validate whether an update from the current
+        graph to ``other`` is supported and whether it requires state migration.
+
+        The comparison performs the following checks:
+
+        - **New operators**: If an operator exists in ``other`` but not in the
+          current graph, a warning is logged. Adding new operators is currently
+          unsupported and marks the update as incompatible.
+        - **Parallelism changes**: If an operator exists in both graphs but its
+          ``n_partitions`` value differs, a warning is logged and state migration
+          is marked as required.
+
+        Operator implementation/code changes are not inspected here; only
+        structural differences (operator presence and partition counts) are
+        evaluated.
+
+        Args:
+            other (StateflowGraph):
+                The target graph to compare against (typically the updated graph).
+
+        Returns:
+            tuple[bool, bool]:
+                A tuple ``(compatible, migration_required)`` where:
+
+                - ``compatible`` is ``False`` if unsupported structural changes
+                  are detected (e.g., new operators).
+                - ``migration_required`` is ``True`` if operator parallelism
+                  changes were detected and state migration must be triggered.
+        """
+        compatible = True
+        migration_required = False
+
+        # Warn on new operators (unsupported)
+        new_ops = set(other.nodes.keys()) - set(self.nodes.keys())
+        for op_name in sorted(new_ops):
+            logging.warning(
+                "StateflowGraph update for %r: new operator %r detected (unsupported).",
+                self.name,
+                op_name,
+            )
+            compatible = False
+
+        common_ops = set(self.nodes.keys()) & set(other.nodes.keys())
+        for op_name in sorted(common_ops):
+            old_op = self.nodes[op_name]
+            new_op = other.nodes[op_name]
+            if getattr(old_op, "n_partitions", None) != getattr(new_op, "n_partitions", None):
+                logging.warning(
+                    "StateflowGraph update for %r: operator %r partition count changed: %s -> %s."
+                    " State Migration will trigger with the update.",
+                    self.name,
+                    op_name,
+                    getattr(old_op, "n_partitions", None),
+                    getattr(new_op, "n_partitions", None),
+                )
+                migration_required = True
+        return compatible, migration_required
