@@ -1,4 +1,4 @@
-setuptools==80.10.1
+setuptools==82.0.0
 # STYX
 # networking service
 uvloop==0.22.1
@@ -8,27 +8,27 @@ cityhash==0.4.10
 zstandard==0.25.0
 # monitoring service
 prometheus-client==0.24.1
-psutil==7.2.1
+psutil==7.2.2
 # Kafka
 aiokafka==0.13.0
-confluent-kafka==2.13.0
+confluent-kafka==2.13.2
 # snapshots
-boto3==1.42.49
+boto3==1.42.59
 # deathstar
 geopy
 # shopping cart demo
 sanic==25.12.0
-aiohttp==3.11.18
-locust==2.43.1
+aiohttp==3.13.3
+locust==2.43.3
 # Plots and demo
-pandas==3.0.0
-tqdm==4.67.1
-numpy==2.4.1
-scipy==1.17.0
+pandas==3.0.1
+tqdm==4.67.3
+numpy==2.4.2
+scipy==1.17.1
 matplotlib==3.10.8
 # docs
-mkdocs-material==9.7.1
+mkdocs-material==9.7.3
 # tests
 pytest==9.0.2
 # make sure to have the same ruff verseion as in .github/workflows/ruff.yml line 30
-ruff==0.15.1
+ruff==0.15.4

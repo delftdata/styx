@@ -18,6 +18,9 @@ spec:
     - name: discovery
       port: {{ default 8888 $ports.discovery }}
       targetPort: discovery
+    - name: protocol
+      port: {{ default 8889 $ports.protocol }}
+      targetPort: protocol
     - name: http
       port: {{ default 8000 $ports.http }}
       targetPort: http

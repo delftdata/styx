@@ -1,1 +1,0 @@
-kubectl patch configmap tcp-services -n ingress-nginx --patch '{"data":{"8888":"default/coordinator-service:8888"}}'

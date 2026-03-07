@@ -11,9 +11,9 @@ styx:
 
   coordinator:
     image:
-      repository: dev/styx-coordinator
+      repository: ghcr.io/delftdata/styx-coordinator
       tag: latest
-      pullPolicy: IfNotPresent
+      pullPolicy: Always
     replicas: 1
     ports:
       discovery: 8888
@@ -27,9 +27,9 @@ styx:
 
   worker:
     image:
-      repository: dev/styx
+      repository: ghcr.io/delftdata/styx-worker
       tag: latest
-      pullPolicy: IfNotPresent
+      pullPolicy: Always
     replicas: 2
     env:
       INGRESS_TYPE: KAFKA
@@ -38,11 +38,7 @@ styx:
       type: ClusterIP
       port: 8000
 
-  kafka:
-    url: "styx-kafka-headless:9092"
-
   rustfs:
-    endpoint: "http://styx-rustfs:9000"
     accessKey: "rustfsadmin"
     secretKey: "rustfsadmin"
     bucket: "styx-snapshots"
@@ -51,6 +47,13 @@ styx:
     enabled: false
     # where your /metrics lives (assumption: http port 8000, path /metrics)
     metricsPath: /metrics
+
+  wait:
+    enabled: true
+    mode: k8s
+    image:
+      repository: "alpine/k8s"
+      tag: "1.32.13"
 
 kafka:
   enabled: true
@@ -64,7 +67,7 @@ kafka:
   defaultReplicationFactor: 3
   zookeeper:
     enabled: false
-    url: "styx-zookeeper-headless:2181"
+    url: "styx-zookeeper-headless.styx.svc.cluster.local:2181"
     kerberos:
       enabled: false
   configurationOverrides:
@@ -76,6 +79,9 @@ kafka:
 
 zookeeper:
   enabled: true
+  # Ensure the Zookeeper headless service name is stable and matches
+  # kafka.zookeeper.url default (styx-zookeeper-headless).
+  fullnameOverride: styx-zookeeper
   image:
     repository: confluentinc/cp-zookeeper
     tag: "7.4.0"

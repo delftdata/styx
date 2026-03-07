@@ -42,7 +42,7 @@ echo "use_fallback_cache: $use_fallback_cache"
 echo "regenerate_tpcc_data: $regenerate_tpcc_data"
 echo "=================================================="
 
-bash scripts/start_styx_cluster.sh "$n_part" "$epoch_size" "$n_part" "$styx_threads_per_worker" "$enable_compression" "$use_composite_keys" "$use_fallback_cache"
+#bash scripts/start_styx_cluster.sh "$n_part" "$epoch_size" "$styx_threads_per_worker" "$enable_compression" "$use_composite_keys" "$use_fallback_cache"
 
 sleep 10
 
@@ -93,4 +93,4 @@ else
 fi
 
 
-bash scripts/stop_styx_cluster.sh "$styx_threads_per_worker"
+#bash scripts/stop_styx_cluster.sh "$styx_threads_per_worker"

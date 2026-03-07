@@ -10,7 +10,7 @@ metadata:
   labels:
     {{- include "styx.labels" . | nindent 4 }}
 data:
-  KAFKA_URL: {{ default (printf "%s-kafka:9092" .Release.Name) $kafka.url | quote }}
+  KAFKA_URL: {{ default (printf "%s-kafka-headless.%s.svc.cluster.local:9092" .Release.Name .Release.Namespace) $kafka.url | quote }}
   DISCOVERY_HOST: {{ printf "%s-coordinator" (include "styx.fullname" .) | quote }}
   DISCOVERY_PORT: {{ default 8888 $ports.discovery | quote }}
   METRICS_PATH: {{ default "/metrics" $mon.metricsPath | quote }}

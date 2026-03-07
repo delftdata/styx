@@ -8,12 +8,13 @@ fullnameOverride: ""
 
 coordinator:
   image:
-    repository: dev/styx-coordinator
+    repository: ghcr.io/delftdata/styx-coordinator
     tag: latest
-    pullPolicy: IfNotPresent
+    pullPolicy: Always
   replicas: 1
   ports:
     discovery: 8888
+    protocol: 8889
     http: 8000
   env:
     HEARTBEAT_LIMIT: "5000"
@@ -25,20 +26,21 @@ coordinator:
 worker:
   replicas: 1
   image:
-    repository: dev/styx
+    repository: ghcr.io/delftdata/styx-worker
     tag: latest
-    pullPolicy: IfNotPresent
+    pullPolicy: Always
   env:
     INGRESS_TYPE: KAFKA
+    WORKER_THREADS: "1"
   service:
     type: ClusterIP
     port: 8000
 
 kafka:
-  url: "styx-kafka:9092"
+  url: ""
 
 rustfs:
-  endpoint: "http://styx-rustfs:9000"
+  endpoint: ""
   accessKey: "rustfsadmin"
   secretKey: "rustfsadmin"
   bucket: "styx-snapshots"
@@ -46,3 +48,19 @@ rustfs:
 monitoring:
   enabled: true
   metricsPath: /metrics
+
+wait:
+  enabled: true
+  mode: k8s # tcp | k8s
+  image:
+    repository: "alpine/k8s"
+    tag: "1.32.13"
+    pullPolicy: IfNotPresent
+  timeoutSec: 300
+  sleepSec: 2
+  waitForKafka: true
+  waitForRustfs: true
+  k8s:
+    namespace: ""
+    kafkaSelector: ""
+    rustfsSelector: ""

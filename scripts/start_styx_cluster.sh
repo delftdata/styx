@@ -2,17 +2,15 @@
 
 scale_factor=$1
 epoch_size=$2
-max_operator_parallelism=$3
-threads_per_worker=$4
-enable_compression=$5
-use_composite_keys=$6
-use_fallback_cache=$7
+threads_per_worker=$3
+enable_compression=$4
+use_composite_keys=$5
+use_fallback_cache=$6
 minimum_amount_of_workers=1
 
 echo "============== Starting Styx Cluster ================"
 echo "scale_factor: $scale_factor"
 echo "epoch_size: $epoch_size"
-echo "max_operator_parallelism: $max_operator_parallelism"
 echo "threads_per_worker: $threads_per_worker"
 echo "minimum_amount_of_workers: $minimum_amount_of_workers"
 echo "enable_compression: $enable_compression"
@@ -34,7 +32,6 @@ sleep 10
 export STYX_WORKER_THREADS="$threads_per_worker"
 docker compose build \
     --build-arg epoch_size="$epoch_size" \
-    --build-arg max_operator_parallelism="$max_operator_parallelism" \
     --build-arg worker_threads="$threads_per_worker" \
     --build-arg enable_compression="$enable_compression" \
     --build-arg use_composite_keys="$use_composite_keys" \

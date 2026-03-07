@@ -57,8 +57,8 @@ echo "regenerate_tpcc_data: $regenerate_tpcc_data"
 echo "============================================================"
 
 bash "$ROOT_DIR/scripts/start_styx_cluster.sh" \
-  "$start_n_part" "$epoch_size" "$max_part" \
-  "$styx_threads_per_worker" "$enable_compression" "$use_composite_keys" "$use_fallback_cache"
+  "$start_n_part" "$epoch_size" "$styx_threads_per_worker" \
+  "$enable_compression" "$use_composite_keys" "$use_fallback_cache"
 
 sleep 10
 
