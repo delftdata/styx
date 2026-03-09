@@ -947,13 +947,11 @@ class CoordinatorService:
         while True:
             try:
                 self.s3_client.create_bucket(Bucket=SNAPSHOT_BUCKET_NAME)
-            except botocore.exceptions.EndpointConnectionError:
+            except botocore.exceptions.EndpointConnectionError as err:
                 attempts += 1
                 if S3_INIT_MAX_RETRIES and attempts >= S3_INIT_MAX_RETRIES:
-                    raise RuntimeError(
-                        "Could not connect to S3 after "
-                        f"{attempts} attempts (endpoint={S3_ENDPOINT})"
-                    )
+                    msg = f"Could not connect to S3 after {attempts} attempts (endpoint={S3_ENDPOINT})"
+                    raise RuntimeError(msg) from err
                 logging.warning(
                     f"Could not establish connection to S3 (endpoint={S3_ENDPOINT}). "
                     f"Sleeping for {S3_INIT_RETRY_SEC:.1f} seconds and retrying..."

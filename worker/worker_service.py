@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import random
 from asyncio import StreamReader, StreamWriter
 from collections import defaultdict
 import concurrent.futures
@@ -10,6 +9,7 @@ import gc
 import logging as sync_logging
 import multiprocessing
 import os
+import random
 import socket
 import struct
 import sys
@@ -901,11 +901,11 @@ class Worker:
         """
 
         # ---- policy knobs  ----
-        infinite_retries: bool = True          # for worker bootstrapping this is often correct
-        max_retries: int = 30                  # used only if infinite_retries=False
-        base_delay_s: float = 0.5              # initial backoff
-        max_delay_s: float = 30.0              # cap backoff
-        timeout_s: float | None = 5.0          # per-attempt timeout; set None to disable
+        infinite_retries: bool = True  # for worker bootstrapping this is often correct
+        max_retries: int = 30  # used only if infinite_retries=False
+        base_delay_s: float = 0.5  # initial backoff
+        max_delay_s: float = 30.0  # cap backoff
+        timeout_s: float | None = 5.0  # per-attempt timeout; set None to disable
         # -----------------------
 
         attempt = 0
@@ -928,24 +928,18 @@ class Worker:
                 logging.warning(f"Worker id received from coordinator: {self.id}")
                 self.protocol_networking.set_worker_id(self.id)
                 self.networking.set_worker_id(self.id)
-                return
-
             except asyncio.CancelledError:
                 # Never swallow cancellation; let shutdowns be fast/clean.
                 raise
-
             except Exception as e:
                 # Stop if finite retries and we've exhausted them.
                 if not infinite_retries and attempt >= max_retries:
-                    logging.exception(
-                        f"Failed to register to coordinator after {attempt} attempts."
-                    )
+                    logging.exception(f"Failed to register to coordinator after {attempt} attempts.")
                     raise
 
                 # Exponential backoff with *full jitter*:
-                # sleep = random(0, min(max_delay, base * 2^(attempt-1)))
                 cap = min(max_delay_s, base_delay_s * (2 ** (attempt - 1)))
-                delay = random.uniform(0.0, cap)
+                delay = random.uniform(0.0, cap)  # noqa: S311
 
                 # Use exception() occasionally to keep a stacktrace in logs without spamming too hard.
                 # (You can tune this: e.g., every N attempts.)
@@ -961,6 +955,8 @@ class Worker:
                     )
 
                 await asyncio.sleep(delay)
+            else:
+                return
 
     @staticmethod
     async def heartbeat_coroutine(worker_id: int, worker_pid: int) -> None:
