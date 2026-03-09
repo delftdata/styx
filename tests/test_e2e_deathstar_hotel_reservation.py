@@ -91,7 +91,6 @@ def _start_cmd(paths: _Paths, p: _ClusterParams) -> list[str]:
         str(paths.start_script),
         str(p.n_partitions),
         str(p.epoch_size),
-        str(p.n_partitions),
         str(p.threads_per_worker),
         p.enable_compression,
         p.use_composite_keys,
