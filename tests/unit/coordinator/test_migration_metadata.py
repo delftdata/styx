@@ -2,8 +2,9 @@
 
 import asyncio
 
-from coordinator.migration_metadata import MigrationMetadata
 from styx.common.message_types import MessageType
+
+from coordinator.migration_metadata import MigrationMetadata
 
 
 def run(coro):

@@ -32,7 +32,7 @@ jobs:
           python -m pip install pytest==9.0.2 pytest-cov
 
       - name: Run coordinator unit tests
-        run: pytest tests/unit/coordinator/ -v --cov=coordinator --cov-report=xml:coverage-coordinator.xml
+        run: pytest tests/unit/coordinator/ -v --cov=. --cov-report=xml:coverage-coordinator.xml
 
       - name: Upload coordinator coverage to Codecov
         uses: codecov/codecov-action@v4
@@ -62,7 +62,7 @@ jobs:
           python -m pip install msgspec pytest==9.0.2 pytest-cov
 
       - name: Run worker unit tests
-        run: pytest tests/unit/worker/ -v --cov=worker --cov-report=xml:coverage-worker.xml
+        run: pytest tests/unit/worker/ -v --cov=. --cov-report=xml:coverage-worker.xml
 
       - name: Upload worker coverage to Codecov
         uses: codecov/codecov-action@v4
