@@ -18,9 +18,11 @@ flags:
   coordinator:
     paths:
       - coordinator/
+    carryforward: true
   worker:
     paths:
       - worker/
+    carryforward: true
 
 ignore:
   - "tests/"
