@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write  # required for Codecov OIDC upload
 
 jobs:
   unit-tests-coordinator:
@@ -35,11 +36,12 @@ jobs:
         run: pytest tests/unit/coordinator/ -v --cov=. --cov-report=xml:coverage-coordinator.xml
 
       - name: Upload coordinator coverage to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
           files: coverage-coordinator.xml
           flags: coordinator
           token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: true
 
   unit-tests-worker:
     name: Unit tests (worker)
@@ -65,8 +67,9 @@ jobs:
         run: pytest tests/unit/worker/ -v --cov=. --cov-report=xml:coverage-worker.xml
 
       - name: Upload worker coverage to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
           files: coverage-worker.xml
           flags: worker
           token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: true
