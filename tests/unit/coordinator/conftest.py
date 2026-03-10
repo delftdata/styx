@@ -25,7 +25,7 @@ _defaults = {
 for _k, _v in _defaults.items():
     os.environ.setdefault(_k, _v)
 
-# Add coordinator/ to the front of sys.path.
-_COORDINATOR_DIR = str(Path(__file__).parent.parent.parent.parent / "coordinator")
-if _COORDINATOR_DIR not in sys.path:
-    sys.path.insert(0, _COORDINATOR_DIR)
+# Add repo root to the front of sys.path so coordinator.* imports work.
+_REPO_ROOT = str(Path(__file__).parent.parent.parent.parent)
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)

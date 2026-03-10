@@ -1,6 +1,6 @@
 """Unit tests for coordinator/aria_sync_metadata.py"""
 
-from aria_sync_metadata import AriaSyncMetadata
+from coordinator.aria_sync_metadata import AriaSyncMetadata
 
 # ---------------------------------------------------------------------------
 # check_distributed_barrier

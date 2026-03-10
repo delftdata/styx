@@ -5,7 +5,7 @@ import time
 from unittest.mock import MagicMock
 
 import pytest
-from worker_pool import Worker, WorkerPool
+from coordinator.worker_pool import Worker, WorkerPool
 
 # ---------------------------------------------------------------------------
 # Helpers

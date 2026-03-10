@@ -4,7 +4,7 @@ Focuses on get_snapshots_per_worker(), which is a pure function and
 therefore straightforward to test without S3 mocking.
 """
 
-from snapshot_compactor import get_snapshots_per_worker
+from coordinator.snapshot_compactor import get_snapshots_per_worker
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -2,7 +2,7 @@
 
 import asyncio
 
-from migration_metadata import MigrationMetadata
+from coordinator.migration_metadata import MigrationMetadata
 from styx.common.message_types import MessageType
 
 
