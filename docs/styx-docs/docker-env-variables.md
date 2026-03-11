@@ -32,9 +32,12 @@ The following environment variables configure the behavior of the **Styx Coordin
 
 | Variable              | Source         | Description                        |
 |-----------------------|----------------|------------------------------------|
-| `MINIO_URL`          | `MINIO_HOST:MINIO_PORT` | Full URL to connect to MinIO  |
-| `MINIO_ACCESS_KEY`   | Required        | Access key for the MinIO user      |
-| `MINIO_SECRET_KEY`   | Required        | Secret key for the MinIO user      |
+| `S3_ENDPOINT`        | Required       | Full URL to connect to S3/MinIO    |
+| `S3_ACCESS_KEY`      | Required       | Access key for the S3/MinIO user   |
+| `S3_SECRET_KEY`      | Required       | Secret key for the S3/MinIO user   |
+| `S3_REGION`          | `us-east-1`    | S3 region for the client           |
+| `S3_INIT_RETRY_SEC`  | `2` (seconds)  | Sleep time between bucket init retries |
+| `S3_INIT_MAX_RETRIES`| `30`           | Max retry attempts before coordinator exits (0 = infinite) |
 
 ---
 

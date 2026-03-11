@@ -1,0 +1,19 @@
+{{- $worker := (.Values.worker | default dict) -}}
+{{- $workerSvc := ($worker.service | default dict) -}}
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "styx.fullname" . }}-worker
+  labels:
+    {{- include "styx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: worker
+spec:
+  type: {{ default "ClusterIP" $workerSvc.type }}
+  selector:
+    {{- include "styx.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: worker
+  ports:
+    - name: http
+      port: {{ default 8000 $workerSvc.port }}
+      targetPort: http

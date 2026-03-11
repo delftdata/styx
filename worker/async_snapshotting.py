@@ -104,6 +104,7 @@ class AsyncSnapshottingProcess:
                 (assigned_partitions, snapshot_id) = NetworkingManager.decode_message(
                     data,
                 )
+                logging.warning(f"[SN_PROC] Received snapshot: {snapshot_id}")
                 self.init_delta_maps(assigned_partitions)
                 self.async_snapshots.update_n_assigned_partitions(
                     len(assigned_partitions),

@@ -24,6 +24,12 @@ epoch_size=${10}
 [ -n "${15}" ] && regenerate_tpcc_data=${15}
 kill_at="-1" # This means that we are not going to kill any containers using this script
 
+# Deployment mode configuration (read from environment).
+# Modes: docker-compose | k8s-minikube | k8s-cluster
+DEPLOY_MODE=${DEPLOY_MODE:-docker-compose}
+RELEASE_NAME=${RELEASE_NAME:-styx-cluster}
+NAMESPACE=${NAMESPACE:-styx}
+
 echo "============= Running Experiment ================="
 echo "workload_name: $workload_name"
 echo "input_rate: $input_rate"
@@ -40,11 +46,41 @@ echo "enable_compression: $enable_compression"
 echo "use_composite_keys: $use_composite_keys"
 echo "use_fallback_cache: $use_fallback_cache"
 echo "regenerate_tpcc_data: $regenerate_tpcc_data"
-echo "=================================================="
+echo "deploy_mode: $DEPLOY_MODE"
+echo "==================================================="
 
-bash scripts/start_styx_cluster.sh "$n_part" "$epoch_size" "$n_part" "$styx_threads_per_worker" "$enable_compression" "$use_composite_keys" "$use_fallback_cache"
+# Use kubefwd to forward all services in the namespace.
+# kubefwd adds /etc/hosts entries for service names and pod FQDNs, which is
+# required for Kafka: kubectl port-forward alone causes advertised-listener
+# redirects to internal cluster DNS names that the host cannot resolve.
+_k8s_setup() {
+    bash scripts/wait_for_styx_k8s.sh || { echo "ERROR: cluster readiness check failed, aborting." >&2; exit 1; }
 
-sleep 10
+    echo "Forwarding all services in namespace '$NAMESPACE' via kubefwd..."
+    sudo KUBECONFIG="$HOME/.kube/config" kubefwd svc -n "$NAMESPACE" &
+    KUBEFWD_PID=$!
+    trap 'sudo kill "$KUBEFWD_PID" 2>/dev/null || true' EXIT
+    sleep 5  # let kubefwd establish forwards and add /etc/hosts entries
+    if ! kill -0 "$KUBEFWD_PID" 2>/dev/null; then
+        echo "ERROR: kubefwd failed to start (check kubeconfig and cluster connectivity)." >&2
+        exit 1
+    fi
+
+    export STYX_HOST="${RELEASE_NAME}-styx-coordinator"
+    export STYX_PORT=8888
+    export KAFKA_URL="${RELEASE_NAME}-kafka-headless:9092"
+    export S3_ENDPOINT="http://${RELEASE_NAME}-rustfs:9000"
+}
+
+if [[ "$DEPLOY_MODE" == "k8s-minikube" || "$DEPLOY_MODE" == "k8s-cluster" ]]; then
+    bash scripts/install_styx_cluster_with_helm.sh
+    _k8s_setup
+
+else
+    # docker-compose mode
+    bash scripts/start_styx_cluster.sh "$n_part" "$epoch_size" "$styx_threads_per_worker" "$enable_compression" "$use_composite_keys" "$use_fallback_cache"
+    sleep 10
+fi
 
 if [[ $workload_name == "ycsbt" ]]; then
     # YCSB-T
@@ -93,4 +129,13 @@ else
 fi
 
 
-bash scripts/stop_styx_cluster.sh "$styx_threads_per_worker"
+if [[ "$DEPLOY_MODE" == "k8s-minikube" || "$DEPLOY_MODE" == "k8s-cluster" ]]; then
+    if [[ -n "${KUBEFWD_PID:-}" ]]; then
+        echo "Stopping kubefwd (pid $KUBEFWD_PID)..."
+        sudo kill "$KUBEFWD_PID" 2>/dev/null || true
+        unset KUBEFWD_PID
+    fi
+    bash scripts/uninstall_styx_cluster_with_helm.sh
+else
+    bash scripts/stop_styx_cluster.sh "$styx_threads_per_worker"
+fi

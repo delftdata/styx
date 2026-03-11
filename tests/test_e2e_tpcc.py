@@ -1,13 +1,12 @@
 from dataclasses import dataclass
 import json
 import logging
-import os
 from pathlib import Path
 import shutil
 
 import pytest
 
-from tests.helpers import run_and_stream, wait_port
+from tests.helpers import make_test_env, run_and_stream, wait_port
 
 log = logging.getLogger("e2e.tpcc")
 
@@ -95,7 +94,6 @@ def _start_cmd(paths: _Paths, p: _ClusterParams) -> list[str]:
         str(paths.start_script),
         str(p.n_partitions),
         str(p.epoch_size),
-        str(p.n_partitions),
         str(p.threads_per_worker),
         p.enable_compression,
         p.use_composite_keys,
@@ -274,7 +272,7 @@ def test_styx_e2e_tpcc(tmp_path: Path):
     cluster = _ClusterParams()
     client = _ClientParams(total_time=10, n_keys=1, n_warehouses=1, regenerate_tpcc_data=True, kill_at=-1)
 
-    env = os.environ.copy()
+    env = make_test_env()
 
     try:
         _start_cluster_and_wait(paths, env, cluster)
@@ -307,7 +305,7 @@ def test_styx_e2e_tpcc_kill_worker_midrun(tmp_path: Path):
         total_time=60, n_keys=1, n_warehouses=1, regenerate_tpcc_data=True, kill_at=20, warmup_seconds=10
     )
 
-    env = os.environ.copy()
+    env = make_test_env()
 
     try:
         _start_cluster_and_wait(paths, env, cluster)

@@ -324,6 +324,24 @@ class SyncStyxClient(BaseStyxClient):
         s.send(msg)
         s.close()
 
+    def update_dataflow(
+        self,
+        stateflow_graph: StateflowGraph,
+        external_modules: tuple | None = None,
+    ) -> None:
+        self._verify_dataflow_input(stateflow_graph, external_modules)
+        self._current_active_graph = stateflow_graph
+        self.graph_known_event.set()
+        msg = NetworkingManager.encode_message(
+            msg=(stateflow_graph,),
+            msg_type=MessageType.UpdateExecutionGraph,
+            serializer=Serializer.CLOUDPICKLE,
+        )
+        s = socket.socket()
+        s.connect((self._styx_coordinator_adr, self._styx_coordinator_port))
+        s.send(msg)
+        s.close()
+
     def notify_init_data_complete(self) -> None:
         msg = NetworkingManager.encode_message(
             msg=b"",

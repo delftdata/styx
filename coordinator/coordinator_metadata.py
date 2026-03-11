@@ -28,7 +28,6 @@ if TYPE_CHECKING:
     from styx.common.tcp_networking import NetworkingManager
     from styx.common.types import OperatorPartition
 
-MAX_OPERATOR_PARALLELISM = int(os.getenv("MAX_OPERATOR_PARALLELISM", "10"))
 KAFKA_REPLICATION_FACTOR = int(os.getenv("KAFKA_REPLICATION_FACTOR", "3"))
 SNAPSHOT_BUCKET_NAME: str = os.getenv("SNAPSHOT_BUCKET_NAME", "styx-snapshots")
 COMPACT_SNAPSHOTS: bool = bool(strtobool(os.getenv("COMPACT_SNAPSHOTS", "false")))
@@ -53,6 +52,7 @@ class Coordinator:
         self.worker_ip_to_id: dict[tuple[str, int, int], int] = {}
 
         self.kafka_metadata_producer: AIOKafkaProducer | None = None
+        self.max_operator_parallelism: int | None = None
 
     async def start_kafka_metadata_producer(self) -> None:
         self.kafka_metadata_producer = AIOKafkaProducer(
@@ -226,7 +226,7 @@ class Coordinator:
         # TODO the cluster was balanced by the previous deployment, if the graph is complex it might be
         #  unbalanced after the update
         for _, operator in iter(new_stateflow_graph):
-            for partition in range(MAX_OPERATOR_PARALLELISM):
+            for partition in range(self.max_operator_parallelism):
                 operator_copy = deepcopy(operator)
                 # Partitions are [0, n_partitions). Everything >= n_partitions is a shadow partition.
                 if partition >= operator.n_partitions:
@@ -268,6 +268,7 @@ class Coordinator:
     ) -> None:
         if not isinstance(stateflow_graph, StateflowGraph):
             raise NotAStateflowGraphError
+        self.max_operator_parallelism = stateflow_graph.max_operator_parallelism
         if ingress_type == IngressTypes.KAFKA:
             await self.create_kafka_ingress_topics(stateflow_graph)
         for operator_name, operator in iter(stateflow_graph):
@@ -281,7 +282,7 @@ class Coordinator:
         for operator_name, operator in iter(stateflow_graph):
             for shadow_partition in range(
                 operator.n_partitions,
-                MAX_OPERATOR_PARALLELISM,
+                self.max_operator_parallelism,
             ):
                 operator_copy = deepcopy(operator)
                 operator_copy.make_shadow()
@@ -351,7 +352,7 @@ class Coordinator:
             + [
                 NewTopic(
                     topic=operator.name,
-                    num_partitions=MAX_OPERATOR_PARALLELISM,
+                    num_partitions=self.max_operator_parallelism,
                     replication_factor=KAFKA_REPLICATION_FACTOR,
                 )
                 for operator in stateflow_graph.nodes.values()
@@ -359,7 +360,7 @@ class Coordinator:
             + [
                 NewTopic(
                     topic=operator.name + "--OUT",
-                    num_partitions=MAX_OPERATOR_PARALLELISM,
+                    num_partitions=self.max_operator_parallelism,
                     replication_factor=KAFKA_REPLICATION_FACTOR,
                 )
                 for operator in stateflow_graph.nodes.values()
@@ -371,7 +372,7 @@ class Coordinator:
             try:
                 future.result()
                 logging.warning(
-                    f"Topic {topic} created with {MAX_OPERATOR_PARALLELISM} partitions "
+                    f"Topic {topic} created with {self.max_operator_parallelism} partitions "
                     f"and replication factor of {KAFKA_REPLICATION_FACTOR}",
                 )
             except KafkaException as e:

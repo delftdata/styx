@@ -1,0 +1,10 @@
+[run]
+relative_files = True
+omit =
+    tests/*
+    demo/*
+    scripts/*
+    */site-packages/*
+
+[report]
+skip_empty = True

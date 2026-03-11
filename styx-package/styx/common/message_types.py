@@ -43,5 +43,4 @@ class MessageType(IntEnum):
     AsyncMigration = 38
     MigrationInitDone = 39
     InitDataComplete = 40
-    AlignStart = 100
-    AlignEnd = 101
+    UpdateExecutionGraph = 41

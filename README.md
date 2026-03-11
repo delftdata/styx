@@ -35,6 +35,18 @@ pip install -r requirements.txt
 *   [`worker`](https://github.com/delftdata/styx/tree/main/styx-package)
     Styx worker.
 
+## Container images
+
+The coordinator and worker images are published to the GitHub Container Registry (GHCR).
+
+Pull the images:
+
+```bash
+docker pull ghcr.io/delftdata/styx-coordinator:latest
+docker pull ghcr.io/delftdata/styx-worker:latest
+```
+
+
 ## Running experiments
 
 The `scripts/` directory contains automation scripts for running the Styx benchmarks.
@@ -158,4 +170,3 @@ booktitle = {Proceedings of the 2025 International Conference on Management of D
 series = {SIGMOD '25}
 }
 ```
-

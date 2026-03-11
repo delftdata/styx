@@ -1,4 +1,4 @@
-setuptools==80.10.1
+setuptools==82.0.1
 # networking service
 uvloop==0.22.1
 msgspec==0.20.0
@@ -8,8 +8,8 @@ zstandard==0.25.0
 # monitoring service
 prometheus-client==0.24.1
 # kafka
-confluent-kafka==2.13.0
+confluent-kafka==2.13.2
 # snapshots
-boto3==1.42.49
+boto3==1.42.65
 # deathstar
 geopy

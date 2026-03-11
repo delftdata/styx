@@ -1,0 +1,28 @@
+{{- $wait := (.Values.wait | default dict) -}}
+{{- $waitMode := (default "tcp" $wait.mode) -}}
+{{- if (and (default false $wait.enabled) (eq $waitMode "k8s")) -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "styx.fullname" . }}-wait
+  labels:
+    {{- include "styx.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "styx.fullname" . }}-wait
+  labels:
+    {{- include "styx.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "styx.fullname" . }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "styx.fullname" . }}-wait
+{{- end }}

@@ -1,4 +1,5 @@
 import multiprocessing
+import os
 import subprocess
 import sys
 import time
@@ -31,18 +32,21 @@ sleeps_per_second = 100
 sleep_time = 0.0085
 seconds = int(sys.argv[6])
 key_list: list[int] = list(range(N_ENTITIES))
-STYX_HOST: str = "localhost"
-STYX_PORT: int = 8886
-# STYX_HOST: str = '35.229.80.128'
-# STYX_PORT: int = 8888
-KAFKA_URL = "localhost:9092"
-# KAFKA_URL = '35.229.114.18:9094'
+STYX_HOST: str = os.getenv("STYX_HOST", "localhost")
+STYX_PORT: int = int(os.getenv("STYX_PORT", "8886"))
+KAFKA_URL: str = os.getenv("KAFKA_URL", "localhost:9092")
+S3_URL: str = os.getenv("S3_ENDPOINT") or "http://localhost:9000"
+S3_ACC_KEY: str = os.getenv("S3_ACCESS_KEY") or "rustfsadmin"
+S3_SEC_KEY: str = os.getenv("S3_SECRET_KEY") or "rustfsadmin"
+S3_REG: str = os.getenv("S3_REGION") or "us-east-1"
 SAVE_DIR: str = sys.argv[7]
 warmup_seconds: int = int(sys.argv[8])
 run_with_validation = sys.argv[9].lower() == "true"
 kill_at: int = int(sys.argv[10])
 ####################################################################################################################
-g = StateflowGraph("ycsb-benchmark", operator_state_backend=LocalStateBackend.DICT)
+g = StateflowGraph("ycsb-benchmark",
+                   operator_state_backend=LocalStateBackend.DICT,
+                   max_operator_parallelism=N_PARTITIONS)
 ycsb_operator.set_n_partitions(N_PARTITIONS)
 g.add_operators(ycsb_operator)
 
@@ -139,10 +143,10 @@ def main():
 
     s3 = boto3.client(
         "s3",
-        endpoint_url="http://localhost:9000",
-        aws_access_key_id="rustfsadmin",
-        aws_secret_access_key="rustfsadmin",
-        region_name="us-east-1"
+        endpoint_url=S3_URL,
+        aws_access_key_id=S3_ACC_KEY,
+        aws_secret_access_key=S3_SEC_KEY,
+        region_name=S3_REG
     )
     styx_client = SyncStyxClient(STYX_HOST, STYX_PORT, kafka_url=KAFKA_URL, s3=s3)
     ycsb_init(styx_client, ycsb_operator, key_list)

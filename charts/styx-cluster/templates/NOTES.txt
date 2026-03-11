@@ -1,0 +1,19 @@
+Styx Stack installed.
+
+Styx coordinator (expose locally):
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ .Release.Name }}-styx-coordinator 8888:8888
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ .Release.Name }}-styx-coordinator 8000:8000  # metrics
+
+Kafka bootstrap (expose locally):
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ .Release.Name }}-kafka-headless 9092:9092
+
+S3 (RustFS, expose locally):
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ .Release.Name }}-rustfs 9000:9000
+
+Prometheus (expose locally):
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ .Release.Name }}-prometheus 9090:9090
+
+Grafana (expose locally):
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ .Release.Name }}-grafana 3000:3000
+
+Or use kubefw to expose them all with a single command: sudo -E kubefwd -n {{ .Release.Namespace }}

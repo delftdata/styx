@@ -1,0 +1,20 @@
+image:
+  repository: grafana/grafana
+  tag: 11.5.2-ubuntu
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 3000
+
+resources: {}
+
+env:
+  GF_AUTH_ANONYMOUS_ENABLED: "true"
+  GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
+  GF_AUTH_DISABLE_LOGIN_FORM: "true"
+
+persistence:
+  enabled: false
+  size: 1Gi
+  storageClass: ""

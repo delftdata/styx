@@ -1,0 +1,37 @@
+apiVersion: v2
+name: styx-stack
+description: Umbrella chart for Styx (coordinator + workers) + Kafka/ZooKeeper + RustFS + Prometheus/Grafana
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+
+dependencies:
+  - name: zookeeper
+    version: 0.2.0
+    repository: https://ricardo-aires.github.io/helm-charts/
+    condition: zookeeper.enabled
+
+  - name: kafka
+    version: 0.2.0
+    repository: https://ricardo-aires.github.io/helm-charts/
+    condition: kafka.enabled
+
+  - name: rustfs
+    version: 0.5.0
+    repository: oci://registry-1.docker.io/cloudpirates
+    condition: rustfs.enabled
+
+  - name: prometheus
+    version: 0.1.0
+    repository: "file://../prometheus"
+    condition: prometheus.enabled
+
+  - name: grafana
+    version: 0.1.0
+    repository: "file://../grafana"
+    condition: grafana.enabled
+
+  - name: styx
+    version: 0.1.0
+    repository: "file://../styx"
+    condition: styx.enabled

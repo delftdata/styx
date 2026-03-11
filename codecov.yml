@@ -1,0 +1,34 @@
+coverage:
+  status:
+    project:
+      default:
+        target: auto        # require coverage to not drop vs base commit
+        threshold: 2%       # allow up to 2% drop before failing
+    patch:
+      default:
+        target: auto
+        threshold: 5%       # new code in PRs must be at least this covered
+
+comment:
+  layout: "reach,diff,flags,files"
+  behavior: default
+  require_changes: true     # only post PR comment if coverage changes
+
+flags:
+  coordinator:
+    paths:
+      - coordinator/
+    carryforward: true
+  worker:
+    paths:
+      - worker/
+    carryforward: true
+  styx-package:
+    paths:
+      - styx-package/
+    carryforward: true
+
+ignore:
+  - "tests/"
+  - "demo/"
+  - "scripts/"

@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "grafana.fullname" . }}-provisioning
+  labels:
+    {{- include "grafana.labels" . | nindent 4 }}
+    app.kubernetes.io/component: grafana
+
+data:
+  datasource.yml: |-
+{{ tpl (.Files.Get "files/grafana/provisioning/datasources/datasource.yml") . | indent 4 }}
+  dashboard.yml: |-
+{{ .Files.Get "files/grafana/provisioning/dashboards/dashboard.yml" | indent 4 }}

@@ -1,4 +1,5 @@
 import asyncio
+import os
 import sys
 
 from aiokafka import AIOKafkaConsumer
@@ -23,7 +24,7 @@ async def consume(save_dir):
     consumer = AIOKafkaConsumer(
         auto_offset_reset="earliest",
         value_deserializer=msgpack_deserialization,
-        bootstrap_servers="localhost:9092")
+        bootstrap_servers=os.getenv("KAFKA_URL", "localhost:9092"))
     await consumer.start()
     topics = []
     # Ensure topic is created by the producer (and not auto-created by this

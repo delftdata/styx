@@ -21,7 +21,9 @@ dependencies = [
     # Hashing
     "cityhash>=0.4.10,<1.0.0",
     # Compression
-    "zstandard>=0.25.0,<1.0.0"
+    "zstandard>=0.25.0,<1.0.0",
+    # S3
+    "boto3>=1.42.59"
 ]
 
 [tool.setuptools.packages.find]

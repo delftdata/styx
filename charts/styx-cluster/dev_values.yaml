@@ -1,0 +1,148 @@
+global:
+  security:
+    allowInsecureImages: true
+
+styx:
+  enabled: true
+
+  imagePullSecrets: []
+  nameOverride: ""
+  fullnameOverride: ""
+
+  coordinator:
+    image:
+      repository: styx-coordinator
+      tag: dev
+      pullPolicy: IfNotPresent
+    replicas: 1
+    ports:
+      discovery: 8888
+      http: 8000
+    env:
+      HEARTBEAT_LIMIT: "5000"
+      HEARTBEAT_CHECK_INTERVAL: "500"
+    resources: {}
+    service:
+      type: ClusterIP
+
+  worker:
+    image:
+      repository: styx-worker
+      tag: dev
+      pullPolicy: IfNotPresent
+    replicas: 2
+    env:
+      INGRESS_TYPE: KAFKA
+      WORKER_THREADS: "2"
+    resources: {}
+    service:
+      type: ClusterIP
+      port: 8000
+
+  rustfs:
+    accessKey: "rustfsadmin"
+    secretKey: "rustfsadmin"
+    bucket: "styx-snapshots"
+
+  monitoring:
+    enabled: false
+    # where your /metrics lives (assumption: http port 8000, path /metrics)
+    metricsPath: /metrics
+
+  wait:
+    enabled: true
+    mode: k8s
+    image:
+      repository: "alpine/k8s"
+      tag: "1.32.13"
+
+kafka:
+  enabled: true
+  image:
+    repository: confluentinc/cp-kafka
+    tag: "7.4.0"
+  replicaCount: 3
+  messageMaxBytes: 134217728
+  offsetsTopicReplicationFactor: 3
+  minInsyncReplicas: 1
+  defaultReplicationFactor: 3
+  zookeeper:
+    enabled: false
+    url: "styx-zookeeper-headless.styx.svc.cluster.local:2181"
+    kerberos:
+      enabled: false
+  configurationOverrides:
+    replica.fetch.max.bytes: "134217728"
+    transaction.state.log.min.isr: "1"
+    transaction.state.log.replication.factor: "3"
+  externalAccess:
+    enabled: true
+
+zookeeper:
+  enabled: true
+  # Ensure the Zookeeper headless service name is stable and matches
+  # kafka.zookeeper.url default (styx-zookeeper-headless).
+  fullnameOverride: styx-zookeeper
+  image:
+    repository: confluentinc/cp-zookeeper
+    tag: "7.4.0"
+  replicaCount: 3
+
+rustfs:
+  enabled: true
+
+  replicaCount: 3
+  deploymentType: deployment
+
+  auth:
+    accessKey: "rustfsadmin"
+    secretKey: "rustfsadmin"
+
+  ingress:
+    enabled: false
+  consoleIngress:
+    enabled: false
+
+  dataPersistence:
+    enabled: true
+    storageClass: ""
+    size: 10Gi
+
+  logsPersistence:
+    enabled: true
+    storageClass: ""
+    size: 1Gi
+
+prometheus:
+  enabled: true
+  image:
+    repository: prom/prometheus
+    tag: v3.2.1
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 9090
+  resources: {}
+  scrapeInterval: 1s
+  scrapeTargets: []
+
+# grafana values are wired to provision dashboards/datasources from files/grafana
+# in charts/styx-cluster/charts/grafana.
+grafana:
+  enabled: true
+  image:
+    repository: grafana/grafana
+    tag: 11.5.2-ubuntu
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 3000
+  resources: {}
+  env:
+    GF_AUTH_ANONYMOUS_ENABLED: "true"
+    GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
+    GF_AUTH_DISABLE_LOGIN_FORM: "true"
+  persistence:
+    enabled: false
+    size: 1Gi
+    storageClass: ""

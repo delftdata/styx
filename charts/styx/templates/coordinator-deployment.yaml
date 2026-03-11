@@ -1,0 +1,156 @@
+{{- $coord := (.Values.coordinator | default dict) -}}
+{{- $img := ($coord.image | default dict) -}}
+{{- $ports := ($coord.ports | default dict) -}}
+{{- $env := ($coord.env | default dict) -}}
+{{- $resources := ($coord.resources | default dict) -}}
+{{- $wait := (.Values.wait | default dict) -}}
+{{- $waitMode := (default "tcp" $wait.mode) -}}
+{{- $waitK8s := ($wait.k8s | default dict) -}}
+{{- $defaultKafkaSelector := (printf "app.kubernetes.io/instance=%s,app.kubernetes.io/name=kafka" .Release.Name) -}}
+{{- $defaultRustfsSelector := (printf "app.kubernetes.io/instance=%s,app.kubernetes.io/name=rustfs" .Release.Name) -}}
+{{- $defaultWaitRepo := ternary "bitnami/kubectl" "busybox" (eq $waitMode "k8s") -}}
+{{- $defaultWaitTag := ternary "1.29.6" "1.36" (eq $waitMode "k8s") -}}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "styx.fullname" . }}-coordinator
+  labels:
+    {{- include "styx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: coordinator
+spec:
+  replicas: {{ default 1 $coord.replicas }}
+  selector:
+    matchLabels:
+      {{- include "styx.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: coordinator
+  template:
+    metadata:
+      labels:
+        {{- include "styx.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: coordinator
+    spec:
+      serviceAccountName: {{ include "styx.fullname" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{ if (default false $wait.enabled) }}
+      initContainers:
+        - name: wait-for-dependencies
+          image: "{{ default $defaultWaitRepo $wait.image.repository }}:{{ default $defaultWaitTag $wait.image.tag }}"
+          imagePullPolicy: {{ default "IfNotPresent" $wait.image.pullPolicy }}
+          env:
+            - name: KAFKA_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "styx.fullname" . }}-config
+                  key: KAFKA_URL
+            - name: RUSTFS_ENDPOINT
+              value: {{ default "" .Values.rustfs.endpoint | quote }}
+            - name: WAIT_MODE
+              value: {{ default "tcp" $waitMode | quote }}
+            - name: WAIT_TIMEOUT_SEC
+              value: {{ default 300 $wait.timeoutSec | quote }}
+            - name: WAIT_SLEEP_SEC
+              value: {{ default 2 $wait.sleepSec | quote }}
+            - name: WAIT_FOR_KAFKA
+              value: {{ default true $wait.waitForKafka | quote }}
+            - name: WAIT_FOR_RUSTFS
+              value: {{ default true $wait.waitForRustfs | quote }}
+            - name: WAIT_NAMESPACE
+              value: {{ default .Release.Namespace $waitK8s.namespace | quote }}
+            - name: KAFKA_SELECTOR
+              value: {{ default $defaultKafkaSelector $waitK8s.kafkaSelector | quote }}
+            - name: RUSTFS_SELECTOR
+              value: {{ default $defaultRustfsSelector $waitK8s.rustfsSelector | quote }}
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              deadline=$(( $(date +%s) + WAIT_TIMEOUT_SEC ))
+              wait_port() {
+                name="$1"
+                host="$2"
+                port="$3"
+                if [ -z "$host" ] || [ -z "$port" ]; then
+                  echo "missing host/port for $name"
+                  return 1
+                fi
+                echo "waiting for $name at $host:$port"
+                while ! nc -z "$host" "$port" >/dev/null 2>&1; do
+                  if [ "$(date +%s)" -ge "$deadline" ]; then
+                    echo "timeout waiting for $name at $host:$port"
+                    return 1
+                  fi
+                  sleep "$WAIT_SLEEP_SEC"
+                done
+              }
+              if [ "$WAIT_MODE" = "k8s" ]; then
+                if [ "$WAIT_FOR_KAFKA" = "true" ]; then
+                  if [ -z "$KAFKA_SELECTOR" ]; then
+                    echo "KAFKA_SELECTOR is required when wait.mode=k8s"
+                    exit 1
+                  fi
+                  echo "waiting for kafka pods (selector=$KAFKA_SELECTOR, ns=$WAIT_NAMESPACE)"
+                  kubectl wait --for=condition=Ready pod -l "$KAFKA_SELECTOR" -n "$WAIT_NAMESPACE" \
+                    --timeout="${WAIT_TIMEOUT_SEC}s"
+                fi
+                if [ "$WAIT_FOR_RUSTFS" = "true" ]; then
+                  if [ -z "$RUSTFS_SELECTOR" ]; then
+                    echo "RUSTFS_SELECTOR is required when wait.mode=k8s"
+                    exit 1
+                  fi
+                  echo "waiting for rustfs pods (selector=$RUSTFS_SELECTOR, ns=$WAIT_NAMESPACE)"
+                  kubectl wait --for=condition=Ready pod -l "$RUSTFS_SELECTOR" -n "$WAIT_NAMESPACE" \
+                    --timeout="${WAIT_TIMEOUT_SEC}s"
+                fi
+              else
+                if [ "$WAIT_FOR_KAFKA" = "true" ]; then
+                  kafka_host="${KAFKA_URL%%:*}"
+                  kafka_port="${KAFKA_URL##*:}"
+                  if [ "$kafka_host" = "$kafka_port" ]; then
+                    kafka_port="9092"
+                  fi
+                  wait_port "kafka" "$kafka_host" "$kafka_port"
+                fi
+                if [ "$WAIT_FOR_RUSTFS" = "true" ]; then
+                  rustfs_host="$(echo "$RUSTFS_ENDPOINT" | sed -E 's#^https?://##; s#/.*##; s/:.*##')"
+                  rustfs_port="$(echo "$RUSTFS_ENDPOINT" | sed -E 's#^https?://##; s#/.*##; s#.*:##')"
+                  if [ "$rustfs_port" = "$rustfs_host" ] || [ -z "$rustfs_port" ]; then
+                    rustfs_port="80"
+                  fi
+                  wait_port "rustfs" "$rustfs_host" "$rustfs_port"
+                fi
+              fi
+      {{ end }}
+      containers:
+        - name: coordinator
+          image: "{{ default "dev/styx-coordinator" $img.repository }}:{{ default "latest" $img.tag }}"
+          imagePullPolicy: {{ default "IfNotPresent" $img.pullPolicy }}
+          ports:
+            - name: discovery
+              containerPort: {{ default 8888 $ports.discovery }}
+            - name: protocol
+              containerPort: {{ default 8889 $ports.protocol }}
+            - name: http
+              containerPort: {{ default 8000 $ports.http }}
+          env:
+            - name: KAFKA_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "styx.fullname" . }}-config
+                  key: KAFKA_URL
+            - name: S3_ENDPOINT
+              value: {{ default (printf "http://%s-rustfs:9000" .Release.Name) .Values.rustfs.endpoint | quote }}
+            - name: S3_ACCESS_KEY
+              value: {{ default "" .Values.rustfs.accessKey | quote }}
+            - name: S3_SECRET_KEY
+              value: {{ default "" .Values.rustfs.secretKey | quote }}
+            - name: SNAPSHOT_BUCKET_NAME
+              value: {{ default "styx-snapshots" .Values.rustfs.bucket | quote }}
+            - name: HEARTBEAT_LIMIT
+              value: {{ default "5000" $env.HEARTBEAT_LIMIT | quote }}
+            - name: HEARTBEAT_CHECK_INTERVAL
+              value: {{ default "500" $env.HEARTBEAT_CHECK_INTERVAL | quote }}
+          resources:
+            {{- toYaml $resources | nindent 12 }}
