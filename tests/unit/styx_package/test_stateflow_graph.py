@@ -4,7 +4,6 @@ from styx.common.local_state_backends import LocalStateBackend
 from styx.common.operator import Operator
 from styx.common.stateflow_graph import StateflowGraph
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

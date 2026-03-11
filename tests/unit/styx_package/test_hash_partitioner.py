@@ -1,10 +1,8 @@
 """Unit tests for styx/common/partitioning/hash_partitioner.py"""
 
 import pytest
-
 from styx.common.exceptions import NonSupportedKeyTypeError
 from styx.common.partitioning.hash_partitioner import HashPartitioner
-
 
 # ---------------------------------------------------------------------------
 # Helpers

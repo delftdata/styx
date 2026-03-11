@@ -30,7 +30,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install styx-package/.
           python -m pip install -r coordinator/requirements.txt
-          python -m pip install pytest==9.0.2 pytest-cov
+          python -m pip install pytest==9.0.2 pytest-cov setuptools
 
       - name: Run coordinator unit tests
         run: pytest tests/unit/coordinator/ -v --cov=. --cov-report=xml:coverage-coordinator.xml

@@ -19,7 +19,6 @@ from styx.common.serialization import (
     zstd_msgpack_serialization,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -119,7 +118,8 @@ class TestCloudpickle:
     def test_roundtrip_dataclass(self):
         p = _Point(3, 7)
         result = cloudpickle_deserialization(cloudpickle_serialization(p))
-        assert result.x == 3 and result.y == 7
+        assert result.x == 3
+        assert result.y == 7
 
     def test_roundtrip_lambda(self):
         fn = lambda x: x * 2  # noqa: E731
@@ -157,7 +157,8 @@ class TestPickle:
     def test_roundtrip_dataclass(self):
         p = _Point(1, 2)
         result = pickle_deserialization(pickle_serialization(p))
-        assert result.x == 1 and result.y == 2
+        assert result.x == 1
+        assert result.y == 2
 
     def test_roundtrip_list(self):
         data = [10, 20, 30]

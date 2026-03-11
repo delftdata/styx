@@ -3,11 +3,9 @@
 import asyncio
 
 import pytest
-
 from styx.common.exceptions import OperatorDoesNotContainFunctionError
 from styx.common.operator import Operator
 from styx.common.partitioning.hash_partitioner import HashPartitioner
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -107,7 +105,7 @@ class TestOperatorRegister:
         op = _op()
         op.register(_dummy_func)
 
-        def dummy():  # noqa: ANN202
+        def dummy():
             return 99
 
         dummy.__name__ = "dummy"
