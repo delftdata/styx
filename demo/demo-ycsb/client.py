@@ -35,10 +35,10 @@ key_list: list[int] = list(range(N_ENTITIES))
 STYX_HOST: str = os.getenv("STYX_HOST", "localhost")
 STYX_PORT: int = int(os.getenv("STYX_PORT", "8886"))
 KAFKA_URL: str = os.getenv("KAFKA_URL", "localhost:9092")
-S3_URL: str = os.getenv("S3_ENDPOINT", "http://localhost:9000")
-S3_ACC_KEY: str = os.getenv("S3_ACCESS_KEY", "rustfsadmin")
-S3_SEC_KEY: str = os.getenv("S3_SECRET_KEY", "rustfsadmin")
-S3_REG: str = os.getenv("S3_REGION", "us-east-1")
+S3_URL: str = os.getenv("S3_ENDPOINT") or "http://localhost:9000"
+S3_ACC_KEY: str = os.getenv("S3_ACCESS_KEY") or "rustfsadmin"
+S3_SEC_KEY: str = os.getenv("S3_SECRET_KEY") or "rustfsadmin"
+S3_REG: str = os.getenv("S3_REGION") or "us-east-1"
 SAVE_DIR: str = sys.argv[7]
 warmup_seconds: int = int(sys.argv[8])
 run_with_validation = sys.argv[9].lower() == "true"

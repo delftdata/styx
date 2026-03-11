@@ -313,10 +313,10 @@ def benchmark_runner(proc_num) -> dict[bytes, dict]:
 def main():
     s3 = boto3.client(
         "s3",
-        endpoint_url=os.getenv("S3_ENDPOINT", "http://localhost:9000"),
-        aws_access_key_id=os.getenv("S3_ACCESS_KEY", "rustfsadmin"),
-        aws_secret_access_key=os.getenv("S3_SECRET_KEY", "rustfsadmin"),
-        region_name=os.getenv("S3_REGION", "us-east-1")
+        endpoint_url=os.getenv("S3_ENDPOINT") or "http://localhost:9000",
+        aws_access_key_id=os.getenv("S3_ACCESS_KEY") or "rustfsadmin",
+        aws_secret_access_key=os.getenv("S3_SECRET_KEY") or "rustfsadmin",
+        region_name=os.getenv("S3_REGION") or "us-east-1"
     )
     styx_client = SyncStyxClient(STYX_HOST, STYX_PORT, kafka_url=KAFKA_URL, s3=s3)
     styx_client.open(consume=False)

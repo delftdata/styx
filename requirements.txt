@@ -1,4 +1,4 @@
-setuptools==82.0.0
+setuptools==82.0.1
 # STYX
 # networking service
 uvloop==0.22.1
@@ -13,7 +13,7 @@ psutil==7.2.2
 aiokafka==0.13.0
 confluent-kafka==2.13.2
 # snapshots
-boto3==1.42.59
+boto3==1.42.65
 # deathstar
 geopy
 # shopping cart demo
@@ -23,12 +23,12 @@ locust==2.43.3
 # Plots and demo
 pandas==3.0.1
 tqdm==4.67.3
-numpy==2.4.2
+numpy==2.4.3
 scipy==1.17.1
 matplotlib==3.10.8
 # docs
-mkdocs-material==9.7.3
+mkdocs-material==9.7.5
 # tests
 pytest==9.0.2
 # make sure to have the same ruff verseion as in .github/workflows/ruff.yml line 30
-ruff==0.15.4
+ruff==0.15.5

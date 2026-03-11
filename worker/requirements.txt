@@ -1,4 +1,4 @@
-setuptools==82.0.0
+setuptools==82.0.1
 # networking service
 uvloop==0.22.1
 msgspec==0.20.0
@@ -10,6 +10,6 @@ psutil==7.2.2
 # Kafka
 aiokafka==0.13.0
 # snapshots
-boto3==1.42.59
+boto3==1.42.65
 # deathstar
 geopy
