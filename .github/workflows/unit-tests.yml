@@ -73,3 +73,34 @@ jobs:
           flags: worker
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: true
+
+  unit-tests-styx-package:
+    name: Unit tests (styx-package)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e styx-package/.
+          python -m pip install pytest==9.0.2 pytest-cov
+
+      - name: Run styx-package unit tests
+        run: pytest tests/unit/styx_package/ -v --cov=styx-package/styx --cov-report=xml:coverage-styx-package.xml
+
+      - name: Upload styx-package coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage-styx-package.xml
+          flags: styx-package
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: true

@@ -23,9 +23,12 @@ flags:
     paths:
       - worker/
     carryforward: true
+  styx-package:
+    paths:
+      - styx-package/
+    carryforward: true
 
 ignore:
   - "tests/"
   - "demo/"
   - "scripts/"
-  - "styx-package/"

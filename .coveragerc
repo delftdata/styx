@@ -4,7 +4,6 @@ omit =
     tests/*
     demo/*
     scripts/*
-    styx-package/*
     */site-packages/*
 
 [report]

@@ -1,8 +1,30 @@
 import contextlib
+import os
 import socket
 import subprocess
 import threading
 import time
+
+# S3 defaults for local development (RustFS via docker-compose-s3.yml).
+_S3_DEFAULTS = {
+    "S3_ENDPOINT": "http://localhost:9000",
+    "S3_ACCESS_KEY": "rustfsadmin",
+    "S3_SECRET_KEY": "rustfsadmin",
+    "S3_REGION": "us-east-1",
+}
+
+
+def make_test_env() -> dict:
+    """Return a copy of os.environ with S3 vars forced to local defaults.
+
+    Uses explicit assignment (not setdefault) so that stale or empty values
+    injected by other conftest files (e.g. coordinator conftest sets
+    S3_ACCESS_KEY=testkey) are always overwritten with the correct values for
+    the local RustFS instance.
+    """
+    env = os.environ.copy()
+    env.update(_S3_DEFAULTS)
+    return env
 
 
 def wait_port(host: str, port: int, timeout_s: float = 120.0) -> None:

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.helpers import run_and_stream, wait_port
+from tests.helpers import make_test_env, run_and_stream, wait_port
 
 log = logging.getLogger("e2e.ycsb")
 
@@ -204,7 +204,7 @@ def test_styx_e2e_ycsb(tmp_path: Path):
     cluster = _ClusterParams()
     client = _ClientParams(total_time=10, kill_at=-1)
 
-    env = os.environ.copy()
+    env = make_test_env()
 
     try:
         _start_cluster_and_wait(paths, env, cluster)
@@ -234,7 +234,7 @@ def test_styx_e2e_ycsb_kill_worker_midrun(tmp_path: Path):
     cluster = _ClusterParams()
     client = _ClientParams(total_time=60, kill_at=20, warmup_seconds=10)
 
-    env = os.environ.copy()
+    env = make_test_env()
 
     try:
         _start_cluster_and_wait(paths, env, cluster)
