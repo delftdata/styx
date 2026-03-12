@@ -29,3 +29,8 @@ for _k, _v in _defaults.items():
 _REPO_ROOT = str(Path(__file__).parent.parent.parent.parent)
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
+
+# Also add coordinator/ so bare imports like `from snapshot_compactor import ...` work.
+_COORDINATOR_DIR = str(Path(__file__).parent.parent.parent.parent / "coordinator")
+if _COORDINATOR_DIR not in sys.path:
+    sys.path.insert(0, _COORDINATOR_DIR)
