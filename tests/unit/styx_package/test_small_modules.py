@@ -24,7 +24,6 @@ from styx.common.local_state_backends import LocalStateBackend
 from styx.common.stateflow_ingress import IngressTypes, StateflowIngress
 from styx.common.stateflow_worker import StateflowWorker
 
-
 # ---------------------------------------------------------------------------
 # Function (ABC)
 # ---------------------------------------------------------------------------
@@ -170,11 +169,13 @@ class TestExceptions:
 
     def test_future_already_set(self):
         with pytest.raises(FutureAlreadySetError):
-            raise FutureAlreadySetError("already set")
+            msg = "already set"
+            raise FutureAlreadySetError(msg)
 
     def test_future_timed_out(self):
         with pytest.raises(FutureTimedOutError):
-            raise FutureTimedOutError("timed out")
+            msg = "timed out"
+            raise FutureTimedOutError(msg)
 
     def test_invalid_range_partitioning(self):
         with pytest.raises(InvalidRangePartitioningError):

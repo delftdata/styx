@@ -1,11 +1,10 @@
 """Unit tests for styx/common/stateful_function.py"""
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from styx.common.stateful_function import StatefulFunction
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -135,7 +134,7 @@ class TestBatchInsert:
 
 class TestCallRemoteAsync:
     def test_queues_remote_call_string_name(self):
-        sf, state, networking, graph, _ = _make_sf()
+        sf, _state, _networking, _graph, _ = _make_sf()
         sf.call_remote_async("users", "my_func", "key1", (1, 2))
         # Check that internal list was populated
         assert len(sf._StatefulFunction__async_remote_calls) == 1
@@ -144,7 +143,7 @@ class TestCallRemoteAsync:
         assert entry[1] == "my_func"
 
     def test_queues_remote_call_type_name(self):
-        sf, state, networking, graph, _ = _make_sf()
+        sf, _state, _networking, _graph, _ = _make_sf()
 
         class MyFunc:
             pass
@@ -193,7 +192,7 @@ class TestStatefulFunctionCall:
 
     @pytest.mark.asyncio
     async def test_call_local_migration(self):
-        sf, state, networking, *_ = _make_sf()
+        sf, state, _networking, *_ = _make_sf()
         state.in_remote_keys.return_value = True
         state.get_worker_id_old_partition.return_value = (0, 1)
         state.operator_partitions = {("users", 1)}  # old partition is local
@@ -202,7 +201,7 @@ class TestStatefulFunctionCall:
             return "migrated"
 
         sf.run = mock_run
-        result, n_calls, partial = await sf()
+        result, _n_calls, _partial = await sf()
         state.migrate_within_the_same_worker.assert_called_once_with("users", 0, "k1", 1)
         assert result == "migrated"
 
@@ -220,7 +219,7 @@ class TestStatefulFunctionCall:
             return "remote_migrated"
 
         sf.run = mock_run
-        result, n_calls, partial = await sf()
+        result, _n_calls, _partial = await sf()
         networking.request_key.assert_called_once()
         networking.wait_for_remote_key_event.assert_called_once()
         assert result == "remote_migrated"
@@ -234,6 +233,6 @@ class TestStatefulFunctionCall:
             return "cached"
 
         sf.run = mock_run
-        result, n_calls, partial = await sf()
+        result, _n_calls, partial = await sf()
         assert result == "cached"
         assert partial == -1

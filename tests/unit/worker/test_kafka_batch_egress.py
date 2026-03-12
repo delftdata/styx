@@ -1,14 +1,12 @@
 """Unit tests for worker/egress/styx_kafka_batch_egress.py"""
 
 import asyncio
-from collections import defaultdict
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
 from aiokafka import TopicPartition
+import pytest
 
 from worker.egress.styx_kafka_batch_egress import StyxKafkaBatchEgress
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -18,8 +16,7 @@ from worker.egress.styx_kafka_batch_egress import StyxKafkaBatchEgress
 def _egress(offsets=None, restart=False):
     if offsets is None:
         offsets = {("users", 0): -1, ("users", 1): -1}
-    e = StyxKafkaBatchEgress(offsets, restart_after_failure=restart)
-    return e
+    return StyxKafkaBatchEgress(offsets, restart_after_failure=restart)
 
 
 # ---------------------------------------------------------------------------

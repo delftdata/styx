@@ -2,10 +2,7 @@
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from worker.fault_tolerance.async_snapshots import AsyncSnapshotsS3
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -179,7 +176,7 @@ class TestRetrieveSnapshot:
         mock_s3.get_paginator.return_value = paginator
 
         s = _snap()
-        data, tp_off, tp_out_off, epoch, t_counter = s.retrieve_snapshot(
+        data, _tp_off, _tp_out_off, _epoch, _t_counter = s.retrieve_snapshot(
             0,
             [("users", 0)],
         )

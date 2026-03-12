@@ -13,7 +13,6 @@ from styx.common.tcp_networking import (
     StyxSocketClient,
 )
 
-
 # ---------------------------------------------------------------------------
 # StyxSocketClient
 # ---------------------------------------------------------------------------
@@ -79,9 +78,7 @@ class TestSocketPool:
 
 class TestNetworkingManager:
     def test_init(self):
-        with patch("socket.gethostbyname", return_value="10.0.0.1"), patch(
-            "socket.gethostname", return_value="worker"
-        ):
+        with patch("socket.gethostbyname", return_value="10.0.0.1"), patch("socket.gethostname", return_value="worker"):
             nm = NetworkingManager(host_port=6000, size=2)
         assert nm.host_port == 6000
         assert nm.socket_pool_size == 2
@@ -90,9 +87,7 @@ class TestNetworkingManager:
         assert nm.wait_remote_key_event == {}
 
     def test_set_peers(self):
-        with patch("socket.gethostbyname", return_value="10.0.0.1"), patch(
-            "socket.gethostname", return_value="worker"
-        ):
+        with patch("socket.gethostbyname", return_value="10.0.0.1"), patch("socket.gethostname", return_value="worker"):
             nm = NetworkingManager(host_port=6000)
         peers = {0: ("host1", 5000, 6000), 1: ("host2", 5001, 6001)}
         nm.set_peers(peers)
@@ -100,9 +95,7 @@ class TestNetworkingManager:
 
     @pytest.mark.asyncio
     async def test_close_all_connections_empty(self):
-        with patch("socket.gethostbyname", return_value="10.0.0.1"), patch(
-            "socket.gethostname", return_value="worker"
-        ):
+        with patch("socket.gethostbyname", return_value="10.0.0.1"), patch("socket.gethostname", return_value="worker"):
             nm = NetworkingManager(host_port=6000)
         await nm.close_all_connections()
         assert nm.pools == {}
@@ -111,9 +104,7 @@ class TestNetworkingManager:
     async def test_key_received_sets_event(self):
         import asyncio
 
-        with patch("socket.gethostbyname", return_value="10.0.0.1"), patch(
-            "socket.gethostname", return_value="worker"
-        ):
+        with patch("socket.gethostbyname", return_value="10.0.0.1"), patch("socket.gethostname", return_value="worker"):
             nm = NetworkingManager(host_port=6000)
         ev = asyncio.Event()
         nm.wait_remote_key_event[("op", 0)] = {"key1": ev}

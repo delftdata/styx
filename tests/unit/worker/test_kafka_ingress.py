@@ -1,14 +1,11 @@
 """Unit tests for worker/ingress/styx_kafka_ingress.py"""
 
-from unittest.mock import MagicMock, PropertyMock
+from unittest.mock import MagicMock
 
-import pytest
 from styx.common.message_types import MessageType
 from styx.common.run_func_payload import RunFuncPayload
-from styx.common.serialization import Serializer
 
 from worker.ingress.styx_kafka_ingress import StyxKafkaIngress
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -79,7 +76,7 @@ class TestKafkaIngressInit:
 
 class TestHandleMessageFromKafka:
     def test_normal_operation_sequences(self):
-        ingress, networking, sequencer, state = _make_ingress()
+        ingress, _networking, sequencer, _state = _make_ingress()
         msg = _make_msg()
         ingress.handle_message_from_kafka(msg)
         sequencer.sequence.assert_called_once()
@@ -91,7 +88,7 @@ class TestHandleMessageFromKafka:
 
     def test_key_none_sequences(self):
         """When key is None (insert operation), it should still sequence."""
-        ingress, networking, sequencer, state = _make_ingress()
+        ingress, networking, sequencer, _state = _make_ingress()
         networking.decode_message.return_value = ("users", None, "insert_func", (), 0)
         msg = _make_msg()
         ingress.handle_message_from_kafka(msg)
@@ -99,7 +96,7 @@ class TestHandleMessageFromKafka:
 
     def test_key_not_in_state_correct_partition(self):
         """Key doesn't exist in state but partition matches = insert."""
-        ingress, networking, sequencer, state = _make_ingress()
+        ingress, _networking, sequencer, state = _make_ingress()
         state.exists.return_value = False
         # which_partition returns same as the message partition
         ingress.registered_operators[("users", 0)].which_partition.return_value = 0
@@ -140,7 +137,7 @@ class TestHandleMessageFromKafka:
 
     async def test_invalid_message_type(self):
         """Non-ClientMsg types should be logged as errors."""
-        ingress, networking, sequencer, state = _make_ingress()
+        ingress, networking, sequencer, _state = _make_ingress()
         networking.get_msg_type.return_value = 99  # invalid type
         msg = _make_msg()
         ingress.handle_message_from_kafka(msg)

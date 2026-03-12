@@ -5,13 +5,11 @@ import threading
 
 import pytest
 from styx.client.styx_future import (
-    BaseFuture,
     StyxAsyncFuture,
     StyxFuture,
     StyxResponse,
 )
 from styx.common.exceptions import FutureAlreadySetError, FutureTimedOutError
-
 
 # ---------------------------------------------------------------------------
 # StyxResponse

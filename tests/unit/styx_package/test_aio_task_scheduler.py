@@ -112,7 +112,8 @@ class TestAIOTaskSchedulerWaitAll:
         s = AIOTaskScheduler()
 
         async def failing():
-            raise ValueError("boom")
+            msg = "boom"
+            raise ValueError(msg)
 
         s.create_task(failing())
         await s.wait_all()

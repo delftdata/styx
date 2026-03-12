@@ -1,16 +1,15 @@
 """Unit tests for styx/client/base_client.py"""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import botocore.exceptions
 import pytest
 from styx.client.base_client import SNAPSHOT_BUCKET, BaseStyxClient, _ensure_bucket_exists
-from styx.common.exceptions import GraphNotSerializableError, NotAStateflowGraphError
+from styx.common.exceptions import NotAStateflowGraphError
+from styx.common.local_state_backends import LocalStateBackend
 from styx.common.operator import Operator
 from styx.common.serialization import Serializer
-from styx.common.local_state_backends import LocalStateBackend
 from styx.common.stateflow_graph import StateflowGraph
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -109,7 +108,7 @@ class TestBaseStyxClientInit:
 
     def test_with_s3_creates_bucket(self):
         s3 = MagicMock()
-        c = ConcreteStyxClient("localhost", 8888, s3=s3)
+        ConcreteStyxClient("localhost", 8888, s3=s3)
         s3.create_bucket.assert_called_once_with(Bucket=SNAPSHOT_BUCKET)
 
     def test_delivery_timestamps_empty(self):
@@ -183,7 +182,7 @@ class TestPrepareKafkaMessage:
         class MyFunc:
             pass
 
-        request_id, serialized_value, partition = c._prepare_kafka_message(
+        _request_id, serialized_value, _partition = c._prepare_kafka_message(
             key="k",
             operator=Operator("users", 2),
             function=MyFunc,
@@ -211,7 +210,7 @@ class TestInitData:
         s3.put_object.assert_called_once()
         call_kwargs = s3.put_object.call_args[1]
         assert call_kwargs["Bucket"] == SNAPSHOT_BUCKET
-        assert "data/users/0/0.bin" == call_kwargs["Key"]
+        assert call_kwargs["Key"] == "data/users/0/0.bin"
 
     def test_init_metadata_without_s3_raises(self):
         c = ConcreteStyxClient("localhost", 8888)

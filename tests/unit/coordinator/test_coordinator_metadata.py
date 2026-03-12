@@ -1,8 +1,7 @@
 """Unit tests for coordinator/coordinator_metadata.py"""
 
 import asyncio
-from copy import deepcopy
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from styx.common.exceptions import NotAStateflowGraphError
@@ -11,7 +10,6 @@ from styx.common.operator import Operator
 from styx.common.stateflow_graph import StateflowGraph
 
 from coordinator.coordinator_metadata import Coordinator
-
 
 # ---------------------------------------------------------------------------
 # Helpers

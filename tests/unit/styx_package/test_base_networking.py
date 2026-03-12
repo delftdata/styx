@@ -16,7 +16,6 @@ from styx.common.message_types import MessageType
 from styx.common.run_func_payload import RunFuncPayload
 from styx.common.serialization import Serializer
 
-
 # ---------------------------------------------------------------------------
 # Concrete subclass for testing abstract methods
 # ---------------------------------------------------------------------------

@@ -2,7 +2,6 @@
 
 from styx.common.run_func_payload import RunFuncPayload, SequencedItem
 
-
 # ---------------------------------------------------------------------------
 # RunFuncPayload
 # ---------------------------------------------------------------------------
@@ -90,6 +89,10 @@ class TestSequencedItem:
 
     def test_sorting(self):
         p = RunFuncPayload(request_id=b"r", key="k", operator_name="op", partition=0, function_name="fn", params=())
-        items = [SequencedItem(t_id=30, payload=p), SequencedItem(t_id=10, payload=p), SequencedItem(t_id=20, payload=p)]
+        items = [
+            SequencedItem(t_id=30, payload=p),
+            SequencedItem(t_id=10, payload=p),
+            SequencedItem(t_id=20, payload=p),
+        ]
         sorted_items = sorted(items)
         assert [i.t_id for i in sorted_items] == [10, 20, 30]
