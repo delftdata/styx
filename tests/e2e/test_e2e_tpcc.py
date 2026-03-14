@@ -64,7 +64,7 @@ class _Paths:
 
 
 def _resolve_paths() -> _Paths:
-    repo_root = Path(__file__).resolve().parents[1]
+    repo_root = Path(__file__).resolve().parents[2]
     demo_dir = repo_root / "demo" / "demo-tpc-c"
     start_script = repo_root / "scripts" / "start_styx_cluster.sh"
     stop_script = repo_root / "scripts" / "stop_styx_cluster.sh"

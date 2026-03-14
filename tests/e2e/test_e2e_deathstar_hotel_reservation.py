@@ -7,20 +7,15 @@ import pytest
 
 from tests.helpers import make_test_env, run_and_stream, wait_port
 
-log = logging.getLogger("e2e.ycsb")
+log = logging.getLogger("e2e.deathstar_hotel_reservation")
 
 
 def _assert_metrics(
     results_dir: Path,
-    zipf_const: float,
     input_rate: int,
     client_threads: int,
 ) -> None:
-    if zipf_const > 0:
-        exp_name = f"ycsbt_zipf_{zipf_const}_{input_rate * client_threads}"
-    else:
-        exp_name = f"ycsbt_uni_{input_rate * client_threads}"
-
+    exp_name = f"d_hotel_reservation_{input_rate * client_threads}"
     metrics_json = results_dir / f"{exp_name}.json"
     log.info("Checking metrics json: %s", metrics_json)
     assert metrics_json.exists(), f"Missing metrics json: {metrics_json}"
@@ -34,15 +29,13 @@ def _assert_metrics(
 
     assert metrics.get("duplicate_requests") is False, metrics
     assert metrics.get("exactly_once_output") is True, metrics
-    assert metrics.get("total_consistent") is True, metrics
-    assert metrics.get("are_we_consistent") is True, metrics
     assert int(metrics.get("missed messages")) == 0, metrics
 
 
 @dataclass(frozen=True)
 class _ClusterParams:
     n_partitions: int = 4
-    epoch_size: int = 1000
+    epoch_size: int = 100
     threads_per_worker: int = 1
     enable_compression: str = "true"
     use_composite_keys: str = "true"
@@ -51,14 +44,11 @@ class _ClusterParams:
 
 @dataclass(frozen=True)
 class _ClientParams:
-    client_threads: int = 2
-    n_keys: int = 10_000
-    zipf_const: float = 0.0
-    input_rate: int = 200
+    client_threads: int = 1
+    input_rate: int = 100
     total_time: int = 10
     warmup_seconds: int = 1
-    run_with_validation: str = "true"
-    kill_at: int = -1  # <0 disables killing; client checks `0 <= kill_at == second`
+    kill_at: int = -1  # <0 disables killing; client checks `second == kill_at`
 
 
 @dataclass(frozen=True)
@@ -70,8 +60,8 @@ class _Paths:
 
 
 def _resolve_paths() -> _Paths:
-    repo_root = Path(__file__).resolve().parents[1]
-    demo_dir = repo_root / "demo" / "demo-ycsb"
+    repo_root = Path(__file__).resolve().parents[2]
+    demo_dir = repo_root / "demo" / "demo-deathstar-hotel-reservation"
     start_script = repo_root / "scripts" / "start_styx_cluster.sh"
     stop_script = repo_root / "scripts" / "stop_styx_cluster.sh"
 
@@ -112,19 +102,16 @@ def _stop_cmd(paths: _Paths, p: _ClusterParams) -> list[str]:
 
 
 def _client_cmd(results_dir: Path, cluster: _ClusterParams, client: _ClientParams) -> list[str]:
-    # client.py expects argv[10] = kill_at
+    # NOTE: kill_at is sys.argv[7] in your script.
     return [
         "python",
-        "client.py",
+        "pure_kafka_demo.py",
+        str(results_dir),
         str(client.client_threads),
-        str(client.n_keys),
         str(cluster.n_partitions),
-        str(client.zipf_const),
         str(client.input_rate),
         str(client.total_time),
-        str(results_dir),
         str(client.warmup_seconds),
-        client.run_with_validation,
         str(client.kill_at),
     ]
 
@@ -164,11 +151,11 @@ def _run_client(
         cwd=str(paths.demo_dir),
         env=env,
         timeout=timeout_s,
-        banner="RUN YCSB CLIENT",
+        banner="RUN DEATHSTAR HOTEL RESERVATION CLIENT",
         log=log,
     )
     if rc != 0:
-        raise AssertionError(f"client.py failed (rc={rc}). Output:\n{out}")
+        raise AssertionError(f"pure_kafka_demo.py failed (rc={rc}). Output:\n{out}")
 
 
 def _assert_artifacts_and_metrics(results_dir: Path, client: _ClientParams) -> None:
@@ -179,7 +166,7 @@ def _assert_artifacts_and_metrics(results_dir: Path, client: _ClientParams) -> N
     assert client_csv.exists(), f"Missing artifact: {client_csv}"
     assert output_csv.exists(), f"Missing artifact: {output_csv}"
 
-    _assert_metrics(results_dir, client.zipf_const, client.input_rate, client.client_threads)
+    _assert_metrics(results_dir=results_dir, input_rate=client.input_rate, client_threads=client.client_threads)
 
 
 def _stop_cluster(paths: _Paths, env: dict, cluster: _ClusterParams, *, timeout_s: int) -> None:
@@ -196,7 +183,7 @@ def _stop_cluster(paths: _Paths, env: dict, cluster: _ClusterParams, *, timeout_
 
 
 @pytest.mark.e2e
-def test_styx_e2e_ycsb(tmp_path: Path):
+def test_styx_e2e_dhr(tmp_path: Path):
     paths = _resolve_paths()
     results_dir = _make_results_dir(tmp_path)
 
@@ -221,11 +208,11 @@ def test_styx_e2e_ycsb(tmp_path: Path):
 
 
 @pytest.mark.e2e
-def test_styx_e2e_ycsb_kill_worker_midrun(tmp_path: Path):
+def test_styx_e2e_dhr_kill_worker_midrun(tmp_path: Path):
     """
     Same scenario/params, but:
       - total_time = 60 seconds
-      - kill at second=40 inside client.py (proc 0 only)
+      - kill at second=20 inside pure_kafka_demo.py (deterministic workload milestone)
     """
     paths = _resolve_paths()
     results_dir = _make_results_dir(tmp_path)

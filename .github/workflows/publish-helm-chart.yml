@@ -36,6 +36,9 @@ jobs:
           fi
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
+      - name: Build chart dependencies
+        run: helm dependency build charts/styx-cluster
+
       - name: Package Helm chart
         run: helm package charts/styx-cluster --version ${{ steps.version.outputs.version }} --destination /tmp/helm
 
