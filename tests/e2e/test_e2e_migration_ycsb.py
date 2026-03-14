@@ -198,7 +198,7 @@ def test_styx_e2e_migration_ycsb(tmp_path: Path):
     results_dir = _make_results_dir(tmp_path)
 
     cluster = _ClusterParams()
-    client = _ClientParams(total_time=120, start_n_partitions=4, end_n_partitions=8)
+    client = _ClientParams(total_time=120, start_n_partitions=8, end_n_partitions=4)
 
     env = make_test_env()
 
