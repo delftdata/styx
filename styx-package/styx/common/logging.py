@@ -13,8 +13,6 @@ if not logging.handlers:
 
 # Background thread drains the queue to stderr.
 _stream_handler = _stdlib_logging.StreamHandler()
-_stream_handler.setFormatter(
-    _stdlib_logging.Formatter("%(asctime)s.%(msecs)03d %(levelname)s:\t%(message)s")
-)
+_stream_handler.setFormatter(_stdlib_logging.Formatter("%(asctime)s.%(msecs)03d %(levelname)s:\t%(message)s"))
 _listener = QueueListener(_log_queue, _stream_handler, respect_handler_level=True)
 _listener.start()
