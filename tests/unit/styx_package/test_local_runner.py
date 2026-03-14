@@ -1,12 +1,10 @@
 import pytest
-
 from styx.common.local_state_backends import LocalStateBackend
 from styx.common.operator import Operator
 from styx.common.stateflow_graph import StateflowGraph
 from styx.local_runner import LocalStyxRunner
 from styx.local_runner.local_context import LocalStatefulFunction
 from styx.local_runner.local_state import LocalOperatorState
-
 
 # ---------------------------------------------------------------------------
 # Helpers: reusable graph + function definitions
@@ -300,7 +298,8 @@ class TestLocalStyxRunnerErrorHandling:
 
         @op.register
         async def boom(ctx):
-            raise ValueError("something went wrong")
+            msg = "something went wrong"
+            raise ValueError(msg)
 
         g.add_operator(op)
         runner = LocalStyxRunner(graph=g)
@@ -344,11 +343,13 @@ class TestLocalStyxRunnerBatch:
         runner = LocalStyxRunner(graph=g)
         runner.init_data("kv", {0: "x", 1: "y"})
 
-        results = await runner.send_batch([
-            ("kv", 0, "read", ()),
-            ("kv", 1, "read", ()),
-            ("kv", 2, "write", (99,)),
-        ])
+        results = await runner.send_batch(
+            [
+                ("kv", 0, "read", ()),
+                ("kv", 1, "read", ()),
+                ("kv", 2, "write", (99,)),
+            ]
+        )
 
         assert results[0] == (0, "x")
         assert results[1] == (1, "y")
