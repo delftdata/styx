@@ -273,9 +273,7 @@ def test_styx_e2e_migration_tpcc(tmp_path: Path):
 
     try:
         _start_cluster_and_wait(paths, env, cluster)
-        _ensure_tpcc_dataset(
-            paths, env, n_warehouses=client.n_warehouses, regenerate=client.regenerate_tpcc_data
-        )
+        _ensure_tpcc_dataset(paths, env, n_warehouses=client.n_warehouses, regenerate=client.regenerate_tpcc_data)
         _run_client(
             paths=paths,
             env=env,
