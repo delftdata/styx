@@ -8,12 +8,7 @@ from worker.sequencer.sequencer import Sequencer
 
 
 def _run_sync_in_loop(fn, *args):
-    """Execute a sync function inside a running asyncio event loop.
-
-    aiologger (styx.common.logging) calls asyncio.create_task() unconditionally
-    in _make_log_task (aiologger 0.7.0), which requires a running event loop
-    even for disabled log levels.
-    """
+    """Execute a sync function inside a running asyncio event loop."""
 
     async def _inner():
         return fn(*args)

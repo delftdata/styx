@@ -153,7 +153,7 @@ class TestInitDataComplete:
 class TestHeartbeat:
     def test_register_heartbeat(self):
         c = _coordinator()
-        # Manually set up worker pool state to avoid aiologger event loop requirement
+        # Manually set up worker pool state to avoid event loop requirement
         c.worker_pool.register_worker_heartbeat = MagicMock()
         c.register_worker_heartbeat(0, 1000.0)
         c.worker_pool.register_worker_heartbeat.assert_called_once_with(0, 1000.0)

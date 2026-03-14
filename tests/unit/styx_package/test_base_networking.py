@@ -1,8 +1,8 @@
 """Unit tests for styx/common/base_networking.py
 
-Note: many BaseNetworking methods use asyncio.Event or trigger aiologger,
-which require a running event loop.  We make those tests ``async`` so that
-pytest-asyncio (asyncio_mode = auto) provides a loop automatically.
+Note: many BaseNetworking methods use asyncio.Event, which requires a running
+event loop.  We make those tests ``async`` so that pytest-asyncio
+(asyncio_mode = auto) provides a loop automatically.
 """
 
 import asyncio
@@ -256,7 +256,7 @@ class TestAbortChain:
 
 
 # ---------------------------------------------------------------------------
-# add_response  (needs loop for aiologger)
+# add_response
 # ---------------------------------------------------------------------------
 
 

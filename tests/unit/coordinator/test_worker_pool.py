@@ -28,11 +28,7 @@ def _mock_operator() -> MagicMock:
 
 
 def _run_sync_in_loop(fn, *args):
-    """Run a sync function inside a running asyncio event loop.
-
-    aiologger (styx.common.logging) calls asyncio.create_task() when logging,
-    which requires a running event loop even from synchronous code.
-    """
+    """Run a sync function inside a running asyncio event loop."""
 
     async def _inner():
         return fn(*args)
