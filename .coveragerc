@@ -5,6 +5,18 @@ omit =
     demo/*
     scripts/*
     */site-packages/*
+    # Service entry points and orchestrators — tested via e2e tests
+    coordinator/coordinator_service.py
+    worker/worker_service.py
+    worker/transactional_protocols/aria.py
+    worker/async_snapshotting.py
+    worker/boot_worker.py
+    # Abstract/trivial modules — not worth testing
+    styx-package/styx/common/base_protocol.py
+    styx-package/styx/common/base_state.py
+    styx-package/styx/common/protocols.py
+    styx-package/styx/common/types.py
+    worker/operator_state/aria/conflict_detection_types.py
 
 [report]
 skip_empty = True

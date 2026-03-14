@@ -415,3 +415,138 @@ class TestSnapshotHelpers:
         s = _state()
         s.data[OP_PART] = {"k": "v"}
         assert s.get_operator_data_for_repartitioning(OP_PART) == {"k": "v"}
+
+
+# ---------------------------------------------------------------------------
+# add_keys_to_send
+# ---------------------------------------------------------------------------
+
+
+class TestAddKeysToSend:
+    def test_assigns_keys_to_send(self):
+        s = _state()
+        kts = {OP_PART: {("k1", 1), ("k2", 2)}}
+        s.add_keys_to_send(kts)
+        assert s.keys_to_send is kts
+
+
+# ---------------------------------------------------------------------------
+# get_key_to_migrate
+# ---------------------------------------------------------------------------
+
+
+class TestGetKeyToMigrate:
+    def test_pops_key_and_removes_from_keys_to_send(self):
+        s = _state()
+        s.data[OP_PART]["k1"] = "v1"
+        s.keys_to_send[OP_PART] = {("k1", 2)}
+        val = s.get_key_to_migrate((OP, 2), "k1", PART)
+        assert val == "v1"
+        assert "k1" not in s.data[OP_PART]
+        assert ("k1", 2) not in s.keys_to_send[OP_PART]
+
+
+# ---------------------------------------------------------------------------
+# set_data_from_migration
+# ---------------------------------------------------------------------------
+
+
+class TestSetDataFromMigration:
+    def test_stores_data_and_cleans_remote_keys(self):
+        s = _state()
+        s.remote_keys[OP_PART] = {"k1": (1, 0)}
+        s.set_data_from_migration(OP_PART, "k1", "migrated_value")
+        assert s.data[OP_PART]["k1"] == "migrated_value"
+        assert OP_PART not in s.remote_keys
+
+    def test_partial_remote_keys_cleanup(self):
+        s = _state()
+        s.remote_keys[OP_PART] = {"k1": (1, 0), "k2": (2, 0)}
+        s.set_data_from_migration(OP_PART, "k1", "v1")
+        assert "k1" not in s.remote_keys[OP_PART]
+        assert "k2" in s.remote_keys[OP_PART]
+
+
+# ---------------------------------------------------------------------------
+# migrate_within_the_same_worker
+# ---------------------------------------------------------------------------
+
+
+class TestMigrateWithinSameWorker:
+    def test_moves_key_between_partitions(self):
+        s = InMemoryOperatorState({(OP, 0), (OP, 1)})
+        s.data[(OP, 0)]["k1"] = "val"
+        s.keys_to_send[(OP, 0)] = {("k1", 1)}
+        s.remote_keys[(OP, 1)] = {"k1": (0, 0)}
+        s.migrate_within_the_same_worker(OP, 1, "k1", 0)
+        assert "k1" not in s.data[(OP, 0)]
+        assert s.data[(OP, 1)]["k1"] == "val"
+
+
+# ---------------------------------------------------------------------------
+# set_batch_data_from_migration
+# ---------------------------------------------------------------------------
+
+
+class TestSetBatchDataFromMigration:
+    def test_batch_stores_and_cleans_remote_keys(self):
+        s = _state()
+        s.remote_keys[OP_PART] = {"k1": (1, 0), "k2": (1, 0)}
+        s.set_batch_data_from_migration(OP_PART, {"k1": "v1", "k2": "v2"})
+        assert s.data[OP_PART]["k1"] == "v1"
+        assert s.data[OP_PART]["k2"] == "v2"
+        assert OP_PART not in s.remote_keys
+
+
+# ---------------------------------------------------------------------------
+# get_all
+# ---------------------------------------------------------------------------
+
+
+class TestGetAll:
+    def test_returns_copy_of_data(self):
+        s = _state()
+        s.data[OP_PART] = {"k1": "v1", "k2": "v2"}
+        result = s.get_all(t_id=1, operator_name=OP, partition=PART)
+        assert result == {"k1": "v1", "k2": "v2"}
+        # Should be a copy
+        result["k3"] = "v3"
+        assert "k3" not in s.data[OP_PART]
+
+    def test_records_reads_for_all_keys(self):
+        s = _state()
+        s.data[OP_PART] = {"k1": "v1", "k2": "v2"}
+        s.get_all(t_id=1, operator_name=OP, partition=PART)
+        assert "k1" in s.read_sets[OP_PART][1]
+        assert "k2" in s.read_sets[OP_PART][1]
+
+
+# ---------------------------------------------------------------------------
+# commit exception path
+# ---------------------------------------------------------------------------
+
+
+class TestCommitException:
+    async def test_commit_exception_is_reraised(self):
+        s = _state()
+        _put(s, "k", "v", t_id=1)
+        # Corrupt write_sets to trigger an exception
+        s.write_sets[("nonexistent", 99)] = {2: {"x": "y"}}
+        import pytest
+
+        with pytest.raises(KeyError):
+            s.commit(aborted_from_remote=set())
+
+
+# ---------------------------------------------------------------------------
+# delete (no-op)
+# ---------------------------------------------------------------------------
+
+
+class TestDelete:
+    def test_delete_is_noop(self):
+        s = _state()
+        s.data[OP_PART]["k"] = "v"
+        s.delete("k", OP, PART)
+        # Delete is not implemented, data should remain
+        assert s.data[OP_PART]["k"] == "v"

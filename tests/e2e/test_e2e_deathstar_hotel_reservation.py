@@ -7,7 +7,7 @@ import pytest
 
 from tests.helpers import make_test_env, run_and_stream, wait_port
 
-log = logging.getLogger("e2e.deathstar_movie_review")
+log = logging.getLogger("e2e.deathstar_hotel_reservation")
 
 
 def _assert_metrics(
@@ -15,7 +15,7 @@ def _assert_metrics(
     input_rate: int,
     client_threads: int,
 ) -> None:
-    exp_name = f"d_movie_review_{input_rate * client_threads}"
+    exp_name = f"d_hotel_reservation_{input_rate * client_threads}"
     metrics_json = results_dir / f"{exp_name}.json"
     log.info("Checking metrics json: %s", metrics_json)
     assert metrics_json.exists(), f"Missing metrics json: {metrics_json}"
@@ -48,7 +48,7 @@ class _ClientParams:
     input_rate: int = 100
     total_time: int = 10
     warmup_seconds: int = 1
-    kill_at: int = -1  # <0 disables killing; client checks `0 <= kill_at == second`
+    kill_at: int = -1  # <0 disables killing; client checks `second == kill_at`
 
 
 @dataclass(frozen=True)
@@ -60,8 +60,8 @@ class _Paths:
 
 
 def _resolve_paths() -> _Paths:
-    repo_root = Path(__file__).resolve().parents[1]
-    demo_dir = repo_root / "demo" / "demo-deathstar-movie-review"
+    repo_root = Path(__file__).resolve().parents[2]
+    demo_dir = repo_root / "demo" / "demo-deathstar-hotel-reservation"
     start_script = repo_root / "scripts" / "start_styx_cluster.sh"
     stop_script = repo_root / "scripts" / "stop_styx_cluster.sh"
 
@@ -102,7 +102,7 @@ def _stop_cmd(paths: _Paths, p: _ClusterParams) -> list[str]:
 
 
 def _client_cmd(results_dir: Path, cluster: _ClusterParams, client: _ClientParams) -> list[str]:
-    # kill_at is sys.argv[7] in your pure_kafka_demo.py
+    # NOTE: kill_at is sys.argv[7] in your script.
     return [
         "python",
         "pure_kafka_demo.py",
@@ -151,7 +151,7 @@ def _run_client(
         cwd=str(paths.demo_dir),
         env=env,
         timeout=timeout_s,
-        banner="RUN DEATHSTAR MOVIE REVIEW CLIENT",
+        banner="RUN DEATHSTAR HOTEL RESERVATION CLIENT",
         log=log,
     )
     if rc != 0:
@@ -183,7 +183,7 @@ def _stop_cluster(paths: _Paths, env: dict, cluster: _ClusterParams, *, timeout_
 
 
 @pytest.mark.e2e
-def test_styx_e2e_dmr(tmp_path: Path):
+def test_styx_e2e_dhr(tmp_path: Path):
     paths = _resolve_paths()
     results_dir = _make_results_dir(tmp_path)
 
@@ -208,11 +208,11 @@ def test_styx_e2e_dmr(tmp_path: Path):
 
 
 @pytest.mark.e2e
-def test_styx_e2e_dmr_kill_worker_midrun(tmp_path: Path):
+def test_styx_e2e_dhr_kill_worker_midrun(tmp_path: Path):
     """
     Same scenario/params, but:
       - total_time = 60 seconds
-      - kill at second=20 inside pure_kafka_demo.py (proc 0 only)
+      - kill at second=20 inside pure_kafka_demo.py (deterministic workload milestone)
     """
     paths = _resolve_paths()
     results_dir = _make_results_dir(tmp_path)

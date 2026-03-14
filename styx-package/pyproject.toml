@@ -16,8 +16,6 @@ dependencies = [
     # Kafka clients (async/sync)
     "aiokafka>=0.12.0,<1.0",
     "confluent-kafka>=2.13.0,<2.14",
-    # Async logging
-    "aiologger>=0.7.0,<1.0",
     # Hashing
     "cityhash>=0.4.10,<1.0.0",
     # Compression

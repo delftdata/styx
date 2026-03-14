@@ -1,5 +1,23 @@
 # Styx: Transactional Stateful Functions on Streaming Dataflows
 
+<p align="center">
+  <a href="https://github.com/delftdata/styx/actions/workflows/publish-images.yml">
+    <img src="https://github.com/delftdata/styx/actions/workflows/publish-images.yml/badge.svg" alt="Build">
+  </a>
+  <a href="https://codecov.io/gh/delftdata/styx">
+    <img src="https://codecov.io/gh/delftdata/styx/graph/badge.svg?token=hEFuAXBF7j" alt="codecov">
+  </a>
+  <a href="https://github.com/delftdata/styx/blob/main/LICENSE">
+    <img src="https://img.shields.io/github/license/delftdata/styx.svg" alt="License">
+  </a>
+  <a href="https://delftdata.github.io/styx/">
+    <img src="https://img.shields.io/badge/docs-GitHub%20Pages-blue.svg" alt="Docs">
+  </a>
+  <a href="https://github.com/astral-sh/ruff">
+    <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json" alt="Ruff">
+  </a>
+</p>
+
 This repository contains the codebase of Styx described in: https://dl.acm.org/doi/10.1145/3725363.
 
 ## Preliminaries
