@@ -15,9 +15,7 @@ def _make_stdlib_logger() -> _stdlib_logging.Logger:
     logger.setLevel(_stdlib_logging.WARNING)
     if not logger.handlers:
         handler = _stdlib_logging.StreamHandler()
-        handler.setFormatter(
-            _stdlib_logging.Formatter("%(asctime)s.%(msecs)03d %(levelname)s:\t%(message)s")
-        )
+        handler.setFormatter(_stdlib_logging.Formatter("%(asctime)s.%(msecs)03d %(levelname)s:\t%(message)s"))
         logger.addHandler(handler)
     return logger
 
