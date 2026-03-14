@@ -10,6 +10,6 @@ prometheus-client==0.24.1
 # kafka
 confluent-kafka==2.13.2
 # snapshots
-boto3==1.42.65
+boto3==1.42.68
 # deathstar
 geopy

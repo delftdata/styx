@@ -379,6 +379,76 @@ class TestEncodeDecodeMessage:
 # ---------------------------------------------------------------------------
 
 
+class TestAddAckFractionStrEdgeCases:
+    async def test_fraction_exceeds_one_logs_error(self):
+        n = _net()
+        n.prepare_function_chain(10)
+        n.add_ack_fraction_str(10, "1/2", [], 0)
+        n.add_ack_fraction_str(10, "3/4", [], 0)
+        # fraction is 1/2 + 3/4 = 5/4 > 1, should log but not crash
+        assert n.ack_fraction[10] > 1
+
+    async def test_fraction_key_error_on_missing_tid(self):
+        n = _net()
+        # Don't prepare chain — ack_fraction[99] does not exist
+        n.add_ack_fraction_str(99, "1/2", [], 0)
+        # Should not raise; handled internally via KeyError
+
+    async def test_partial_node_count_accumulates(self):
+        n = _net()
+        n.prepare_function_chain(10)
+        n.add_ack_fraction_str(10, "1/4", [1], 2)
+        assert n.ack_cnts[10] == (0, 2)
+        n.add_ack_fraction_str(10, "1/4", [2], 3)
+        assert n.ack_cnts[10] == (0, 5)
+
+
+class TestAddAckCntEdgeCases:
+    async def test_cnt_exceeds_total_logs_error(self):
+        n = _net()
+        n.prepare_function_chain(10)
+        n.ack_cnts[10] = (0, 1)
+        n.add_ack_cnt(10, 1)
+        assert n.waited_ack_events[10].is_set()
+        # Adding more exceeds total
+        n.waited_ack_events[10].clear()
+        n.add_ack_cnt(10, 1)
+        assert n.ack_cnts[10] == (2, 1)  # 2 > 1
+
+    async def test_cnt_key_error_on_missing_tid(self):
+        n = _net()
+        n.add_ack_cnt(99, 1)  # should not raise
+
+
+class TestAddResponseNone:
+    async def test_none_response_stored_with_logging(self):
+        n = _net()
+        n.add_response(1, None)
+        assert n.client_responses[1] is None
+
+
+class TestEncodeDecodePickle:
+    def test_pickle_roundtrip(self):
+        msg = {"key": [1, 2, 3]}
+        encoded = BaseNetworking.encode_message(msg, MessageType.ClientMsg, Serializer.PICKLE)
+        assert encoded[1] == 2  # pickle serializer id
+        decoded = BaseNetworking.decode_message(encoded)
+        assert decoded == msg
+
+    async def test_decode_unsupported_serializer_raises(self):
+        # Craft a message with an invalid serializer id
+        import struct
+
+        data = struct.pack(">B", MessageType.ClientMsg) + struct.pack(">B", 99) + b"payload"
+        with pytest.raises(SerializerNotSupportedError):
+            BaseNetworking.decode_message(data)
+
+
+# ---------------------------------------------------------------------------
+# __repr__
+# ---------------------------------------------------------------------------
+
+
 class TestRepr:
     def test_repr_format(self):
         n = _net(port=6000)
