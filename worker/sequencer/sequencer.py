@@ -1,7 +1,8 @@
 import asyncio
 
-from styx.common.logging import logging
 from styx.common.run_func_payload import RunFuncPayload, SequencedItem
+
+from worker.sequencer._sequencer import cy_sequence
 
 
 class Sequencer:
@@ -37,14 +38,16 @@ class Sequencer:
         self.n_workers = len(sorted_w_ids)
 
     def sequence(self, message: RunFuncPayload) -> None:
-        if message.request_id in self.request_id_to_t_id_map:
-            t_id = self.request_id_to_t_id_map[message.request_id]
-        else:
-            t_id = self.get_t_id()
-            while t_id in self.t_ids_in_wal:
-                t_id = self.get_t_id()
-        logging.debug(f"Sequencing message: {message.key} with t_id: {t_id}")
-        self.distributed_log.append(SequencedItem(t_id, message))
+        self.t_counter = cy_sequence(
+            message,
+            self.request_id_to_t_id_map,
+            self.t_ids_in_wal,
+            self.distributed_log,
+            SequencedItem,
+            self.sequencer_id,
+            self.t_counter,
+            self.n_workers,
+        )
 
     def get_t_id(self) -> int:
         t_id = self.sequencer_id + self.t_counter * self.n_workers

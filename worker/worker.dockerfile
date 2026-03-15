@@ -20,7 +20,8 @@ RUN python -m pip install --upgrade pip && \
     python -m pip install -r /tmp/requirements.txt
 
 COPY styx-package /tmp/styx-package
-RUN python -m pip install /tmp/styx-package
+RUN cd /tmp/styx-package && python setup.py build_ext --inplace && \
+    python -m pip install /tmp/styx-package
 
 COPY worker /app/worker
 

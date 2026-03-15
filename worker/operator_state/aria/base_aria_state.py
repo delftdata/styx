@@ -12,8 +12,8 @@ from worker.operator_state.aria._aria_state import (
     deal_with_reads as _cy_deal_with_reads,
     has_conflicts as _cy_has_conflicts,
     min_rw_reservations as _cy_min_rw_reservations,
-    put_write_sets as _cy_put_write_sets,
     remove_aborted_from_rw_sets as _cy_remove_aborted,
+    state_put as _cy_state_put,
 )
 
 if TYPE_CHECKING:
@@ -57,7 +57,7 @@ class BaseAriaState(BaseOperatorState):
         operator_name: str,
         partition: int,
     ) -> None:
-        _cy_put_write_sets(self.write_sets, self.writes, key, value, t_id, (operator_name, partition))
+        _cy_state_put(self.write_sets, self.writes, key, value, t_id, operator_name, partition)
 
     def put_immediate(
         self,

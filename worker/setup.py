@@ -39,6 +39,10 @@ def main() -> None:
             "worker.operator_state.aria._aria_state",
             ["worker/operator_state/aria/_aria_state.pyx"],
         ),
+        Extension(
+            "worker.sequencer._sequencer",
+            ["worker/sequencer/_sequencer.pyx"],
+        ),
     ]
 
     setup(

@@ -1,9 +1,10 @@
 from functools import lru_cache
 from typing import TYPE_CHECKING
 
-import cityhash
-
-from styx.common.exceptions import NonSupportedKeyTypeError
+from styx.common.partitioning._hash_partitioner import (
+    get_partition_no_cache as _cy_get_partition_no_cache,
+    make_key_hashable as _cy_make_key_hashable,
+)
 from styx.common.partitioning.base_partitioner import BasePartitioner
 
 if TYPE_CHECKING:
@@ -46,26 +47,13 @@ class HashPartitioner(BasePartitioner):
             key: str  # This only holds for str keys
             field, delim = composite_key_hash_parameters
             key = key.split(delim)[field]
-        return HashPartitioner.make_key_hashable(key) % partitions
+        return _cy_make_key_hashable(key) % partitions
 
     def get_partition_no_cache(self, key: K) -> int | None:
-        if key is None:
-            return None
-        if self._composite_key_hash_parameters is not None:
-            key: str  # This only holds for str keys
-            field, delim = self._composite_key_hash_parameters
-            key = key.split(delim)[field]
-        return self.make_key_hashable(key) % self._partitions
+        return _cy_get_partition_no_cache(
+            key, self._partitions, self._composite_key_hash_parameters,
+        )
 
     @staticmethod
     def make_key_hashable(key: K) -> int:
-        if type(key) is int:
-            return key
-        if type(key) is str:
-            if key.isdigit():
-                return int(key)
-            return cityhash.CityHash64(key)
-        try:
-            return cityhash.CityHash64(key)
-        except Exception as e:
-            raise NonSupportedKeyTypeError from e
+        return _cy_make_key_hashable(key)

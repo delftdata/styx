@@ -4,6 +4,11 @@ from typing import TYPE_CHECKING
 
 from styx.common.logging import logging
 
+from worker.operator_state.aria._aria_state import (
+    commit as _cy_commit,
+    state_get as _cy_state_get,
+    state_get_immediate as _cy_state_get_immediate,
+)
 from worker.operator_state.aria.base_aria_state import BaseAriaState
 from worker.operator_state.aria.fast_copy import fast_deepcopy
 
@@ -213,24 +218,16 @@ class InMemoryOperatorState(BaseAriaState):
         self.delta_map[operator_partition].update(kv_pairs)
 
     def get(self, key: K, t_id: int, operator_name: str, partition: int) -> V:
-        operator_partition: OperatorPartition = (operator_name, partition)
-        self.deal_with_reads(key, t_id, operator_partition)
-        # if transaction wrote to this key, read from the write set
-        if t_id in self.write_sets[operator_partition] and key in self.write_sets[operator_partition][t_id]:
-            return fast_deepcopy(self.write_sets[operator_partition][t_id][key])
-        return fast_deepcopy(self.data[operator_partition].get(key))
+        return _cy_state_get(
+            self.data, self.write_sets, self.reads, self.read_sets,
+            key, t_id, operator_name, partition,
+        )
 
     def get_immediate(self, key: K, t_id: int, operator_name: str, partition: int) -> V:
-        operator_partition: OperatorPartition = (operator_name, partition)
-        if (
-            t_id in self.fallback_commit_buffer
-            and operator_partition in self.fallback_commit_buffer[t_id]
-            and key in self.fallback_commit_buffer[t_id][operator_partition]
-        ):
-            return fast_deepcopy(
-                self.fallback_commit_buffer[t_id][operator_partition][key],
-            )
-        return fast_deepcopy(self.data[operator_partition].get(key))
+        return _cy_state_get_immediate(
+            self.data, self.fallback_commit_buffer,
+            key, t_id, operator_name, partition,
+        )
 
     def delete(self, key: K, operator_name: str, partition: int) -> None:
         # Need to find a way to implement deletes
@@ -251,17 +248,8 @@ class InMemoryOperatorState(BaseAriaState):
         ) or self.in_remote_keys(key, operator_name, partition)
 
     def commit(self, aborted_from_remote: set[int]) -> set[int]:
-        committed_t_ids = set()
         try:
-            for operator_name in self.write_sets:
-                updates_to_commit = {}
-                for t_id, ws in self.write_sets[operator_name].items():
-                    if t_id not in aborted_from_remote:
-                        updates_to_commit.update(ws)
-                        committed_t_ids.add(t_id)
-                self.data[operator_name].update(updates_to_commit)
-                self.delta_map[operator_name].update(updates_to_commit)
+            return _cy_commit(self.write_sets, self.data, self.delta_map, aborted_from_remote)
         except Exception as e:
             logging.warning(traceback.format_exc())
             raise e
-        return committed_t_ids
