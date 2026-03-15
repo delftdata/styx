@@ -29,15 +29,27 @@ S3_REGION: str = os.getenv("S3_REGION", "us-east-1")
 SNAPSHOT_BUCKET_NAME: str = os.getenv("SNAPSHOT_BUCKET_NAME", "styx-snapshots")
 SEQUENCER_PREFIX = "sequencer/"
 
+# Per-process cached S3 client (avoids re-creating boto3 client on every call)
+_s3_client: S3Client | None = None
 
-def _mk_s3_client() -> S3Client:
-    return boto3.client(
-        "s3",
-        endpoint_url=S3_ENDPOINT,
-        aws_access_key_id=S3_ACCESS_KEY,
-        aws_secret_access_key=S3_SECRET_KEY,
-        region_name=S3_REGION,
-    )
+
+def _get_s3_client() -> S3Client:
+    """Return a cached S3 client for the current process."""
+    global _s3_client  # noqa: PLW0603
+    if _s3_client is None:
+        _s3_client = boto3.client(
+            "s3",
+            endpoint_url=S3_ENDPOINT,
+            aws_access_key_id=S3_ACCESS_KEY,
+            aws_secret_access_key=S3_SECRET_KEY,
+            region_name=S3_REGION,
+        )
+    return _s3_client
+
+
+def warm_s3_client() -> None:
+    """Pre-warm the S3 client in a subprocess. Used as ProcessPoolExecutor initializer."""
+    _get_s3_client()
 
 
 class AsyncSnapshotsS3(BaseSnapshotter):
@@ -112,8 +124,7 @@ class AsyncSnapshotsS3(BaseSnapshotter):
 
     @staticmethod
     def store_snapshot(snapshot_name: str, sn_data: bytes) -> bool:
-        s3 = _mk_s3_client()
-        s3.put_object(
+        _get_s3_client().put_object(
             Bucket=SNAPSHOT_BUCKET_NAME,
             Key=snapshot_name,
             Body=sn_data,
@@ -135,7 +146,7 @@ class AsyncSnapshotsS3(BaseSnapshotter):
         if snapshot_id == -1:
             return {}, {}, {}, 0, 0
 
-        s3 = _mk_s3_client()
+        s3 = _get_s3_client()
         data = self._load_operator_state(s3, snapshot_id, registered_operators)
         tp_offsets, tp_out_offsets, epoch, t_counter = self._load_sequencer_state(s3, snapshot_id)
         return data, tp_offsets, tp_out_offsets, epoch, t_counter

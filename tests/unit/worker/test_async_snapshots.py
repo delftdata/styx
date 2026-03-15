@@ -136,7 +136,7 @@ class TestSnapshotCompletedCallback:
 
 
 class TestStoreSnapshot:
-    @patch("worker.fault_tolerance.async_snapshots._mk_s3_client")
+    @patch("worker.fault_tolerance.async_snapshots._get_s3_client")
     def test_puts_object(self, mock_mk):
         mock_s3 = MagicMock()
         mock_mk.return_value = mock_s3
@@ -166,7 +166,7 @@ class TestRetrieveSnapshot:
         assert t_counter == 0
         assert s.snapshot_id == 0  # -1 + 1
 
-    @patch("worker.fault_tolerance.async_snapshots._mk_s3_client")
+    @patch("worker.fault_tolerance.async_snapshots._get_s3_client")
     def test_retrieve_with_no_files(self, mock_mk):
         mock_s3 = MagicMock()
         mock_mk.return_value = mock_s3
@@ -190,7 +190,7 @@ class TestRetrieveSnapshot:
 
 
 class TestIterSnapshotFiles:
-    @patch("worker.fault_tolerance.async_snapshots._mk_s3_client")
+    @patch("worker.fault_tolerance.async_snapshots._get_s3_client")
     def test_filters_by_max_id(self, mock_mk):
         mock_s3 = MagicMock()
         mock_mk.return_value = mock_s3
@@ -213,7 +213,7 @@ class TestIterSnapshotFiles:
         assert result[0] == (1, "data/op/0/1.bin")
         assert result[1] == (3, "data/op/0/3.bin")
 
-    @patch("worker.fault_tolerance.async_snapshots._mk_s3_client")
+    @patch("worker.fault_tolerance.async_snapshots._get_s3_client")
     def test_sorted_by_id(self, mock_mk):
         mock_s3 = MagicMock()
         mock_mk.return_value = mock_s3

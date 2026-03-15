@@ -12,7 +12,7 @@ from styx.common.tcp_networking import NetworkingManager
 from styx.common.util.aio_task_scheduler import AIOTaskScheduler
 import uvloop
 
-from worker.fault_tolerance.async_snapshots import AsyncSnapshotsS3
+from worker.fault_tolerance.async_snapshots import AsyncSnapshotsS3, warm_s3_client
 
 if TYPE_CHECKING:
     from styx.common.types import KVPairs, OperatorPartition
@@ -44,7 +44,12 @@ class AsyncSnapshottingProcess:
         self.pool: concurrent.futures.ProcessPoolExecutor = concurrent.futures.ProcessPoolExecutor(
             4,
             multiprocessing.get_context("spawn"),
+            initializer=warm_s3_client,
         )
+        # Force-spawn all pool workers now so the first snapshot doesn't pay
+        # the ~1.9s boto3 cold-start cost.  submit() is needed because spawn-
+        # context pools are lazy — workers aren't created until first use.
+        list(self.pool.map(int, range(4)))
         self.delta_maps: dict[OperatorPartition, KVPairs] = {}
         self.worker_id = worker_id
         self.async_snapshots = AsyncSnapshotsS3(self.worker_id)
