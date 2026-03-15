@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import os
 import time
 from timeit import default_timer as timer
@@ -119,7 +120,7 @@ class AriaProtocol(BaseTransactionalProtocol):
             worker_id=self.id,
             kafka_url=KAFKA_URL,
             sequence_max_size=SEQUENCE_MAX_SIZE,
-            epoch_interval_ms=1,
+            epoch_interval_ms=100,
         )
 
         self.egress: StyxKafkaBatchEgress = StyxKafkaBatchEgress(
@@ -438,6 +439,7 @@ class AriaProtocol(BaseTransactionalProtocol):
     async def _handle_remote_wants_to_proceed(self, _: bytes) -> None:
         if not self.currently_processing:
             self.remote_wants_to_proceed = True
+            self.ingress.messages_available.set()
 
     async def _handle_async_migration(self, data: bytes) -> None:
         mt = MessageType.AsyncMigration
@@ -489,8 +491,14 @@ class AriaProtocol(BaseTransactionalProtocol):
         logging.warning("STARTED function scheduler")
 
         while self.running:
-            # need to sleep to allow the kafka consumer coroutine to read data
-            await asyncio.sleep(0)
+            # Wait until the ingress signals that messages are available,
+            # or a remote peer wants to proceed, instead of busy-spinning.
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(
+                    self.ingress.messages_available.wait(),
+                    timeout=0.1,
+                )
+            self.ingress.messages_available.clear()
 
             async with self.sequencer.lock:
                 sequence: list[SequencedItem] = self.sequencer.get_epoch()
