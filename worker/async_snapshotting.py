@@ -46,10 +46,11 @@ class AsyncSnapshottingProcess:
             multiprocessing.get_context("spawn"),
             initializer=warm_s3_client,
         )
-        # Force-spawn all pool workers now so the first snapshot doesn't pay
-        # the ~1.9s boto3 cold-start cost.  submit() is needed because spawn-
-        # context pools are lazy — workers aren't created until first use.
-        list(self.pool.map(int, range(4)))
+        # Kick off pool worker spawning in the background so the first snapshot
+        # doesn't pay the ~1.9s boto3 cold-start cost.  We don't block here
+        # because the snapshotting TCP server must start listening before the
+        # main worker process tries to connect.
+        self._warmup_futures = [self.pool.submit(int, i) for i in range(4)]
         self.delta_maps: dict[OperatorPartition, KVPairs] = {}
         self.worker_id = worker_id
         self.async_snapshots = AsyncSnapshotsS3(self.worker_id)
