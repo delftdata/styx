@@ -237,6 +237,7 @@ class InMemoryOperatorState(BaseAriaState):
             t_id,
             operator_name,
             partition,
+            self.fallback_read_sets,
         )
 
     def delete(self, key: K, operator_name: str, partition: int) -> None:

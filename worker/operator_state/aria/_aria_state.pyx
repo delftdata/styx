@@ -153,9 +153,25 @@ cpdef object state_get_immediate(
     int t_id,
     str operator_name,
     int partition,
+    dict fallback_read_sets=None,
 ):
-    """Inlined InMemoryOperatorState.get_immediate()."""
+    """Inlined InMemoryOperatorState.get_immediate().
+
+    When *fallback_read_sets* is provided, records the key read for
+    rw-set change detection (Aria paper §4.2).
+    """
     cdef tuple op = (operator_name, partition)
+
+    # Track fallback read
+    if fallback_read_sets is not None:
+        if t_id in fallback_read_sets:
+            tid_rs = fallback_read_sets[t_id]
+            if op in tid_rs:
+                (<set>tid_rs[op]).add(key)
+            else:
+                tid_rs[op] = {key}
+        else:
+            fallback_read_sets[t_id] = {op: {key}}
 
     if t_id in fallback_commit_buffer:
         tid_buf = fallback_commit_buffer[t_id]

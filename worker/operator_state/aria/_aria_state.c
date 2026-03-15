@@ -1522,6 +1522,19 @@ static const char* const __pyx_f[] = {
 /* #### Code section: type_declarations ### */
 
 /*--- Type declarations ---*/
+struct __pyx_opt_args_6worker_14operator_state_4aria_11_aria_state_state_get_immediate;
+
+/* "worker/operator_state/aria/_aria_state.pyx":149
+ * 
+ * 
+ * cpdef object state_get_immediate(             # <<<<<<<<<<<<<<
+ *     dict data,
+ *     object fallback_commit_buffer,
+*/
+struct __pyx_opt_args_6worker_14operator_state_4aria_11_aria_state_state_get_immediate {
+  int __pyx_n;
+  PyObject *fallback_read_sets;
+};
 /* #### Code section: utility_code_proto ### */
 
 /* --- Runtime support code (head) --- */
@@ -2427,7 +2440,7 @@ static void __pyx_f_6worker_14operator_state_4aria_11_aria_state_deal_with_reads
 static void __pyx_f_6worker_14operator_state_4aria_11_aria_state_put_write_sets(PyObject *, PyObject *, PyObject *, PyObject *, int, PyObject *, int __pyx_skip_dispatch); /*proto*/
 static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_state_get(PyObject *, PyObject *, PyObject *, PyObject *, PyObject *, int, PyObject *, int, int __pyx_skip_dispatch); /*proto*/
 static void __pyx_f_6worker_14operator_state_4aria_11_aria_state_state_put(PyObject *, PyObject *, PyObject *, PyObject *, int, PyObject *, int, int __pyx_skip_dispatch); /*proto*/
-static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_state_get_immediate(PyObject *, PyObject *, PyObject *, int, PyObject *, int, int __pyx_skip_dispatch); /*proto*/
+static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_state_get_immediate(PyObject *, PyObject *, PyObject *, int, PyObject *, int, int __pyx_skip_dispatch, struct __pyx_opt_args_6worker_14operator_state_4aria_11_aria_state_state_get_immediate *__pyx_optional_args); /*proto*/
 static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_commit(PyObject *, PyObject *, PyObject *, PyObject *, int __pyx_skip_dispatch); /*proto*/
 static int __pyx_f_6worker_14operator_state_4aria_11_aria_state_has_conflicts(int, PyObject *, PyObject *, int __pyx_skip_dispatch); /*proto*/
 static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_min_rw_reservations(PyObject *, int __pyx_skip_dispatch); /*proto*/
@@ -2451,7 +2464,7 @@ static PyObject *__pyx_pf_6worker_14operator_state_4aria_11_aria_state_deal_with
 static PyObject *__pyx_pf_6worker_14operator_state_4aria_11_aria_state_2put_write_sets(CYTHON_UNUSED PyObject *__pyx_self, PyObject *__pyx_v_write_sets, PyObject *__pyx_v_writes, PyObject *__pyx_v_key, PyObject *__pyx_v_value, int __pyx_v_t_id, PyObject *__pyx_v_operator_partition); /* proto */
 static PyObject *__pyx_pf_6worker_14operator_state_4aria_11_aria_state_4state_get(CYTHON_UNUSED PyObject *__pyx_self, PyObject *__pyx_v_data, PyObject *__pyx_v_write_sets, PyObject *__pyx_v_reads, PyObject *__pyx_v_read_sets, PyObject *__pyx_v_key, int __pyx_v_t_id, PyObject *__pyx_v_operator_name, int __pyx_v_partition); /* proto */
 static PyObject *__pyx_pf_6worker_14operator_state_4aria_11_aria_state_6state_put(CYTHON_UNUSED PyObject *__pyx_self, PyObject *__pyx_v_write_sets, PyObject *__pyx_v_writes, PyObject *__pyx_v_key, PyObject *__pyx_v_value, int __pyx_v_t_id, PyObject *__pyx_v_operator_name, int __pyx_v_partition); /* proto */
-static PyObject *__pyx_pf_6worker_14operator_state_4aria_11_aria_state_8state_get_immediate(CYTHON_UNUSED PyObject *__pyx_self, PyObject *__pyx_v_data, PyObject *__pyx_v_fallback_commit_buffer, PyObject *__pyx_v_key, int __pyx_v_t_id, PyObject *__pyx_v_operator_name, int __pyx_v_partition); /* proto */
+static PyObject *__pyx_pf_6worker_14operator_state_4aria_11_aria_state_8state_get_immediate(CYTHON_UNUSED PyObject *__pyx_self, PyObject *__pyx_v_data, PyObject *__pyx_v_fallback_commit_buffer, PyObject *__pyx_v_key, int __pyx_v_t_id, PyObject *__pyx_v_operator_name, int __pyx_v_partition, PyObject *__pyx_v_fallback_read_sets); /* proto */
 static PyObject *__pyx_pf_6worker_14operator_state_4aria_11_aria_state_10commit(CYTHON_UNUSED PyObject *__pyx_self, PyObject *__pyx_v_write_sets, PyObject *__pyx_v_data, PyObject *__pyx_v_delta_map, PyObject *__pyx_v_aborted_from_remote); /* proto */
 static PyObject *__pyx_pf_6worker_14operator_state_4aria_11_aria_state_12has_conflicts(CYTHON_UNUSED PyObject *__pyx_self, int __pyx_v_t_id, PyObject *__pyx_v_keys, PyObject *__pyx_v_reservations); /* proto */
 static PyObject *__pyx_pf_6worker_14operator_state_4aria_11_aria_state_14min_rw_reservations(CYTHON_UNUSED PyObject *__pyx_self, PyObject *__pyx_v_reservations); /* proto */
@@ -2485,8 +2498,9 @@ typedef struct {
   __Pyx_CachedCFunction __pyx_umethod_PyDict_Type_pop;
   __Pyx_CachedCFunction __pyx_umethod_PyDict_Type_values;
   __Pyx_CachedCFunction __pyx_umethod_PySet_Type__update;
+  PyObject *__pyx_tuple[1];
   PyObject *__pyx_codeobj_tab[12];
-  PyObject *__pyx_string_tab[74];
+  PyObject *__pyx_string_tab[75];
 /* #### Code section: module_state_contents ### */
 /* CommonTypesMetaclass.module_state_decls */
 PyTypeObject *__pyx_CommonTypesMetaclassType;
@@ -2545,62 +2559,63 @@ static __pyx_mstatetype * const __pyx_mstate_global = &__pyx_mstate_global_stati
 #define __pyx_n_u_deal_with_reads __pyx_string_tab[15]
 #define __pyx_n_u_delta_map __pyx_string_tab[16]
 #define __pyx_n_u_fallback_commit_buffer __pyx_string_tab[17]
-#define __pyx_n_u_fast_deepcopy __pyx_string_tab[18]
-#define __pyx_n_u_fast_deepcopy_2 __pyx_string_tab[19]
-#define __pyx_n_u_func __pyx_string_tab[20]
-#define __pyx_n_u_get __pyx_string_tab[21]
-#define __pyx_n_u_global_logic_aborts __pyx_string_tab[22]
-#define __pyx_n_u_global_read_sets __pyx_string_tab[23]
-#define __pyx_n_u_global_reads __pyx_string_tab[24]
-#define __pyx_n_u_global_write_sets __pyx_string_tab[25]
-#define __pyx_n_u_has_conflicts __pyx_string_tab[26]
-#define __pyx_n_u_is_coroutine __pyx_string_tab[27]
-#define __pyx_n_u_items __pyx_string_tab[28]
-#define __pyx_n_u_key __pyx_string_tab[29]
-#define __pyx_n_u_keys __pyx_string_tab[30]
-#define __pyx_n_u_main __pyx_string_tab[31]
-#define __pyx_n_u_min __pyx_string_tab[32]
-#define __pyx_n_u_min_rw_reservations __pyx_string_tab[33]
-#define __pyx_n_u_module __pyx_string_tab[34]
-#define __pyx_n_u_name __pyx_string_tab[35]
-#define __pyx_n_u_operator_name __pyx_string_tab[36]
-#define __pyx_n_u_operator_partition __pyx_string_tab[37]
-#define __pyx_n_u_operator_partitions __pyx_string_tab[38]
-#define __pyx_n_u_partition __pyx_string_tab[39]
-#define __pyx_n_u_pop __pyx_string_tab[40]
-#define __pyx_n_u_put_write_sets __pyx_string_tab[41]
-#define __pyx_n_u_qualname __pyx_string_tab[42]
-#define __pyx_n_u_read_sets __pyx_string_tab[43]
-#define __pyx_n_u_reads __pyx_string_tab[44]
-#define __pyx_n_u_remove_aborted_from_rw_sets __pyx_string_tab[45]
-#define __pyx_n_u_reservations __pyx_string_tab[46]
-#define __pyx_n_u_set_name __pyx_string_tab[47]
-#define __pyx_n_u_setdefault __pyx_string_tab[48]
-#define __pyx_n_u_state_get __pyx_string_tab[49]
-#define __pyx_n_u_state_get_immediate __pyx_string_tab[50]
-#define __pyx_n_u_state_put __pyx_string_tab[51]
-#define __pyx_n_u_t_id __pyx_string_tab[52]
-#define __pyx_n_u_test __pyx_string_tab[53]
-#define __pyx_n_u_update __pyx_string_tab[54]
-#define __pyx_n_u_value __pyx_string_tab[55]
-#define __pyx_n_u_values __pyx_string_tab[56]
-#define __pyx_n_u_worker_operator_state_aria__aria __pyx_string_tab[57]
-#define __pyx_n_u_worker_operator_state_aria__fast __pyx_string_tab[58]
-#define __pyx_n_u_write_sets __pyx_string_tab[59]
-#define __pyx_n_u_writes __pyx_string_tab[60]
-#define __pyx_n_u_writes_dict __pyx_string_tab[61]
-#define __pyx_kp_b_iso88591_0_4AQ_1_F_1A_6_2V_QiuA_WBfIQiuA __pyx_string_tab[62]
-#define __pyx_kp_b_iso88591_4AQ_1_1_1G5_q_HA_AYa_AV4q_t1A_1 __pyx_string_tab[63]
-#define __pyx_kp_b_iso88591_4AQ_j_a_6_1_1HE_WAYe1_q_HA_Qiq __pyx_string_tab[64]
-#define __pyx_kp_b_iso88591_A_fJaq_aq_uCq_uAQ_awa_QiuA_t3a __pyx_string_tab[65]
-#define __pyx_kp_b_iso88591_A_uAQ_V9AQ_t3a_fHAQ_7_1_uCq_5 __pyx_string_tab[66]
-#define __pyx_kp_b_iso88591_A_uCq_3c_WAQ_t3a_QfAQ_6_Qd_aq __pyx_string_tab[67]
-#define __pyx_kp_b_iso88591_fJaq_aq_uCq_uAQ_awa_QiuA_t3a_fI __pyx_string_tab[68]
-#define __pyx_kp_b_iso88591_q_4s_l_1_uHBa_q_1 __pyx_string_tab[69]
-#define __pyx_kp_b_iso88591_q_F_E_6_V1_q_q_s_1_a_1 __pyx_string_tab[70]
-#define __pyx_kp_b_iso88591_t1_1_G4q_uA_t3a_G1A_1_G4q_uA_t3 __pyx_string_tab[71]
-#define __pyx_kp_b_iso88591_uAQ_V9AQ_t3a_fHAQ_7_1_uCq_5_AQ __pyx_string_tab[72]
-#define __pyx_kp_b_iso88591_z_q_A_F_uG1_q_t1A_t1IWAQ_y_1 __pyx_string_tab[73]
+#define __pyx_n_u_fallback_read_sets __pyx_string_tab[18]
+#define __pyx_n_u_fast_deepcopy __pyx_string_tab[19]
+#define __pyx_n_u_fast_deepcopy_2 __pyx_string_tab[20]
+#define __pyx_n_u_func __pyx_string_tab[21]
+#define __pyx_n_u_get __pyx_string_tab[22]
+#define __pyx_n_u_global_logic_aborts __pyx_string_tab[23]
+#define __pyx_n_u_global_read_sets __pyx_string_tab[24]
+#define __pyx_n_u_global_reads __pyx_string_tab[25]
+#define __pyx_n_u_global_write_sets __pyx_string_tab[26]
+#define __pyx_n_u_has_conflicts __pyx_string_tab[27]
+#define __pyx_n_u_is_coroutine __pyx_string_tab[28]
+#define __pyx_n_u_items __pyx_string_tab[29]
+#define __pyx_n_u_key __pyx_string_tab[30]
+#define __pyx_n_u_keys __pyx_string_tab[31]
+#define __pyx_n_u_main __pyx_string_tab[32]
+#define __pyx_n_u_min __pyx_string_tab[33]
+#define __pyx_n_u_min_rw_reservations __pyx_string_tab[34]
+#define __pyx_n_u_module __pyx_string_tab[35]
+#define __pyx_n_u_name __pyx_string_tab[36]
+#define __pyx_n_u_operator_name __pyx_string_tab[37]
+#define __pyx_n_u_operator_partition __pyx_string_tab[38]
+#define __pyx_n_u_operator_partitions __pyx_string_tab[39]
+#define __pyx_n_u_partition __pyx_string_tab[40]
+#define __pyx_n_u_pop __pyx_string_tab[41]
+#define __pyx_n_u_put_write_sets __pyx_string_tab[42]
+#define __pyx_n_u_qualname __pyx_string_tab[43]
+#define __pyx_n_u_read_sets __pyx_string_tab[44]
+#define __pyx_n_u_reads __pyx_string_tab[45]
+#define __pyx_n_u_remove_aborted_from_rw_sets __pyx_string_tab[46]
+#define __pyx_n_u_reservations __pyx_string_tab[47]
+#define __pyx_n_u_set_name __pyx_string_tab[48]
+#define __pyx_n_u_setdefault __pyx_string_tab[49]
+#define __pyx_n_u_state_get __pyx_string_tab[50]
+#define __pyx_n_u_state_get_immediate __pyx_string_tab[51]
+#define __pyx_n_u_state_put __pyx_string_tab[52]
+#define __pyx_n_u_t_id __pyx_string_tab[53]
+#define __pyx_n_u_test __pyx_string_tab[54]
+#define __pyx_n_u_update __pyx_string_tab[55]
+#define __pyx_n_u_value __pyx_string_tab[56]
+#define __pyx_n_u_values __pyx_string_tab[57]
+#define __pyx_n_u_worker_operator_state_aria__aria __pyx_string_tab[58]
+#define __pyx_n_u_worker_operator_state_aria__fast __pyx_string_tab[59]
+#define __pyx_n_u_write_sets __pyx_string_tab[60]
+#define __pyx_n_u_writes __pyx_string_tab[61]
+#define __pyx_n_u_writes_dict __pyx_string_tab[62]
+#define __pyx_kp_b_iso88591_0_4AQ_1_F_1A_6_2V_QiuA_WBfIQiuA __pyx_string_tab[63]
+#define __pyx_kp_b_iso88591_4AQ_1_1_1G5_q_HA_AYa_AV4q_t1A_1 __pyx_string_tab[64]
+#define __pyx_kp_b_iso88591_4AQ_j_a_6_1_1HE_WAYe1_q_HA_Qiq __pyx_string_tab[65]
+#define __pyx_kp_b_iso88591_A_5_1_q_s_Q_fAT_Qa_awa_ay_Q_uC __pyx_string_tab[66]
+#define __pyx_kp_b_iso88591_A_fJaq_aq_uCq_uAQ_awa_QiuA_t3a __pyx_string_tab[67]
+#define __pyx_kp_b_iso88591_A_uAQ_V9AQ_t3a_fHAQ_7_1_uCq_5 __pyx_string_tab[68]
+#define __pyx_kp_b_iso88591_fJaq_aq_uCq_uAQ_awa_QiuA_t3a_fI __pyx_string_tab[69]
+#define __pyx_kp_b_iso88591_q_4s_l_1_uHBa_q_1 __pyx_string_tab[70]
+#define __pyx_kp_b_iso88591_q_F_E_6_V1_q_q_s_1_a_1 __pyx_string_tab[71]
+#define __pyx_kp_b_iso88591_t1_1_G4q_uA_t3a_G1A_1_G4q_uA_t3 __pyx_string_tab[72]
+#define __pyx_kp_b_iso88591_uAQ_V9AQ_t3a_fHAQ_7_1_uCq_5_AQ __pyx_string_tab[73]
+#define __pyx_kp_b_iso88591_z_q_A_F_uG1_q_t1A_t1IWAQ_y_1 __pyx_string_tab[74]
 /* #### Code section: module_state_clear ### */
 #if CYTHON_USE_MODULE_STATE
 static CYTHON_SMALL_CODE int __pyx_m_clear(PyObject *m) {
@@ -2615,8 +2630,9 @@ static CYTHON_SMALL_CODE int __pyx_m_clear(PyObject *m) {
   #if CYTHON_PEP489_MULTI_PHASE_INIT
   __Pyx_State_RemoveModule(NULL);
   #endif
+  for (int i=0; i<1; ++i) { Py_CLEAR(clear_module_state->__pyx_tuple[i]); }
   for (int i=0; i<12; ++i) { Py_CLEAR(clear_module_state->__pyx_codeobj_tab[i]); }
-  for (int i=0; i<74; ++i) { Py_CLEAR(clear_module_state->__pyx_string_tab[i]); }
+  for (int i=0; i<75; ++i) { Py_CLEAR(clear_module_state->__pyx_string_tab[i]); }
 /* #### Code section: module_state_clear_contents ### */
 /* CommonTypesMetaclass.module_state_clear */
 Py_CLEAR(clear_module_state->__pyx_CommonTypesMetaclassType);
@@ -2639,8 +2655,9 @@ static CYTHON_SMALL_CODE int __pyx_m_traverse(PyObject *m, visitproc visit, void
   __Pyx_VISIT_CONST(traverse_module_state->__pyx_empty_tuple);
   __Pyx_VISIT_CONST(traverse_module_state->__pyx_empty_bytes);
   __Pyx_VISIT_CONST(traverse_module_state->__pyx_empty_unicode);
+  for (int i=0; i<1; ++i) { __Pyx_VISIT_CONST(traverse_module_state->__pyx_tuple[i]); }
   for (int i=0; i<12; ++i) { __Pyx_VISIT_CONST(traverse_module_state->__pyx_codeobj_tab[i]); }
-  for (int i=0; i<74; ++i) { __Pyx_VISIT_CONST(traverse_module_state->__pyx_string_tab[i]); }
+  for (int i=0; i<75; ++i) { __Pyx_VISIT_CONST(traverse_module_state->__pyx_string_tab[i]); }
 /* #### Code section: module_state_traverse_contents ### */
 /* CommonTypesMetaclass.module_state_traverse */
 Py_VISIT(traverse_module_state->__pyx_CommonTypesMetaclassType);
@@ -4617,8 +4634,18 @@ PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 PyObject *__pyx_args, PyObject *__pyx_kwds
 #endif
 ); /*proto*/
-static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_state_get_immediate(PyObject *__pyx_v_data, PyObject *__pyx_v_fallback_commit_buffer, PyObject *__pyx_v_key, int __pyx_v_t_id, PyObject *__pyx_v_operator_name, int __pyx_v_partition, CYTHON_UNUSED int __pyx_skip_dispatch) {
+static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_state_get_immediate(PyObject *__pyx_v_data, PyObject *__pyx_v_fallback_commit_buffer, PyObject *__pyx_v_key, int __pyx_v_t_id, PyObject *__pyx_v_operator_name, int __pyx_v_partition, CYTHON_UNUSED int __pyx_skip_dispatch, struct __pyx_opt_args_6worker_14operator_state_4aria_11_aria_state_state_get_immediate *__pyx_optional_args) {
+
+  /* "worker/operator_state/aria/_aria_state.pyx":156
+ *     str operator_name,
+ *     int partition,
+ *     dict fallback_read_sets=None,             # <<<<<<<<<<<<<<
+ * ):
+ *     """Inlined InMemoryOperatorState.get_immediate().
+*/
+  PyObject *__pyx_v_fallback_read_sets = ((PyObject*)Py_None);
   PyObject *__pyx_v_op = 0;
+  PyObject *__pyx_v_tid_rs = NULL;
   PyObject *__pyx_v_tid_buf = NULL;
   PyObject *__pyx_v_op_buf = NULL;
   PyObject *__pyx_r = NULL;
@@ -4626,93 +4653,243 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_state_get_
   PyObject *__pyx_t_1 = NULL;
   PyObject *__pyx_t_2 = NULL;
   int __pyx_t_3;
-  PyObject *__pyx_t_4 = NULL;
+  int __pyx_t_4;
   PyObject *__pyx_t_5 = NULL;
-  size_t __pyx_t_6;
-  PyObject *__pyx_t_7 = NULL;
+  PyObject *__pyx_t_6 = NULL;
+  size_t __pyx_t_7;
+  PyObject *__pyx_t_8 = NULL;
   int __pyx_lineno = 0;
   const char *__pyx_filename = NULL;
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("state_get_immediate", 0);
+  if (__pyx_optional_args) {
+    if (__pyx_optional_args->__pyx_n > 0) {
+      __pyx_v_fallback_read_sets = __pyx_optional_args->fallback_read_sets;
+    }
+  }
 
-  /* "worker/operator_state/aria/_aria_state.pyx":158
- * ):
- *     """Inlined InMemoryOperatorState.get_immediate()."""
+  /* "worker/operator_state/aria/_aria_state.pyx":163
+ *     rw-set change detection (Aria paper 4.2).
+ *     """
  *     cdef tuple op = (operator_name, partition)             # <<<<<<<<<<<<<<
  * 
- *     if t_id in fallback_commit_buffer:
+ *     # Track fallback read
 */
-  __pyx_t_1 = __Pyx_PyLong_From_int(__pyx_v_partition); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 158, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_PyLong_From_int(__pyx_v_partition); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 163, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
-  __pyx_t_2 = PyTuple_New(2); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 158, __pyx_L1_error)
+  __pyx_t_2 = PyTuple_New(2); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 163, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   __Pyx_INCREF(__pyx_v_operator_name);
   __Pyx_GIVEREF(__pyx_v_operator_name);
-  if (__Pyx_PyTuple_SET_ITEM(__pyx_t_2, 0, __pyx_v_operator_name) != (0)) __PYX_ERR(0, 158, __pyx_L1_error);
+  if (__Pyx_PyTuple_SET_ITEM(__pyx_t_2, 0, __pyx_v_operator_name) != (0)) __PYX_ERR(0, 163, __pyx_L1_error);
   __Pyx_GIVEREF(__pyx_t_1);
-  if (__Pyx_PyTuple_SET_ITEM(__pyx_t_2, 1, __pyx_t_1) != (0)) __PYX_ERR(0, 158, __pyx_L1_error);
+  if (__Pyx_PyTuple_SET_ITEM(__pyx_t_2, 1, __pyx_t_1) != (0)) __PYX_ERR(0, 163, __pyx_L1_error);
   __pyx_t_1 = 0;
   __pyx_v_op = ((PyObject*)__pyx_t_2);
   __pyx_t_2 = 0;
 
-  /* "worker/operator_state/aria/_aria_state.pyx":160
- *     cdef tuple op = (operator_name, partition)
+  /* "worker/operator_state/aria/_aria_state.pyx":166
+ * 
+ *     # Track fallback read
+ *     if fallback_read_sets is not None:             # <<<<<<<<<<<<<<
+ *         if t_id in fallback_read_sets:
+ *             tid_rs = fallback_read_sets[t_id]
+*/
+  __pyx_t_3 = (__pyx_v_fallback_read_sets != ((PyObject*)Py_None));
+  if (__pyx_t_3) {
+
+    /* "worker/operator_state/aria/_aria_state.pyx":167
+ *     # Track fallback read
+ *     if fallback_read_sets is not None:
+ *         if t_id in fallback_read_sets:             # <<<<<<<<<<<<<<
+ *             tid_rs = fallback_read_sets[t_id]
+ *             if op in tid_rs:
+*/
+    __pyx_t_2 = __Pyx_PyLong_From_int(__pyx_v_t_id); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 167, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_2);
+    if (unlikely(__pyx_v_fallback_read_sets == Py_None)) {
+      PyErr_SetString(PyExc_TypeError, "'NoneType' object is not iterable");
+      __PYX_ERR(0, 167, __pyx_L1_error)
+    }
+    __pyx_t_3 = (__Pyx_PyDict_ContainsTF(__pyx_t_2, __pyx_v_fallback_read_sets, Py_EQ)); if (unlikely((__pyx_t_3 < 0))) __PYX_ERR(0, 167, __pyx_L1_error)
+    __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
+    if (__pyx_t_3) {
+
+      /* "worker/operator_state/aria/_aria_state.pyx":168
+ *     if fallback_read_sets is not None:
+ *         if t_id in fallback_read_sets:
+ *             tid_rs = fallback_read_sets[t_id]             # <<<<<<<<<<<<<<
+ *             if op in tid_rs:
+ *                 (<set>tid_rs[op]).add(key)
+*/
+      if (unlikely(__pyx_v_fallback_read_sets == Py_None)) {
+        PyErr_SetString(PyExc_TypeError, "'NoneType' object is not subscriptable");
+        __PYX_ERR(0, 168, __pyx_L1_error)
+      }
+      __pyx_t_2 = __Pyx_PyLong_From_int(__pyx_v_t_id); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 168, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_2);
+      __pyx_t_1 = __Pyx_PyDict_GetItem(__pyx_v_fallback_read_sets, __pyx_t_2); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 168, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_1);
+      __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
+      __pyx_v_tid_rs = __pyx_t_1;
+      __pyx_t_1 = 0;
+
+      /* "worker/operator_state/aria/_aria_state.pyx":169
+ *         if t_id in fallback_read_sets:
+ *             tid_rs = fallback_read_sets[t_id]
+ *             if op in tid_rs:             # <<<<<<<<<<<<<<
+ *                 (<set>tid_rs[op]).add(key)
+ *             else:
+*/
+      __pyx_t_3 = (__Pyx_PySequence_ContainsTF(__pyx_v_op, __pyx_v_tid_rs, Py_EQ)); if (unlikely((__pyx_t_3 < 0))) __PYX_ERR(0, 169, __pyx_L1_error)
+      if (__pyx_t_3) {
+
+        /* "worker/operator_state/aria/_aria_state.pyx":170
+ *             tid_rs = fallback_read_sets[t_id]
+ *             if op in tid_rs:
+ *                 (<set>tid_rs[op]).add(key)             # <<<<<<<<<<<<<<
+ *             else:
+ *                 tid_rs[op] = {key}
+*/
+        __pyx_t_1 = __Pyx_PyObject_GetItem(__pyx_v_tid_rs, __pyx_v_op); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 170, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_1);
+        if (unlikely(__pyx_t_1 == Py_None)) {
+          PyErr_Format(PyExc_AttributeError, "'NoneType' object has no attribute '%.30s'", "add");
+          __PYX_ERR(0, 170, __pyx_L1_error)
+        }
+        __pyx_t_4 = PySet_Add(((PyObject*)__pyx_t_1), __pyx_v_key); if (unlikely(__pyx_t_4 == ((int)-1))) __PYX_ERR(0, 170, __pyx_L1_error)
+        __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
+
+        /* "worker/operator_state/aria/_aria_state.pyx":169
+ *         if t_id in fallback_read_sets:
+ *             tid_rs = fallback_read_sets[t_id]
+ *             if op in tid_rs:             # <<<<<<<<<<<<<<
+ *                 (<set>tid_rs[op]).add(key)
+ *             else:
+*/
+        goto __pyx_L5;
+      }
+
+      /* "worker/operator_state/aria/_aria_state.pyx":172
+ *                 (<set>tid_rs[op]).add(key)
+ *             else:
+ *                 tid_rs[op] = {key}             # <<<<<<<<<<<<<<
+ *         else:
+ *             fallback_read_sets[t_id] = {op: {key}}
+*/
+      /*else*/ {
+        __pyx_t_1 = PySet_New(0); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 172, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_1);
+        if (PySet_Add(__pyx_t_1, __pyx_v_key) < (0)) __PYX_ERR(0, 172, __pyx_L1_error)
+        if (unlikely((PyObject_SetItem(__pyx_v_tid_rs, __pyx_v_op, __pyx_t_1) < 0))) __PYX_ERR(0, 172, __pyx_L1_error)
+        __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
+      }
+      __pyx_L5:;
+
+      /* "worker/operator_state/aria/_aria_state.pyx":167
+ *     # Track fallback read
+ *     if fallback_read_sets is not None:
+ *         if t_id in fallback_read_sets:             # <<<<<<<<<<<<<<
+ *             tid_rs = fallback_read_sets[t_id]
+ *             if op in tid_rs:
+*/
+      goto __pyx_L4;
+    }
+
+    /* "worker/operator_state/aria/_aria_state.pyx":174
+ *                 tid_rs[op] = {key}
+ *         else:
+ *             fallback_read_sets[t_id] = {op: {key}}             # <<<<<<<<<<<<<<
+ * 
+ *     if t_id in fallback_commit_buffer:
+*/
+    /*else*/ {
+      __pyx_t_1 = __Pyx_PyDict_NewPresized(1); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 174, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_1);
+      __pyx_t_2 = PySet_New(0); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 174, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_2);
+      if (PySet_Add(__pyx_t_2, __pyx_v_key) < (0)) __PYX_ERR(0, 174, __pyx_L1_error)
+      if (PyDict_SetItem(__pyx_t_1, __pyx_v_op, __pyx_t_2) < (0)) __PYX_ERR(0, 174, __pyx_L1_error)
+      __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
+      if (unlikely(__pyx_v_fallback_read_sets == Py_None)) {
+        PyErr_SetString(PyExc_TypeError, "'NoneType' object is not subscriptable");
+        __PYX_ERR(0, 174, __pyx_L1_error)
+      }
+      __pyx_t_2 = __Pyx_PyLong_From_int(__pyx_v_t_id); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 174, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_2);
+      if (unlikely((PyDict_SetItem(__pyx_v_fallback_read_sets, __pyx_t_2, __pyx_t_1) < 0))) __PYX_ERR(0, 174, __pyx_L1_error)
+      __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
+      __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
+    }
+    __pyx_L4:;
+
+    /* "worker/operator_state/aria/_aria_state.pyx":166
+ * 
+ *     # Track fallback read
+ *     if fallback_read_sets is not None:             # <<<<<<<<<<<<<<
+ *         if t_id in fallback_read_sets:
+ *             tid_rs = fallback_read_sets[t_id]
+*/
+  }
+
+  /* "worker/operator_state/aria/_aria_state.pyx":176
+ *             fallback_read_sets[t_id] = {op: {key}}
  * 
  *     if t_id in fallback_commit_buffer:             # <<<<<<<<<<<<<<
  *         tid_buf = fallback_commit_buffer[t_id]
  *         if op in tid_buf:
 */
-  __pyx_t_2 = __Pyx_PyLong_From_int(__pyx_v_t_id); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 160, __pyx_L1_error)
-  __Pyx_GOTREF(__pyx_t_2);
-  __pyx_t_3 = (__Pyx_PySequence_ContainsTF(__pyx_t_2, __pyx_v_fallback_commit_buffer, Py_EQ)); if (unlikely((__pyx_t_3 < 0))) __PYX_ERR(0, 160, __pyx_L1_error)
-  __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
+  __pyx_t_1 = __Pyx_PyLong_From_int(__pyx_v_t_id); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 176, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_1);
+  __pyx_t_3 = (__Pyx_PySequence_ContainsTF(__pyx_t_1, __pyx_v_fallback_commit_buffer, Py_EQ)); if (unlikely((__pyx_t_3 < 0))) __PYX_ERR(0, 176, __pyx_L1_error)
+  __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
   if (__pyx_t_3) {
 
-    /* "worker/operator_state/aria/_aria_state.pyx":161
+    /* "worker/operator_state/aria/_aria_state.pyx":177
  * 
  *     if t_id in fallback_commit_buffer:
  *         tid_buf = fallback_commit_buffer[t_id]             # <<<<<<<<<<<<<<
  *         if op in tid_buf:
  *             op_buf = tid_buf[op]
 */
-    __pyx_t_2 = __Pyx_GetItemInt(__pyx_v_fallback_commit_buffer, __pyx_v_t_id, int, 1, __Pyx_PyLong_From_int, 0, 0, 0, 1, __Pyx_ReferenceSharing_FunctionArgument); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 161, __pyx_L1_error)
-    __Pyx_GOTREF(__pyx_t_2);
-    __pyx_v_tid_buf = __pyx_t_2;
-    __pyx_t_2 = 0;
+    __pyx_t_1 = __Pyx_GetItemInt(__pyx_v_fallback_commit_buffer, __pyx_v_t_id, int, 1, __Pyx_PyLong_From_int, 0, 0, 0, 1, __Pyx_ReferenceSharing_FunctionArgument); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 177, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_1);
+    __pyx_v_tid_buf = __pyx_t_1;
+    __pyx_t_1 = 0;
 
-    /* "worker/operator_state/aria/_aria_state.pyx":162
+    /* "worker/operator_state/aria/_aria_state.pyx":178
  *     if t_id in fallback_commit_buffer:
  *         tid_buf = fallback_commit_buffer[t_id]
  *         if op in tid_buf:             # <<<<<<<<<<<<<<
  *             op_buf = tid_buf[op]
  *             if key in op_buf:
 */
-    __pyx_t_3 = (__Pyx_PySequence_ContainsTF(__pyx_v_op, __pyx_v_tid_buf, Py_EQ)); if (unlikely((__pyx_t_3 < 0))) __PYX_ERR(0, 162, __pyx_L1_error)
+    __pyx_t_3 = (__Pyx_PySequence_ContainsTF(__pyx_v_op, __pyx_v_tid_buf, Py_EQ)); if (unlikely((__pyx_t_3 < 0))) __PYX_ERR(0, 178, __pyx_L1_error)
     if (__pyx_t_3) {
 
-      /* "worker/operator_state/aria/_aria_state.pyx":163
+      /* "worker/operator_state/aria/_aria_state.pyx":179
  *         tid_buf = fallback_commit_buffer[t_id]
  *         if op in tid_buf:
  *             op_buf = tid_buf[op]             # <<<<<<<<<<<<<<
  *             if key in op_buf:
  *                 return _fast_deepcopy(op_buf[key])
 */
-      __pyx_t_2 = __Pyx_PyObject_GetItem(__pyx_v_tid_buf, __pyx_v_op); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 163, __pyx_L1_error)
-      __Pyx_GOTREF(__pyx_t_2);
-      __pyx_v_op_buf = __pyx_t_2;
-      __pyx_t_2 = 0;
+      __pyx_t_1 = __Pyx_PyObject_GetItem(__pyx_v_tid_buf, __pyx_v_op); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 179, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_1);
+      __pyx_v_op_buf = __pyx_t_1;
+      __pyx_t_1 = 0;
 
-      /* "worker/operator_state/aria/_aria_state.pyx":164
+      /* "worker/operator_state/aria/_aria_state.pyx":180
  *         if op in tid_buf:
  *             op_buf = tid_buf[op]
  *             if key in op_buf:             # <<<<<<<<<<<<<<
  *                 return _fast_deepcopy(op_buf[key])
  * 
 */
-      __pyx_t_3 = (__Pyx_PySequence_ContainsTF(__pyx_v_key, __pyx_v_op_buf, Py_EQ)); if (unlikely((__pyx_t_3 < 0))) __PYX_ERR(0, 164, __pyx_L1_error)
+      __pyx_t_3 = (__Pyx_PySequence_ContainsTF(__pyx_v_key, __pyx_v_op_buf, Py_EQ)); if (unlikely((__pyx_t_3 < 0))) __PYX_ERR(0, 180, __pyx_L1_error)
       if (__pyx_t_3) {
 
-        /* "worker/operator_state/aria/_aria_state.pyx":165
+        /* "worker/operator_state/aria/_aria_state.pyx":181
  *             op_buf = tid_buf[op]
  *             if key in op_buf:
  *                 return _fast_deepcopy(op_buf[key])             # <<<<<<<<<<<<<<
@@ -4720,37 +4897,37 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_state_get_
  *     return _fast_deepcopy((<dict>data[op]).get(key))
 */
         __Pyx_XDECREF(__pyx_r);
-        __pyx_t_1 = NULL;
-        __Pyx_GetModuleGlobalName(__pyx_t_4, __pyx_mstate_global->__pyx_n_u_fast_deepcopy); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 165, __pyx_L1_error)
-        __Pyx_GOTREF(__pyx_t_4);
-        __pyx_t_5 = __Pyx_PyObject_GetItem(__pyx_v_op_buf, __pyx_v_key); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 165, __pyx_L1_error)
+        __pyx_t_2 = NULL;
+        __Pyx_GetModuleGlobalName(__pyx_t_5, __pyx_mstate_global->__pyx_n_u_fast_deepcopy); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 181, __pyx_L1_error)
         __Pyx_GOTREF(__pyx_t_5);
-        __pyx_t_6 = 1;
+        __pyx_t_6 = __Pyx_PyObject_GetItem(__pyx_v_op_buf, __pyx_v_key); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 181, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_6);
+        __pyx_t_7 = 1;
         #if CYTHON_UNPACK_METHODS
-        if (unlikely(PyMethod_Check(__pyx_t_4))) {
-          __pyx_t_1 = PyMethod_GET_SELF(__pyx_t_4);
-          assert(__pyx_t_1);
-          PyObject* __pyx__function = PyMethod_GET_FUNCTION(__pyx_t_4);
-          __Pyx_INCREF(__pyx_t_1);
+        if (unlikely(PyMethod_Check(__pyx_t_5))) {
+          __pyx_t_2 = PyMethod_GET_SELF(__pyx_t_5);
+          assert(__pyx_t_2);
+          PyObject* __pyx__function = PyMethod_GET_FUNCTION(__pyx_t_5);
+          __Pyx_INCREF(__pyx_t_2);
           __Pyx_INCREF(__pyx__function);
-          __Pyx_DECREF_SET(__pyx_t_4, __pyx__function);
-          __pyx_t_6 = 0;
+          __Pyx_DECREF_SET(__pyx_t_5, __pyx__function);
+          __pyx_t_7 = 0;
         }
         #endif
         {
-          PyObject *__pyx_callargs[2] = {__pyx_t_1, __pyx_t_5};
-          __pyx_t_2 = __Pyx_PyObject_FastCall((PyObject*)__pyx_t_4, __pyx_callargs+__pyx_t_6, (2-__pyx_t_6) | (__pyx_t_6*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
-          __Pyx_XDECREF(__pyx_t_1); __pyx_t_1 = 0;
+          PyObject *__pyx_callargs[2] = {__pyx_t_2, __pyx_t_6};
+          __pyx_t_1 = __Pyx_PyObject_FastCall((PyObject*)__pyx_t_5, __pyx_callargs+__pyx_t_7, (2-__pyx_t_7) | (__pyx_t_7*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
+          __Pyx_XDECREF(__pyx_t_2); __pyx_t_2 = 0;
+          __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
           __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
-          __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
-          if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 165, __pyx_L1_error)
-          __Pyx_GOTREF(__pyx_t_2);
+          if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 181, __pyx_L1_error)
+          __Pyx_GOTREF(__pyx_t_1);
         }
-        __pyx_r = __pyx_t_2;
-        __pyx_t_2 = 0;
+        __pyx_r = __pyx_t_1;
+        __pyx_t_1 = 0;
         goto __pyx_L0;
 
-        /* "worker/operator_state/aria/_aria_state.pyx":164
+        /* "worker/operator_state/aria/_aria_state.pyx":180
  *         if op in tid_buf:
  *             op_buf = tid_buf[op]
  *             if key in op_buf:             # <<<<<<<<<<<<<<
@@ -4759,7 +4936,7 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_state_get_
 */
       }
 
-      /* "worker/operator_state/aria/_aria_state.pyx":162
+      /* "worker/operator_state/aria/_aria_state.pyx":178
  *     if t_id in fallback_commit_buffer:
  *         tid_buf = fallback_commit_buffer[t_id]
  *         if op in tid_buf:             # <<<<<<<<<<<<<<
@@ -4768,8 +4945,8 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_state_get_
 */
     }
 
-    /* "worker/operator_state/aria/_aria_state.pyx":160
- *     cdef tuple op = (operator_name, partition)
+    /* "worker/operator_state/aria/_aria_state.pyx":176
+ *             fallback_read_sets[t_id] = {op: {key}}
  * 
  *     if t_id in fallback_commit_buffer:             # <<<<<<<<<<<<<<
  *         tid_buf = fallback_commit_buffer[t_id]
@@ -4777,7 +4954,7 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_state_get_
 */
   }
 
-  /* "worker/operator_state/aria/_aria_state.pyx":167
+  /* "worker/operator_state/aria/_aria_state.pyx":183
  *                 return _fast_deepcopy(op_buf[key])
  * 
  *     return _fast_deepcopy((<dict>data[op]).get(key))             # <<<<<<<<<<<<<<
@@ -4785,45 +4962,45 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_state_get_
  * 
 */
   __Pyx_XDECREF(__pyx_r);
-  __pyx_t_4 = NULL;
-  __Pyx_GetModuleGlobalName(__pyx_t_5, __pyx_mstate_global->__pyx_n_u_fast_deepcopy); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 167, __pyx_L1_error)
-  __Pyx_GOTREF(__pyx_t_5);
+  __pyx_t_5 = NULL;
+  __Pyx_GetModuleGlobalName(__pyx_t_6, __pyx_mstate_global->__pyx_n_u_fast_deepcopy); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 183, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_6);
   if (unlikely(__pyx_v_data == Py_None)) {
     PyErr_SetString(PyExc_TypeError, "'NoneType' object is not subscriptable");
-    __PYX_ERR(0, 167, __pyx_L1_error)
+    __PYX_ERR(0, 183, __pyx_L1_error)
   }
-  __pyx_t_1 = __Pyx_PyDict_GetItem(__pyx_v_data, __pyx_v_op); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 167, __pyx_L1_error)
-  __Pyx_GOTREF(__pyx_t_1);
-  if (unlikely(__pyx_t_1 == Py_None)) {
+  __pyx_t_2 = __Pyx_PyDict_GetItem(__pyx_v_data, __pyx_v_op); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 183, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_2);
+  if (unlikely(__pyx_t_2 == Py_None)) {
     PyErr_Format(PyExc_AttributeError, "'NoneType' object has no attribute '%.30s'", "get");
-    __PYX_ERR(0, 167, __pyx_L1_error)
+    __PYX_ERR(0, 183, __pyx_L1_error)
   }
-  __pyx_t_7 = __Pyx_PyDict_GetItemDefault(((PyObject*)__pyx_t_1), __pyx_v_key, Py_None); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 167, __pyx_L1_error)
-  __Pyx_GOTREF(__pyx_t_7);
-  __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
-  __pyx_t_6 = 1;
+  __pyx_t_8 = __Pyx_PyDict_GetItemDefault(((PyObject*)__pyx_t_2), __pyx_v_key, Py_None); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 183, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_8);
+  __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
+  __pyx_t_7 = 1;
   #if CYTHON_UNPACK_METHODS
-  if (unlikely(PyMethod_Check(__pyx_t_5))) {
-    __pyx_t_4 = PyMethod_GET_SELF(__pyx_t_5);
-    assert(__pyx_t_4);
-    PyObject* __pyx__function = PyMethod_GET_FUNCTION(__pyx_t_5);
-    __Pyx_INCREF(__pyx_t_4);
+  if (unlikely(PyMethod_Check(__pyx_t_6))) {
+    __pyx_t_5 = PyMethod_GET_SELF(__pyx_t_6);
+    assert(__pyx_t_5);
+    PyObject* __pyx__function = PyMethod_GET_FUNCTION(__pyx_t_6);
+    __Pyx_INCREF(__pyx_t_5);
     __Pyx_INCREF(__pyx__function);
-    __Pyx_DECREF_SET(__pyx_t_5, __pyx__function);
-    __pyx_t_6 = 0;
+    __Pyx_DECREF_SET(__pyx_t_6, __pyx__function);
+    __pyx_t_7 = 0;
   }
   #endif
   {
-    PyObject *__pyx_callargs[2] = {__pyx_t_4, __pyx_t_7};
-    __pyx_t_2 = __Pyx_PyObject_FastCall((PyObject*)__pyx_t_5, __pyx_callargs+__pyx_t_6, (2-__pyx_t_6) | (__pyx_t_6*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
-    __Pyx_XDECREF(__pyx_t_4); __pyx_t_4 = 0;
-    __Pyx_DECREF(__pyx_t_7); __pyx_t_7 = 0;
-    __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
-    if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 167, __pyx_L1_error)
-    __Pyx_GOTREF(__pyx_t_2);
+    PyObject *__pyx_callargs[2] = {__pyx_t_5, __pyx_t_8};
+    __pyx_t_1 = __Pyx_PyObject_FastCall((PyObject*)__pyx_t_6, __pyx_callargs+__pyx_t_7, (2-__pyx_t_7) | (__pyx_t_7*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
+    __Pyx_XDECREF(__pyx_t_5); __pyx_t_5 = 0;
+    __Pyx_DECREF(__pyx_t_8); __pyx_t_8 = 0;
+    __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
+    if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 183, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_1);
   }
-  __pyx_r = __pyx_t_2;
-  __pyx_t_2 = 0;
+  __pyx_r = __pyx_t_1;
+  __pyx_t_1 = 0;
   goto __pyx_L0;
 
   /* "worker/operator_state/aria/_aria_state.pyx":149
@@ -4838,13 +5015,14 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_state_get_
   __pyx_L1_error:;
   __Pyx_XDECREF(__pyx_t_1);
   __Pyx_XDECREF(__pyx_t_2);
-  __Pyx_XDECREF(__pyx_t_4);
   __Pyx_XDECREF(__pyx_t_5);
-  __Pyx_XDECREF(__pyx_t_7);
+  __Pyx_XDECREF(__pyx_t_6);
+  __Pyx_XDECREF(__pyx_t_8);
   __Pyx_AddTraceback("worker.operator_state.aria._aria_state.state_get_immediate", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __pyx_r = 0;
   __pyx_L0:;
   __Pyx_XDECREF(__pyx_v_op);
+  __Pyx_XDECREF(__pyx_v_tid_rs);
   __Pyx_XDECREF(__pyx_v_tid_buf);
   __Pyx_XDECREF(__pyx_v_op_buf);
   __Pyx_XGIVEREF(__pyx_r);
@@ -4860,7 +5038,7 @@ PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 PyObject *__pyx_args, PyObject *__pyx_kwds
 #endif
 ); /*proto*/
-PyDoc_STRVAR(__pyx_doc_6worker_14operator_state_4aria_11_aria_state_8state_get_immediate, "Inlined InMemoryOperatorState.get_immediate().");
+PyDoc_STRVAR(__pyx_doc_6worker_14operator_state_4aria_11_aria_state_8state_get_immediate, "Inlined InMemoryOperatorState.get_immediate().\n\n    When *fallback_read_sets* is provided, records the key read for\n    rw-set change detection (Aria paper \302\2474.2).\n    ");
 static PyMethodDef __pyx_mdef_6worker_14operator_state_4aria_11_aria_state_9state_get_immediate = {"state_get_immediate", (PyCFunction)(void(*)(void))(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_6worker_14operator_state_4aria_11_aria_state_9state_get_immediate, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_6worker_14operator_state_4aria_11_aria_state_8state_get_immediate};
 static PyObject *__pyx_pw_6worker_14operator_state_4aria_11_aria_state_9state_get_immediate(PyObject *__pyx_self, 
 #if CYTHON_METH_FASTCALL
@@ -4875,11 +5053,12 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   int __pyx_v_t_id;
   PyObject *__pyx_v_operator_name = 0;
   int __pyx_v_partition;
+  PyObject *__pyx_v_fallback_read_sets = 0;
   #if !CYTHON_METH_FASTCALL
   CYTHON_UNUSED Py_ssize_t __pyx_nargs;
   #endif
   CYTHON_UNUSED PyObject *const *__pyx_kwvalues;
-  PyObject* values[6] = {0,0,0,0,0,0};
+  PyObject* values[7] = {0,0,0,0,0,0,0};
   int __pyx_lineno = 0;
   const char *__pyx_filename = NULL;
   int __pyx_clineno = 0;
@@ -4895,11 +5074,15 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   #endif
   __pyx_kwvalues = __Pyx_KwValues_FASTCALL(__pyx_args, __pyx_nargs);
   {
-    PyObject ** const __pyx_pyargnames[] = {&__pyx_mstate_global->__pyx_n_u_data,&__pyx_mstate_global->__pyx_n_u_fallback_commit_buffer,&__pyx_mstate_global->__pyx_n_u_key,&__pyx_mstate_global->__pyx_n_u_t_id,&__pyx_mstate_global->__pyx_n_u_operator_name,&__pyx_mstate_global->__pyx_n_u_partition,0};
+    PyObject ** const __pyx_pyargnames[] = {&__pyx_mstate_global->__pyx_n_u_data,&__pyx_mstate_global->__pyx_n_u_fallback_commit_buffer,&__pyx_mstate_global->__pyx_n_u_key,&__pyx_mstate_global->__pyx_n_u_t_id,&__pyx_mstate_global->__pyx_n_u_operator_name,&__pyx_mstate_global->__pyx_n_u_partition,&__pyx_mstate_global->__pyx_n_u_fallback_read_sets,0};
     const Py_ssize_t __pyx_kwds_len = (__pyx_kwds) ? __Pyx_NumKwargs_FASTCALL(__pyx_kwds) : 0;
     if (unlikely(__pyx_kwds_len) < 0) __PYX_ERR(0, 149, __pyx_L3_error)
     if (__pyx_kwds_len > 0) {
       switch (__pyx_nargs) {
+        case  7:
+        values[6] = __Pyx_ArgRef_FASTCALL(__pyx_args, 6);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[6])) __PYX_ERR(0, 149, __pyx_L3_error)
+        CYTHON_FALLTHROUGH;
         case  6:
         values[5] = __Pyx_ArgRef_FASTCALL(__pyx_args, 5);
         if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[5])) __PYX_ERR(0, 149, __pyx_L3_error)
@@ -4929,24 +5112,41 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
       }
       const Py_ssize_t kwd_pos_args = __pyx_nargs;
       if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "state_get_immediate", 0) < (0)) __PYX_ERR(0, 149, __pyx_L3_error)
+
+      /* "worker/operator_state/aria/_aria_state.pyx":156
+ *     str operator_name,
+ *     int partition,
+ *     dict fallback_read_sets=None,             # <<<<<<<<<<<<<<
+ * ):
+ *     """Inlined InMemoryOperatorState.get_immediate().
+*/
+      if (!values[6]) values[6] = __Pyx_NewRef(((PyObject*)Py_None));
       for (Py_ssize_t i = __pyx_nargs; i < 6; i++) {
-        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("state_get_immediate", 1, 6, 6, i); __PYX_ERR(0, 149, __pyx_L3_error) }
+        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("state_get_immediate", 0, 6, 7, i); __PYX_ERR(0, 149, __pyx_L3_error) }
       }
-    } else if (unlikely(__pyx_nargs != 6)) {
-      goto __pyx_L5_argtuple_error;
     } else {
-      values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 149, __pyx_L3_error)
-      values[1] = __Pyx_ArgRef_FASTCALL(__pyx_args, 1);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 149, __pyx_L3_error)
-      values[2] = __Pyx_ArgRef_FASTCALL(__pyx_args, 2);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 149, __pyx_L3_error)
-      values[3] = __Pyx_ArgRef_FASTCALL(__pyx_args, 3);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[3])) __PYX_ERR(0, 149, __pyx_L3_error)
-      values[4] = __Pyx_ArgRef_FASTCALL(__pyx_args, 4);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[4])) __PYX_ERR(0, 149, __pyx_L3_error)
-      values[5] = __Pyx_ArgRef_FASTCALL(__pyx_args, 5);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[5])) __PYX_ERR(0, 149, __pyx_L3_error)
+      switch (__pyx_nargs) {
+        case  7:
+        values[6] = __Pyx_ArgRef_FASTCALL(__pyx_args, 6);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[6])) __PYX_ERR(0, 149, __pyx_L3_error)
+        CYTHON_FALLTHROUGH;
+        case  6:
+        values[5] = __Pyx_ArgRef_FASTCALL(__pyx_args, 5);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[5])) __PYX_ERR(0, 149, __pyx_L3_error)
+        values[4] = __Pyx_ArgRef_FASTCALL(__pyx_args, 4);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[4])) __PYX_ERR(0, 149, __pyx_L3_error)
+        values[3] = __Pyx_ArgRef_FASTCALL(__pyx_args, 3);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[3])) __PYX_ERR(0, 149, __pyx_L3_error)
+        values[2] = __Pyx_ArgRef_FASTCALL(__pyx_args, 2);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 149, __pyx_L3_error)
+        values[1] = __Pyx_ArgRef_FASTCALL(__pyx_args, 1);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 149, __pyx_L3_error)
+        values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 149, __pyx_L3_error)
+        break;
+        default: goto __pyx_L5_argtuple_error;
+      }
+      if (!values[6]) values[6] = __Pyx_NewRef(((PyObject*)Py_None));
     }
     __pyx_v_data = ((PyObject*)values[0]);
     __pyx_v_fallback_commit_buffer = values[1];
@@ -4954,10 +5154,11 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
     __pyx_v_t_id = __Pyx_PyLong_As_int(values[3]); if (unlikely((__pyx_v_t_id == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 153, __pyx_L3_error)
     __pyx_v_operator_name = ((PyObject*)values[4]);
     __pyx_v_partition = __Pyx_PyLong_As_int(values[5]); if (unlikely((__pyx_v_partition == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 155, __pyx_L3_error)
+    __pyx_v_fallback_read_sets = ((PyObject*)values[6]);
   }
   goto __pyx_L6_skip;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("state_get_immediate", 1, 6, 6, __pyx_nargs); __PYX_ERR(0, 149, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("state_get_immediate", 0, 6, 7, __pyx_nargs); __PYX_ERR(0, 149, __pyx_L3_error)
   __pyx_L6_skip:;
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L3_error:;
@@ -4970,7 +5171,16 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   __pyx_L4_argument_unpacking_done:;
   if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_data), (&PyDict_Type), 1, "data", 1))) __PYX_ERR(0, 150, __pyx_L1_error)
   if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_operator_name), (&PyUnicode_Type), 1, "operator_name", 1))) __PYX_ERR(0, 154, __pyx_L1_error)
-  __pyx_r = __pyx_pf_6worker_14operator_state_4aria_11_aria_state_8state_get_immediate(__pyx_self, __pyx_v_data, __pyx_v_fallback_commit_buffer, __pyx_v_key, __pyx_v_t_id, __pyx_v_operator_name, __pyx_v_partition);
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_fallback_read_sets), (&PyDict_Type), 1, "fallback_read_sets", 1))) __PYX_ERR(0, 156, __pyx_L1_error)
+  __pyx_r = __pyx_pf_6worker_14operator_state_4aria_11_aria_state_8state_get_immediate(__pyx_self, __pyx_v_data, __pyx_v_fallback_commit_buffer, __pyx_v_key, __pyx_v_t_id, __pyx_v_operator_name, __pyx_v_partition, __pyx_v_fallback_read_sets);
+
+  /* "worker/operator_state/aria/_aria_state.pyx":149
+ * 
+ * 
+ * cpdef object state_get_immediate(             # <<<<<<<<<<<<<<
+ *     dict data,
+ *     object fallback_commit_buffer,
+*/
 
   /* function exit code */
   goto __pyx_L0;
@@ -4989,16 +5199,19 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   return __pyx_r;
 }
 
-static PyObject *__pyx_pf_6worker_14operator_state_4aria_11_aria_state_8state_get_immediate(CYTHON_UNUSED PyObject *__pyx_self, PyObject *__pyx_v_data, PyObject *__pyx_v_fallback_commit_buffer, PyObject *__pyx_v_key, int __pyx_v_t_id, PyObject *__pyx_v_operator_name, int __pyx_v_partition) {
+static PyObject *__pyx_pf_6worker_14operator_state_4aria_11_aria_state_8state_get_immediate(CYTHON_UNUSED PyObject *__pyx_self, PyObject *__pyx_v_data, PyObject *__pyx_v_fallback_commit_buffer, PyObject *__pyx_v_key, int __pyx_v_t_id, PyObject *__pyx_v_operator_name, int __pyx_v_partition, PyObject *__pyx_v_fallback_read_sets) {
   PyObject *__pyx_r = NULL;
   __Pyx_RefNannyDeclarations
   PyObject *__pyx_t_1 = NULL;
+  struct __pyx_opt_args_6worker_14operator_state_4aria_11_aria_state_state_get_immediate __pyx_t_2;
   int __pyx_lineno = 0;
   const char *__pyx_filename = NULL;
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("state_get_immediate", 0);
   __Pyx_XDECREF(__pyx_r);
-  __pyx_t_1 = __pyx_f_6worker_14operator_state_4aria_11_aria_state_state_get_immediate(__pyx_v_data, __pyx_v_fallback_commit_buffer, __pyx_v_key, __pyx_v_t_id, __pyx_v_operator_name, __pyx_v_partition, 1); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 149, __pyx_L1_error)
+  __pyx_t_2.__pyx_n = 1;
+  __pyx_t_2.fallback_read_sets = __pyx_v_fallback_read_sets;
+  __pyx_t_1 = __pyx_f_6worker_14operator_state_4aria_11_aria_state_state_get_immediate(__pyx_v_data, __pyx_v_fallback_commit_buffer, __pyx_v_key, __pyx_v_t_id, __pyx_v_operator_name, __pyx_v_partition, 1, &__pyx_t_2); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 149, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __pyx_r = __pyx_t_1;
   __pyx_t_1 = 0;
@@ -5015,7 +5228,7 @@ static PyObject *__pyx_pf_6worker_14operator_state_4aria_11_aria_state_8state_ge
   return __pyx_r;
 }
 
-/* "worker/operator_state/aria/_aria_state.pyx":170
+/* "worker/operator_state/aria/_aria_state.pyx":186
  * 
  * 
  * cpdef set commit(             # <<<<<<<<<<<<<<
@@ -5058,19 +5271,19 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_commit(PyO
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("commit", 0);
 
-  /* "worker/operator_state/aria/_aria_state.pyx":177
+  /* "worker/operator_state/aria/_aria_state.pyx":193
  * ):
  *     """Inlined InMemoryOperatorState.commit()."""
  *     cdef set committed_t_ids = set()             # <<<<<<<<<<<<<<
  *     cdef tuple op_name
  *     cdef dict ws
 */
-  __pyx_t_1 = PySet_New(0); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 177, __pyx_L1_error)
+  __pyx_t_1 = PySet_New(0); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 193, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __pyx_v_committed_t_ids = ((PyObject*)__pyx_t_1);
   __pyx_t_1 = 0;
 
-  /* "worker/operator_state/aria/_aria_state.pyx":183
+  /* "worker/operator_state/aria/_aria_state.pyx":199
  *     cdef int t_id
  * 
  *     for op_name, ws in write_sets.items():             # <<<<<<<<<<<<<<
@@ -5080,9 +5293,9 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_commit(PyO
   __pyx_t_2 = 0;
   if (unlikely(__pyx_v_write_sets == Py_None)) {
     PyErr_Format(PyExc_AttributeError, "'NoneType' object has no attribute '%.30s'", "items");
-    __PYX_ERR(0, 183, __pyx_L1_error)
+    __PYX_ERR(0, 199, __pyx_L1_error)
   }
-  __pyx_t_5 = __Pyx_dict_iterator(__pyx_v_write_sets, 1, __pyx_mstate_global->__pyx_n_u_items, (&__pyx_t_3), (&__pyx_t_4)); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 183, __pyx_L1_error)
+  __pyx_t_5 = __Pyx_dict_iterator(__pyx_v_write_sets, 1, __pyx_mstate_global->__pyx_n_u_items, (&__pyx_t_3), (&__pyx_t_4)); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 199, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_5);
   __Pyx_XDECREF(__pyx_t_1);
   __pyx_t_1 = __pyx_t_5;
@@ -5090,29 +5303,29 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_commit(PyO
   while (1) {
     __pyx_t_7 = __Pyx_dict_iter_next(__pyx_t_1, __pyx_t_3, &__pyx_t_2, &__pyx_t_5, &__pyx_t_6, NULL, __pyx_t_4);
     if (unlikely(__pyx_t_7 == 0)) break;
-    if (unlikely(__pyx_t_7 == -1)) __PYX_ERR(0, 183, __pyx_L1_error)
+    if (unlikely(__pyx_t_7 == -1)) __PYX_ERR(0, 199, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_5);
     __Pyx_GOTREF(__pyx_t_6);
-    if (!(likely(PyTuple_CheckExact(__pyx_t_5))||((__pyx_t_5) == Py_None) || __Pyx_RaiseUnexpectedTypeError("tuple", __pyx_t_5))) __PYX_ERR(0, 183, __pyx_L1_error)
-    if (!(likely(PyDict_CheckExact(__pyx_t_6))||((__pyx_t_6) == Py_None) || __Pyx_RaiseUnexpectedTypeError("dict", __pyx_t_6))) __PYX_ERR(0, 183, __pyx_L1_error)
+    if (!(likely(PyTuple_CheckExact(__pyx_t_5))||((__pyx_t_5) == Py_None) || __Pyx_RaiseUnexpectedTypeError("tuple", __pyx_t_5))) __PYX_ERR(0, 199, __pyx_L1_error)
+    if (!(likely(PyDict_CheckExact(__pyx_t_6))||((__pyx_t_6) == Py_None) || __Pyx_RaiseUnexpectedTypeError("dict", __pyx_t_6))) __PYX_ERR(0, 199, __pyx_L1_error)
     __Pyx_XDECREF_SET(__pyx_v_op_name, ((PyObject*)__pyx_t_5));
     __pyx_t_5 = 0;
     __Pyx_XDECREF_SET(__pyx_v_ws, ((PyObject*)__pyx_t_6));
     __pyx_t_6 = 0;
 
-    /* "worker/operator_state/aria/_aria_state.pyx":184
+    /* "worker/operator_state/aria/_aria_state.pyx":200
  * 
  *     for op_name, ws in write_sets.items():
  *         updates_to_commit = {}             # <<<<<<<<<<<<<<
  *         for t_id, kv in ws.items():
  *             if t_id not in aborted_from_remote:
 */
-    __pyx_t_6 = __Pyx_PyDict_NewPresized(0); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 184, __pyx_L1_error)
+    __pyx_t_6 = __Pyx_PyDict_NewPresized(0); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 200, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_6);
     __Pyx_XDECREF_SET(__pyx_v_updates_to_commit, ((PyObject*)__pyx_t_6));
     __pyx_t_6 = 0;
 
-    /* "worker/operator_state/aria/_aria_state.pyx":185
+    /* "worker/operator_state/aria/_aria_state.pyx":201
  *     for op_name, ws in write_sets.items():
  *         updates_to_commit = {}
  *         for t_id, kv in ws.items():             # <<<<<<<<<<<<<<
@@ -5122,9 +5335,9 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_commit(PyO
     __pyx_t_8 = 0;
     if (unlikely(__pyx_v_ws == Py_None)) {
       PyErr_Format(PyExc_AttributeError, "'NoneType' object has no attribute '%.30s'", "items");
-      __PYX_ERR(0, 185, __pyx_L1_error)
+      __PYX_ERR(0, 201, __pyx_L1_error)
     }
-    __pyx_t_5 = __Pyx_dict_iterator(__pyx_v_ws, 1, __pyx_mstate_global->__pyx_n_u_items, (&__pyx_t_9), (&__pyx_t_7)); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 185, __pyx_L1_error)
+    __pyx_t_5 = __Pyx_dict_iterator(__pyx_v_ws, 1, __pyx_mstate_global->__pyx_n_u_items, (&__pyx_t_9), (&__pyx_t_7)); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 201, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_5);
     __Pyx_XDECREF(__pyx_t_6);
     __pyx_t_6 = __pyx_t_5;
@@ -5132,33 +5345,33 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_commit(PyO
     while (1) {
       __pyx_t_11 = __Pyx_dict_iter_next(__pyx_t_6, __pyx_t_9, &__pyx_t_8, &__pyx_t_5, &__pyx_t_10, NULL, __pyx_t_7);
       if (unlikely(__pyx_t_11 == 0)) break;
-      if (unlikely(__pyx_t_11 == -1)) __PYX_ERR(0, 185, __pyx_L1_error)
+      if (unlikely(__pyx_t_11 == -1)) __PYX_ERR(0, 201, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_5);
       __Pyx_GOTREF(__pyx_t_10);
-      __pyx_t_11 = __Pyx_PyLong_As_int(__pyx_t_5); if (unlikely((__pyx_t_11 == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 185, __pyx_L1_error)
+      __pyx_t_11 = __Pyx_PyLong_As_int(__pyx_t_5); if (unlikely((__pyx_t_11 == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 201, __pyx_L1_error)
       __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
       __pyx_v_t_id = __pyx_t_11;
       __Pyx_XDECREF_SET(__pyx_v_kv, __pyx_t_10);
       __pyx_t_10 = 0;
 
-      /* "worker/operator_state/aria/_aria_state.pyx":186
+      /* "worker/operator_state/aria/_aria_state.pyx":202
  *         updates_to_commit = {}
  *         for t_id, kv in ws.items():
  *             if t_id not in aborted_from_remote:             # <<<<<<<<<<<<<<
  *                 (<dict>updates_to_commit).update(<dict>kv)
  *                 committed_t_ids.add(t_id)
 */
-      __pyx_t_10 = __Pyx_PyLong_From_int(__pyx_v_t_id); if (unlikely(!__pyx_t_10)) __PYX_ERR(0, 186, __pyx_L1_error)
+      __pyx_t_10 = __Pyx_PyLong_From_int(__pyx_v_t_id); if (unlikely(!__pyx_t_10)) __PYX_ERR(0, 202, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_10);
       if (unlikely(__pyx_v_aborted_from_remote == Py_None)) {
         PyErr_SetString(PyExc_TypeError, "'NoneType' object is not iterable");
-        __PYX_ERR(0, 186, __pyx_L1_error)
+        __PYX_ERR(0, 202, __pyx_L1_error)
       }
-      __pyx_t_12 = (__Pyx_PySet_ContainsTF(__pyx_t_10, __pyx_v_aborted_from_remote, Py_NE)); if (unlikely((__pyx_t_12 < 0))) __PYX_ERR(0, 186, __pyx_L1_error)
+      __pyx_t_12 = (__Pyx_PySet_ContainsTF(__pyx_t_10, __pyx_v_aborted_from_remote, Py_NE)); if (unlikely((__pyx_t_12 < 0))) __PYX_ERR(0, 202, __pyx_L1_error)
       __Pyx_DECREF(__pyx_t_10); __pyx_t_10 = 0;
       if (__pyx_t_12) {
 
-        /* "worker/operator_state/aria/_aria_state.pyx":187
+        /* "worker/operator_state/aria/_aria_state.pyx":203
  *         for t_id, kv in ws.items():
  *             if t_id not in aborted_from_remote:
  *                 (<dict>updates_to_commit).update(<dict>kv)             # <<<<<<<<<<<<<<
@@ -5172,24 +5385,24 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_commit(PyO
           PyObject *__pyx_callargs[2] = {__pyx_t_5, __pyx_v_kv};
           __pyx_t_10 = __Pyx_PyObject_FastCallMethod((PyObject*)__pyx_mstate_global->__pyx_n_u_update, __pyx_callargs+__pyx_t_13, (2-__pyx_t_13) | (1*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
           __Pyx_XDECREF(__pyx_t_5); __pyx_t_5 = 0;
-          if (unlikely(!__pyx_t_10)) __PYX_ERR(0, 187, __pyx_L1_error)
+          if (unlikely(!__pyx_t_10)) __PYX_ERR(0, 203, __pyx_L1_error)
           __Pyx_GOTREF(__pyx_t_10);
         }
         __Pyx_DECREF(__pyx_t_10); __pyx_t_10 = 0;
 
-        /* "worker/operator_state/aria/_aria_state.pyx":188
+        /* "worker/operator_state/aria/_aria_state.pyx":204
  *             if t_id not in aborted_from_remote:
  *                 (<dict>updates_to_commit).update(<dict>kv)
  *                 committed_t_ids.add(t_id)             # <<<<<<<<<<<<<<
  *         (<dict>data[op_name]).update(updates_to_commit)
  *         (<dict>delta_map[op_name]).update(updates_to_commit)
 */
-        __pyx_t_10 = __Pyx_PyLong_From_int(__pyx_v_t_id); if (unlikely(!__pyx_t_10)) __PYX_ERR(0, 188, __pyx_L1_error)
+        __pyx_t_10 = __Pyx_PyLong_From_int(__pyx_v_t_id); if (unlikely(!__pyx_t_10)) __PYX_ERR(0, 204, __pyx_L1_error)
         __Pyx_GOTREF(__pyx_t_10);
-        __pyx_t_14 = PySet_Add(__pyx_v_committed_t_ids, __pyx_t_10); if (unlikely(__pyx_t_14 == ((int)-1))) __PYX_ERR(0, 188, __pyx_L1_error)
+        __pyx_t_14 = PySet_Add(__pyx_v_committed_t_ids, __pyx_t_10); if (unlikely(__pyx_t_14 == ((int)-1))) __PYX_ERR(0, 204, __pyx_L1_error)
         __Pyx_DECREF(__pyx_t_10); __pyx_t_10 = 0;
 
-        /* "worker/operator_state/aria/_aria_state.pyx":186
+        /* "worker/operator_state/aria/_aria_state.pyx":202
  *         updates_to_commit = {}
  *         for t_id, kv in ws.items():
  *             if t_id not in aborted_from_remote:             # <<<<<<<<<<<<<<
@@ -5200,7 +5413,7 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_commit(PyO
     }
     __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
 
-    /* "worker/operator_state/aria/_aria_state.pyx":189
+    /* "worker/operator_state/aria/_aria_state.pyx":205
  *                 (<dict>updates_to_commit).update(<dict>kv)
  *                 committed_t_ids.add(t_id)
  *         (<dict>data[op_name]).update(updates_to_commit)             # <<<<<<<<<<<<<<
@@ -5209,9 +5422,9 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_commit(PyO
 */
     if (unlikely(__pyx_v_data == Py_None)) {
       PyErr_SetString(PyExc_TypeError, "'NoneType' object is not subscriptable");
-      __PYX_ERR(0, 189, __pyx_L1_error)
+      __PYX_ERR(0, 205, __pyx_L1_error)
     }
-    __pyx_t_5 = __Pyx_PyDict_GetItem(__pyx_v_data, __pyx_v_op_name); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 189, __pyx_L1_error)
+    __pyx_t_5 = __Pyx_PyDict_GetItem(__pyx_v_data, __pyx_v_op_name); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 205, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_5);
     __pyx_t_10 = __pyx_t_5;
     __Pyx_INCREF(__pyx_t_10);
@@ -5221,12 +5434,12 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_commit(PyO
       __pyx_t_6 = __Pyx_PyObject_FastCallMethod((PyObject*)__pyx_mstate_global->__pyx_n_u_update, __pyx_callargs+__pyx_t_13, (2-__pyx_t_13) | (1*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
       __Pyx_XDECREF(__pyx_t_10); __pyx_t_10 = 0;
       __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
-      if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 189, __pyx_L1_error)
+      if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 205, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_6);
     }
     __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
 
-    /* "worker/operator_state/aria/_aria_state.pyx":190
+    /* "worker/operator_state/aria/_aria_state.pyx":206
  *                 committed_t_ids.add(t_id)
  *         (<dict>data[op_name]).update(updates_to_commit)
  *         (<dict>delta_map[op_name]).update(updates_to_commit)             # <<<<<<<<<<<<<<
@@ -5235,9 +5448,9 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_commit(PyO
 */
     if (unlikely(__pyx_v_delta_map == Py_None)) {
       PyErr_SetString(PyExc_TypeError, "'NoneType' object is not subscriptable");
-      __PYX_ERR(0, 190, __pyx_L1_error)
+      __PYX_ERR(0, 206, __pyx_L1_error)
     }
-    __pyx_t_10 = __Pyx_PyDict_GetItem(__pyx_v_delta_map, __pyx_v_op_name); if (unlikely(!__pyx_t_10)) __PYX_ERR(0, 190, __pyx_L1_error)
+    __pyx_t_10 = __Pyx_PyDict_GetItem(__pyx_v_delta_map, __pyx_v_op_name); if (unlikely(!__pyx_t_10)) __PYX_ERR(0, 206, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_10);
     __pyx_t_5 = __pyx_t_10;
     __Pyx_INCREF(__pyx_t_5);
@@ -5247,14 +5460,14 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_commit(PyO
       __pyx_t_6 = __Pyx_PyObject_FastCallMethod((PyObject*)__pyx_mstate_global->__pyx_n_u_update, __pyx_callargs+__pyx_t_13, (2-__pyx_t_13) | (1*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
       __Pyx_XDECREF(__pyx_t_5); __pyx_t_5 = 0;
       __Pyx_DECREF(__pyx_t_10); __pyx_t_10 = 0;
-      if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 190, __pyx_L1_error)
+      if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 206, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_6);
     }
     __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
   }
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
 
-  /* "worker/operator_state/aria/_aria_state.pyx":191
+  /* "worker/operator_state/aria/_aria_state.pyx":207
  *         (<dict>data[op_name]).update(updates_to_commit)
  *         (<dict>delta_map[op_name]).update(updates_to_commit)
  *     return committed_t_ids             # <<<<<<<<<<<<<<
@@ -5266,7 +5479,7 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_commit(PyO
   __pyx_r = __pyx_v_committed_t_ids;
   goto __pyx_L0;
 
-  /* "worker/operator_state/aria/_aria_state.pyx":170
+  /* "worker/operator_state/aria/_aria_state.pyx":186
  * 
  * 
  * cpdef set commit(             # <<<<<<<<<<<<<<
@@ -5336,44 +5549,44 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   {
     PyObject ** const __pyx_pyargnames[] = {&__pyx_mstate_global->__pyx_n_u_write_sets,&__pyx_mstate_global->__pyx_n_u_data,&__pyx_mstate_global->__pyx_n_u_delta_map,&__pyx_mstate_global->__pyx_n_u_aborted_from_remote,0};
     const Py_ssize_t __pyx_kwds_len = (__pyx_kwds) ? __Pyx_NumKwargs_FASTCALL(__pyx_kwds) : 0;
-    if (unlikely(__pyx_kwds_len) < 0) __PYX_ERR(0, 170, __pyx_L3_error)
+    if (unlikely(__pyx_kwds_len) < 0) __PYX_ERR(0, 186, __pyx_L3_error)
     if (__pyx_kwds_len > 0) {
       switch (__pyx_nargs) {
         case  4:
         values[3] = __Pyx_ArgRef_FASTCALL(__pyx_args, 3);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[3])) __PYX_ERR(0, 170, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[3])) __PYX_ERR(0, 186, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  3:
         values[2] = __Pyx_ArgRef_FASTCALL(__pyx_args, 2);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 170, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 186, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  2:
         values[1] = __Pyx_ArgRef_FASTCALL(__pyx_args, 1);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 170, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 186, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  1:
         values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 170, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 186, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  0: break;
         default: goto __pyx_L5_argtuple_error;
       }
       const Py_ssize_t kwd_pos_args = __pyx_nargs;
-      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "commit", 0) < (0)) __PYX_ERR(0, 170, __pyx_L3_error)
+      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "commit", 0) < (0)) __PYX_ERR(0, 186, __pyx_L3_error)
       for (Py_ssize_t i = __pyx_nargs; i < 4; i++) {
-        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("commit", 1, 4, 4, i); __PYX_ERR(0, 170, __pyx_L3_error) }
+        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("commit", 1, 4, 4, i); __PYX_ERR(0, 186, __pyx_L3_error) }
       }
     } else if (unlikely(__pyx_nargs != 4)) {
       goto __pyx_L5_argtuple_error;
     } else {
       values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 170, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 186, __pyx_L3_error)
       values[1] = __Pyx_ArgRef_FASTCALL(__pyx_args, 1);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 170, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 186, __pyx_L3_error)
       values[2] = __Pyx_ArgRef_FASTCALL(__pyx_args, 2);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 170, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 186, __pyx_L3_error)
       values[3] = __Pyx_ArgRef_FASTCALL(__pyx_args, 3);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[3])) __PYX_ERR(0, 170, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[3])) __PYX_ERR(0, 186, __pyx_L3_error)
     }
     __pyx_v_write_sets = ((PyObject*)values[0]);
     __pyx_v_data = ((PyObject*)values[1]);
@@ -5382,7 +5595,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   }
   goto __pyx_L6_skip;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("commit", 1, 4, 4, __pyx_nargs); __PYX_ERR(0, 170, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("commit", 1, 4, 4, __pyx_nargs); __PYX_ERR(0, 186, __pyx_L3_error)
   __pyx_L6_skip:;
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L3_error:;
@@ -5393,10 +5606,10 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   __Pyx_RefNannyFinishContext();
   return NULL;
   __pyx_L4_argument_unpacking_done:;
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_write_sets), (&PyDict_Type), 1, "write_sets", 1))) __PYX_ERR(0, 171, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_data), (&PyDict_Type), 1, "data", 1))) __PYX_ERR(0, 172, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_delta_map), (&PyDict_Type), 1, "delta_map", 1))) __PYX_ERR(0, 173, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_aborted_from_remote), (&PySet_Type), 1, "aborted_from_remote", 1))) __PYX_ERR(0, 174, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_write_sets), (&PyDict_Type), 1, "write_sets", 1))) __PYX_ERR(0, 187, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_data), (&PyDict_Type), 1, "data", 1))) __PYX_ERR(0, 188, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_delta_map), (&PyDict_Type), 1, "delta_map", 1))) __PYX_ERR(0, 189, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_aborted_from_remote), (&PySet_Type), 1, "aborted_from_remote", 1))) __PYX_ERR(0, 190, __pyx_L1_error)
   __pyx_r = __pyx_pf_6worker_14operator_state_4aria_11_aria_state_10commit(__pyx_self, __pyx_v_write_sets, __pyx_v_data, __pyx_v_delta_map, __pyx_v_aborted_from_remote);
 
   /* function exit code */
@@ -5425,7 +5638,7 @@ static PyObject *__pyx_pf_6worker_14operator_state_4aria_11_aria_state_10commit(
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("commit", 0);
   __Pyx_XDECREF(__pyx_r);
-  __pyx_t_1 = __pyx_f_6worker_14operator_state_4aria_11_aria_state_commit(__pyx_v_write_sets, __pyx_v_data, __pyx_v_delta_map, __pyx_v_aborted_from_remote, 1); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 170, __pyx_L1_error)
+  __pyx_t_1 = __pyx_f_6worker_14operator_state_4aria_11_aria_state_commit(__pyx_v_write_sets, __pyx_v_data, __pyx_v_delta_map, __pyx_v_aborted_from_remote, 1); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 186, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __pyx_r = __pyx_t_1;
   __pyx_t_1 = 0;
@@ -5442,7 +5655,7 @@ static PyObject *__pyx_pf_6worker_14operator_state_4aria_11_aria_state_10commit(
   return __pyx_r;
 }
 
-/* "worker/operator_state/aria/_aria_state.pyx":198
+/* "worker/operator_state/aria/_aria_state.pyx":214
  * # ---------------------------------------------------------------------------
  * 
  * cpdef bint has_conflicts(int t_id, object keys, dict reservations):             # <<<<<<<<<<<<<<
@@ -5473,7 +5686,7 @@ static int __pyx_f_6worker_14operator_state_4aria_11_aria_state_has_conflicts(in
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("has_conflicts", 0);
 
-  /* "worker/operator_state/aria/_aria_state.pyx":202
+  /* "worker/operator_state/aria/_aria_state.pyx":218
  *     cdef object key
  *     cdef object res_tid
  *     for key in keys:             # <<<<<<<<<<<<<<
@@ -5485,9 +5698,9 @@ static int __pyx_f_6worker_14operator_state_4aria_11_aria_state_has_conflicts(in
     __pyx_t_2 = 0;
     __pyx_t_3 = NULL;
   } else {
-    __pyx_t_2 = -1; __pyx_t_1 = PyObject_GetIter(__pyx_v_keys); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 202, __pyx_L1_error)
+    __pyx_t_2 = -1; __pyx_t_1 = PyObject_GetIter(__pyx_v_keys); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 218, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_1);
-    __pyx_t_3 = (CYTHON_COMPILING_IN_LIMITED_API) ? PyIter_Next : __Pyx_PyObject_GetIterNextFunc(__pyx_t_1); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 202, __pyx_L1_error)
+    __pyx_t_3 = (CYTHON_COMPILING_IN_LIMITED_API) ? PyIter_Next : __Pyx_PyObject_GetIterNextFunc(__pyx_t_1); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 218, __pyx_L1_error)
   }
   for (;;) {
     if (likely(!__pyx_t_3)) {
@@ -5495,7 +5708,7 @@ static int __pyx_f_6worker_14operator_state_4aria_11_aria_state_has_conflicts(in
         {
           Py_ssize_t __pyx_temp = __Pyx_PyList_GET_SIZE(__pyx_t_1);
           #if !CYTHON_ASSUME_SAFE_SIZE
-          if (unlikely((__pyx_temp < 0))) __PYX_ERR(0, 202, __pyx_L1_error)
+          if (unlikely((__pyx_temp < 0))) __PYX_ERR(0, 218, __pyx_L1_error)
           #endif
           if (__pyx_t_2 >= __pyx_temp) break;
         }
@@ -5505,7 +5718,7 @@ static int __pyx_f_6worker_14operator_state_4aria_11_aria_state_has_conflicts(in
         {
           Py_ssize_t __pyx_temp = __Pyx_PyTuple_GET_SIZE(__pyx_t_1);
           #if !CYTHON_ASSUME_SAFE_SIZE
-          if (unlikely((__pyx_temp < 0))) __PYX_ERR(0, 202, __pyx_L1_error)
+          if (unlikely((__pyx_temp < 0))) __PYX_ERR(0, 218, __pyx_L1_error)
           #endif
           if (__pyx_t_2 >= __pyx_temp) break;
         }
@@ -5516,13 +5729,13 @@ static int __pyx_f_6worker_14operator_state_4aria_11_aria_state_has_conflicts(in
         #endif
         ++__pyx_t_2;
       }
-      if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 202, __pyx_L1_error)
+      if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 218, __pyx_L1_error)
     } else {
       __pyx_t_4 = __pyx_t_3(__pyx_t_1);
       if (unlikely(!__pyx_t_4)) {
         PyObject* exc_type = PyErr_Occurred();
         if (exc_type) {
-          if (unlikely(!__Pyx_PyErr_GivenExceptionMatches(exc_type, PyExc_StopIteration))) __PYX_ERR(0, 202, __pyx_L1_error)
+          if (unlikely(!__Pyx_PyErr_GivenExceptionMatches(exc_type, PyExc_StopIteration))) __PYX_ERR(0, 218, __pyx_L1_error)
           PyErr_Clear();
         }
         break;
@@ -5532,7 +5745,7 @@ static int __pyx_f_6worker_14operator_state_4aria_11_aria_state_has_conflicts(in
     __Pyx_XDECREF_SET(__pyx_v_key, __pyx_t_4);
     __pyx_t_4 = 0;
 
-    /* "worker/operator_state/aria/_aria_state.pyx":203
+    /* "worker/operator_state/aria/_aria_state.pyx":219
  *     cdef object res_tid
  *     for key in keys:
  *         if key in reservations:             # <<<<<<<<<<<<<<
@@ -5541,12 +5754,12 @@ static int __pyx_f_6worker_14operator_state_4aria_11_aria_state_has_conflicts(in
 */
     if (unlikely(__pyx_v_reservations == Py_None)) {
       PyErr_SetString(PyExc_TypeError, "'NoneType' object is not iterable");
-      __PYX_ERR(0, 203, __pyx_L1_error)
+      __PYX_ERR(0, 219, __pyx_L1_error)
     }
-    __pyx_t_5 = (__Pyx_PyDict_ContainsTF(__pyx_v_key, __pyx_v_reservations, Py_EQ)); if (unlikely((__pyx_t_5 < 0))) __PYX_ERR(0, 203, __pyx_L1_error)
+    __pyx_t_5 = (__Pyx_PyDict_ContainsTF(__pyx_v_key, __pyx_v_reservations, Py_EQ)); if (unlikely((__pyx_t_5 < 0))) __PYX_ERR(0, 219, __pyx_L1_error)
     if (__pyx_t_5) {
 
-      /* "worker/operator_state/aria/_aria_state.pyx":204
+      /* "worker/operator_state/aria/_aria_state.pyx":220
  *     for key in keys:
  *         if key in reservations:
  *             res_tid = reservations[key]             # <<<<<<<<<<<<<<
@@ -5555,25 +5768,25 @@ static int __pyx_f_6worker_14operator_state_4aria_11_aria_state_has_conflicts(in
 */
       if (unlikely(__pyx_v_reservations == Py_None)) {
         PyErr_SetString(PyExc_TypeError, "'NoneType' object is not subscriptable");
-        __PYX_ERR(0, 204, __pyx_L1_error)
+        __PYX_ERR(0, 220, __pyx_L1_error)
       }
-      __pyx_t_4 = __Pyx_PyDict_GetItem(__pyx_v_reservations, __pyx_v_key); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 204, __pyx_L1_error)
+      __pyx_t_4 = __Pyx_PyDict_GetItem(__pyx_v_reservations, __pyx_v_key); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 220, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_4);
       __Pyx_XDECREF_SET(__pyx_v_res_tid, __pyx_t_4);
       __pyx_t_4 = 0;
 
-      /* "worker/operator_state/aria/_aria_state.pyx":205
+      /* "worker/operator_state/aria/_aria_state.pyx":221
  *         if key in reservations:
  *             res_tid = reservations[key]
  *             if <int>res_tid < t_id:             # <<<<<<<<<<<<<<
  *                 return True
  *     return False
 */
-      __pyx_t_6 = __Pyx_PyLong_As_int(__pyx_v_res_tid); if (unlikely((__pyx_t_6 == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 205, __pyx_L1_error)
+      __pyx_t_6 = __Pyx_PyLong_As_int(__pyx_v_res_tid); if (unlikely((__pyx_t_6 == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 221, __pyx_L1_error)
       __pyx_t_5 = (((int)__pyx_t_6) < __pyx_v_t_id);
       if (__pyx_t_5) {
 
-        /* "worker/operator_state/aria/_aria_state.pyx":206
+        /* "worker/operator_state/aria/_aria_state.pyx":222
  *             res_tid = reservations[key]
  *             if <int>res_tid < t_id:
  *                 return True             # <<<<<<<<<<<<<<
@@ -5584,7 +5797,7 @@ static int __pyx_f_6worker_14operator_state_4aria_11_aria_state_has_conflicts(in
         __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
         goto __pyx_L0;
 
-        /* "worker/operator_state/aria/_aria_state.pyx":205
+        /* "worker/operator_state/aria/_aria_state.pyx":221
  *         if key in reservations:
  *             res_tid = reservations[key]
  *             if <int>res_tid < t_id:             # <<<<<<<<<<<<<<
@@ -5593,7 +5806,7 @@ static int __pyx_f_6worker_14operator_state_4aria_11_aria_state_has_conflicts(in
 */
       }
 
-      /* "worker/operator_state/aria/_aria_state.pyx":203
+      /* "worker/operator_state/aria/_aria_state.pyx":219
  *     cdef object res_tid
  *     for key in keys:
  *         if key in reservations:             # <<<<<<<<<<<<<<
@@ -5602,7 +5815,7 @@ static int __pyx_f_6worker_14operator_state_4aria_11_aria_state_has_conflicts(in
 */
     }
 
-    /* "worker/operator_state/aria/_aria_state.pyx":202
+    /* "worker/operator_state/aria/_aria_state.pyx":218
  *     cdef object key
  *     cdef object res_tid
  *     for key in keys:             # <<<<<<<<<<<<<<
@@ -5612,7 +5825,7 @@ static int __pyx_f_6worker_14operator_state_4aria_11_aria_state_has_conflicts(in
   }
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
 
-  /* "worker/operator_state/aria/_aria_state.pyx":207
+  /* "worker/operator_state/aria/_aria_state.pyx":223
  *             if <int>res_tid < t_id:
  *                 return True
  *     return False             # <<<<<<<<<<<<<<
@@ -5622,7 +5835,7 @@ static int __pyx_f_6worker_14operator_state_4aria_11_aria_state_has_conflicts(in
   __pyx_r = 0;
   goto __pyx_L0;
 
-  /* "worker/operator_state/aria/_aria_state.pyx":198
+  /* "worker/operator_state/aria/_aria_state.pyx":214
  * # ---------------------------------------------------------------------------
  * 
  * cpdef bint has_conflicts(int t_id, object keys, dict reservations):             # <<<<<<<<<<<<<<
@@ -5685,46 +5898,46 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   {
     PyObject ** const __pyx_pyargnames[] = {&__pyx_mstate_global->__pyx_n_u_t_id,&__pyx_mstate_global->__pyx_n_u_keys,&__pyx_mstate_global->__pyx_n_u_reservations,0};
     const Py_ssize_t __pyx_kwds_len = (__pyx_kwds) ? __Pyx_NumKwargs_FASTCALL(__pyx_kwds) : 0;
-    if (unlikely(__pyx_kwds_len) < 0) __PYX_ERR(0, 198, __pyx_L3_error)
+    if (unlikely(__pyx_kwds_len) < 0) __PYX_ERR(0, 214, __pyx_L3_error)
     if (__pyx_kwds_len > 0) {
       switch (__pyx_nargs) {
         case  3:
         values[2] = __Pyx_ArgRef_FASTCALL(__pyx_args, 2);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 198, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 214, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  2:
         values[1] = __Pyx_ArgRef_FASTCALL(__pyx_args, 1);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 198, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 214, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  1:
         values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 198, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 214, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  0: break;
         default: goto __pyx_L5_argtuple_error;
       }
       const Py_ssize_t kwd_pos_args = __pyx_nargs;
-      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "has_conflicts", 0) < (0)) __PYX_ERR(0, 198, __pyx_L3_error)
+      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "has_conflicts", 0) < (0)) __PYX_ERR(0, 214, __pyx_L3_error)
       for (Py_ssize_t i = __pyx_nargs; i < 3; i++) {
-        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("has_conflicts", 1, 3, 3, i); __PYX_ERR(0, 198, __pyx_L3_error) }
+        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("has_conflicts", 1, 3, 3, i); __PYX_ERR(0, 214, __pyx_L3_error) }
       }
     } else if (unlikely(__pyx_nargs != 3)) {
       goto __pyx_L5_argtuple_error;
     } else {
       values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 198, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 214, __pyx_L3_error)
       values[1] = __Pyx_ArgRef_FASTCALL(__pyx_args, 1);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 198, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 214, __pyx_L3_error)
       values[2] = __Pyx_ArgRef_FASTCALL(__pyx_args, 2);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 198, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 214, __pyx_L3_error)
     }
-    __pyx_v_t_id = __Pyx_PyLong_As_int(values[0]); if (unlikely((__pyx_v_t_id == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 198, __pyx_L3_error)
+    __pyx_v_t_id = __Pyx_PyLong_As_int(values[0]); if (unlikely((__pyx_v_t_id == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 214, __pyx_L3_error)
     __pyx_v_keys = values[1];
     __pyx_v_reservations = ((PyObject*)values[2]);
   }
   goto __pyx_L6_skip;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("has_conflicts", 1, 3, 3, __pyx_nargs); __PYX_ERR(0, 198, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("has_conflicts", 1, 3, 3, __pyx_nargs); __PYX_ERR(0, 214, __pyx_L3_error)
   __pyx_L6_skip:;
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L3_error:;
@@ -5735,7 +5948,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   __Pyx_RefNannyFinishContext();
   return NULL;
   __pyx_L4_argument_unpacking_done:;
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_reservations), (&PyDict_Type), 1, "reservations", 1))) __PYX_ERR(0, 198, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_reservations), (&PyDict_Type), 1, "reservations", 1))) __PYX_ERR(0, 214, __pyx_L1_error)
   __pyx_r = __pyx_pf_6worker_14operator_state_4aria_11_aria_state_12has_conflicts(__pyx_self, __pyx_v_t_id, __pyx_v_keys, __pyx_v_reservations);
 
   /* function exit code */
@@ -5765,8 +5978,8 @@ static PyObject *__pyx_pf_6worker_14operator_state_4aria_11_aria_state_12has_con
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("has_conflicts", 0);
   __Pyx_XDECREF(__pyx_r);
-  __pyx_t_1 = __pyx_f_6worker_14operator_state_4aria_11_aria_state_has_conflicts(__pyx_v_t_id, __pyx_v_keys, __pyx_v_reservations, 1); if (unlikely(__pyx_t_1 == ((int)-1) && PyErr_Occurred())) __PYX_ERR(0, 198, __pyx_L1_error)
-  __pyx_t_2 = __Pyx_PyBool_FromLong(__pyx_t_1); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 198, __pyx_L1_error)
+  __pyx_t_1 = __pyx_f_6worker_14operator_state_4aria_11_aria_state_has_conflicts(__pyx_v_t_id, __pyx_v_keys, __pyx_v_reservations, 1); if (unlikely(__pyx_t_1 == ((int)-1) && PyErr_Occurred())) __PYX_ERR(0, 214, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_PyBool_FromLong(__pyx_t_1); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 214, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   __pyx_r = __pyx_t_2;
   __pyx_t_2 = 0;
@@ -5783,7 +5996,7 @@ static PyObject *__pyx_pf_6worker_14operator_state_4aria_11_aria_state_12has_con
   return __pyx_r;
 }
 
-/* "worker/operator_state/aria/_aria_state.pyx":210
+/* "worker/operator_state/aria/_aria_state.pyx":226
  * 
  * 
  * cpdef dict min_rw_reservations(dict reservations):             # <<<<<<<<<<<<<<
@@ -5825,19 +6038,19 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_min_rw_res
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("min_rw_reservations", 0);
 
-  /* "worker/operator_state/aria/_aria_state.pyx":212
+  /* "worker/operator_state/aria/_aria_state.pyx":228
  * cpdef dict min_rw_reservations(dict reservations):
  *     """For each (operator_partition -> key -> [t_ids]), compute the minimum t_id."""
  *     cdef dict result = {}             # <<<<<<<<<<<<<<
  *     cdef tuple op_part
  *     cdef dict reservation
 */
-  __pyx_t_1 = __Pyx_PyDict_NewPresized(0); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 212, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_PyDict_NewPresized(0); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 228, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __pyx_v_result = ((PyObject*)__pyx_t_1);
   __pyx_t_1 = 0;
 
-  /* "worker/operator_state/aria/_aria_state.pyx":218
+  /* "worker/operator_state/aria/_aria_state.pyx":234
  *     cdef object key
  *     cdef list t_ids
  *     for op_part, reservation in reservations.items():             # <<<<<<<<<<<<<<
@@ -5847,9 +6060,9 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_min_rw_res
   __pyx_t_2 = 0;
   if (unlikely(__pyx_v_reservations == Py_None)) {
     PyErr_Format(PyExc_AttributeError, "'NoneType' object has no attribute '%.30s'", "items");
-    __PYX_ERR(0, 218, __pyx_L1_error)
+    __PYX_ERR(0, 234, __pyx_L1_error)
   }
-  __pyx_t_5 = __Pyx_dict_iterator(__pyx_v_reservations, 1, __pyx_mstate_global->__pyx_n_u_items, (&__pyx_t_3), (&__pyx_t_4)); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 218, __pyx_L1_error)
+  __pyx_t_5 = __Pyx_dict_iterator(__pyx_v_reservations, 1, __pyx_mstate_global->__pyx_n_u_items, (&__pyx_t_3), (&__pyx_t_4)); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 234, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_5);
   __Pyx_XDECREF(__pyx_t_1);
   __pyx_t_1 = __pyx_t_5;
@@ -5857,29 +6070,29 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_min_rw_res
   while (1) {
     __pyx_t_7 = __Pyx_dict_iter_next(__pyx_t_1, __pyx_t_3, &__pyx_t_2, &__pyx_t_5, &__pyx_t_6, NULL, __pyx_t_4);
     if (unlikely(__pyx_t_7 == 0)) break;
-    if (unlikely(__pyx_t_7 == -1)) __PYX_ERR(0, 218, __pyx_L1_error)
+    if (unlikely(__pyx_t_7 == -1)) __PYX_ERR(0, 234, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_5);
     __Pyx_GOTREF(__pyx_t_6);
-    if (!(likely(PyTuple_CheckExact(__pyx_t_5))||((__pyx_t_5) == Py_None) || __Pyx_RaiseUnexpectedTypeError("tuple", __pyx_t_5))) __PYX_ERR(0, 218, __pyx_L1_error)
-    if (!(likely(PyDict_CheckExact(__pyx_t_6))||((__pyx_t_6) == Py_None) || __Pyx_RaiseUnexpectedTypeError("dict", __pyx_t_6))) __PYX_ERR(0, 218, __pyx_L1_error)
+    if (!(likely(PyTuple_CheckExact(__pyx_t_5))||((__pyx_t_5) == Py_None) || __Pyx_RaiseUnexpectedTypeError("tuple", __pyx_t_5))) __PYX_ERR(0, 234, __pyx_L1_error)
+    if (!(likely(PyDict_CheckExact(__pyx_t_6))||((__pyx_t_6) == Py_None) || __Pyx_RaiseUnexpectedTypeError("dict", __pyx_t_6))) __PYX_ERR(0, 234, __pyx_L1_error)
     __Pyx_XDECREF_SET(__pyx_v_op_part, ((PyObject*)__pyx_t_5));
     __pyx_t_5 = 0;
     __Pyx_XDECREF_SET(__pyx_v_reservation, ((PyObject*)__pyx_t_6));
     __pyx_t_6 = 0;
 
-    /* "worker/operator_state/aria/_aria_state.pyx":219
+    /* "worker/operator_state/aria/_aria_state.pyx":235
  *     cdef list t_ids
  *     for op_part, reservation in reservations.items():
  *         new_res = {}             # <<<<<<<<<<<<<<
  *         for key, t_ids in (<dict>reservation).items():
  *             if t_ids:
 */
-    __pyx_t_6 = __Pyx_PyDict_NewPresized(0); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 219, __pyx_L1_error)
+    __pyx_t_6 = __Pyx_PyDict_NewPresized(0); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 235, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_6);
     __Pyx_XDECREF_SET(__pyx_v_new_res, ((PyObject*)__pyx_t_6));
     __pyx_t_6 = 0;
 
-    /* "worker/operator_state/aria/_aria_state.pyx":220
+    /* "worker/operator_state/aria/_aria_state.pyx":236
  *     for op_part, reservation in reservations.items():
  *         new_res = {}
  *         for key, t_ids in (<dict>reservation).items():             # <<<<<<<<<<<<<<
@@ -5889,9 +6102,9 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_min_rw_res
     __pyx_t_8 = 0;
     if (unlikely(__pyx_v_reservation == Py_None)) {
       PyErr_Format(PyExc_AttributeError, "'NoneType' object has no attribute '%.30s'", "items");
-      __PYX_ERR(0, 220, __pyx_L1_error)
+      __PYX_ERR(0, 236, __pyx_L1_error)
     }
-    __pyx_t_5 = __Pyx_dict_iterator(((PyObject*)__pyx_v_reservation), 1, __pyx_mstate_global->__pyx_n_u_items, (&__pyx_t_9), (&__pyx_t_7)); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 220, __pyx_L1_error)
+    __pyx_t_5 = __Pyx_dict_iterator(((PyObject*)__pyx_v_reservation), 1, __pyx_mstate_global->__pyx_n_u_items, (&__pyx_t_9), (&__pyx_t_7)); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 236, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_5);
     __Pyx_XDECREF(__pyx_t_6);
     __pyx_t_6 = __pyx_t_5;
@@ -5899,16 +6112,16 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_min_rw_res
     while (1) {
       __pyx_t_11 = __Pyx_dict_iter_next(__pyx_t_6, __pyx_t_9, &__pyx_t_8, &__pyx_t_5, &__pyx_t_10, NULL, __pyx_t_7);
       if (unlikely(__pyx_t_11 == 0)) break;
-      if (unlikely(__pyx_t_11 == -1)) __PYX_ERR(0, 220, __pyx_L1_error)
+      if (unlikely(__pyx_t_11 == -1)) __PYX_ERR(0, 236, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_5);
       __Pyx_GOTREF(__pyx_t_10);
-      if (!(likely(PyList_CheckExact(__pyx_t_10))||((__pyx_t_10) == Py_None) || __Pyx_RaiseUnexpectedTypeError("list", __pyx_t_10))) __PYX_ERR(0, 220, __pyx_L1_error)
+      if (!(likely(PyList_CheckExact(__pyx_t_10))||((__pyx_t_10) == Py_None) || __Pyx_RaiseUnexpectedTypeError("list", __pyx_t_10))) __PYX_ERR(0, 236, __pyx_L1_error)
       __Pyx_XDECREF_SET(__pyx_v_key, __pyx_t_5);
       __pyx_t_5 = 0;
       __Pyx_XDECREF_SET(__pyx_v_t_ids, ((PyObject*)__pyx_t_10));
       __pyx_t_10 = 0;
 
-      /* "worker/operator_state/aria/_aria_state.pyx":221
+      /* "worker/operator_state/aria/_aria_state.pyx":237
  *         new_res = {}
  *         for key, t_ids in (<dict>reservation).items():
  *             if t_ids:             # <<<<<<<<<<<<<<
@@ -5919,13 +6132,13 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_min_rw_res
       else
       {
         Py_ssize_t __pyx_temp = __Pyx_PyList_GET_SIZE(__pyx_v_t_ids);
-        if (unlikely(((!CYTHON_ASSUME_SAFE_SIZE) && __pyx_temp < 0))) __PYX_ERR(0, 221, __pyx_L1_error)
+        if (unlikely(((!CYTHON_ASSUME_SAFE_SIZE) && __pyx_temp < 0))) __PYX_ERR(0, 237, __pyx_L1_error)
         __pyx_t_12 = (__pyx_temp != 0);
       }
 
       if (__pyx_t_12) {
 
-        /* "worker/operator_state/aria/_aria_state.pyx":222
+        /* "worker/operator_state/aria/_aria_state.pyx":238
  *         for key, t_ids in (<dict>reservation).items():
  *             if t_ids:
  *                 new_res[key] = min(t_ids)             # <<<<<<<<<<<<<<
@@ -5938,13 +6151,13 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_min_rw_res
           PyObject *__pyx_callargs[2] = {__pyx_t_5, __pyx_v_t_ids};
           __pyx_t_10 = __Pyx_PyObject_FastCall((PyObject*)__pyx_builtin_min, __pyx_callargs+__pyx_t_13, (2-__pyx_t_13) | (__pyx_t_13*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
           __Pyx_XDECREF(__pyx_t_5); __pyx_t_5 = 0;
-          if (unlikely(!__pyx_t_10)) __PYX_ERR(0, 222, __pyx_L1_error)
+          if (unlikely(!__pyx_t_10)) __PYX_ERR(0, 238, __pyx_L1_error)
           __Pyx_GOTREF(__pyx_t_10);
         }
-        if (unlikely((PyDict_SetItem(__pyx_v_new_res, __pyx_v_key, __pyx_t_10) < 0))) __PYX_ERR(0, 222, __pyx_L1_error)
+        if (unlikely((PyDict_SetItem(__pyx_v_new_res, __pyx_v_key, __pyx_t_10) < 0))) __PYX_ERR(0, 238, __pyx_L1_error)
         __Pyx_DECREF(__pyx_t_10); __pyx_t_10 = 0;
 
-        /* "worker/operator_state/aria/_aria_state.pyx":221
+        /* "worker/operator_state/aria/_aria_state.pyx":237
  *         new_res = {}
  *         for key, t_ids in (<dict>reservation).items():
  *             if t_ids:             # <<<<<<<<<<<<<<
@@ -5955,18 +6168,18 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_min_rw_res
     }
     __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
 
-    /* "worker/operator_state/aria/_aria_state.pyx":223
+    /* "worker/operator_state/aria/_aria_state.pyx":239
  *             if t_ids:
  *                 new_res[key] = min(t_ids)
  *         result[op_part] = new_res             # <<<<<<<<<<<<<<
  *     return result
  * 
 */
-    if (unlikely((PyDict_SetItem(__pyx_v_result, __pyx_v_op_part, __pyx_v_new_res) < 0))) __PYX_ERR(0, 223, __pyx_L1_error)
+    if (unlikely((PyDict_SetItem(__pyx_v_result, __pyx_v_op_part, __pyx_v_new_res) < 0))) __PYX_ERR(0, 239, __pyx_L1_error)
   }
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
 
-  /* "worker/operator_state/aria/_aria_state.pyx":224
+  /* "worker/operator_state/aria/_aria_state.pyx":240
  *                 new_res[key] = min(t_ids)
  *         result[op_part] = new_res
  *     return result             # <<<<<<<<<<<<<<
@@ -5978,7 +6191,7 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_min_rw_res
   __pyx_r = __pyx_v_result;
   goto __pyx_L0;
 
-  /* "worker/operator_state/aria/_aria_state.pyx":210
+  /* "worker/operator_state/aria/_aria_state.pyx":226
  * 
  * 
  * cpdef dict min_rw_reservations(dict reservations):             # <<<<<<<<<<<<<<
@@ -6046,32 +6259,32 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   {
     PyObject ** const __pyx_pyargnames[] = {&__pyx_mstate_global->__pyx_n_u_reservations,0};
     const Py_ssize_t __pyx_kwds_len = (__pyx_kwds) ? __Pyx_NumKwargs_FASTCALL(__pyx_kwds) : 0;
-    if (unlikely(__pyx_kwds_len) < 0) __PYX_ERR(0, 210, __pyx_L3_error)
+    if (unlikely(__pyx_kwds_len) < 0) __PYX_ERR(0, 226, __pyx_L3_error)
     if (__pyx_kwds_len > 0) {
       switch (__pyx_nargs) {
         case  1:
         values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 210, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 226, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  0: break;
         default: goto __pyx_L5_argtuple_error;
       }
       const Py_ssize_t kwd_pos_args = __pyx_nargs;
-      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "min_rw_reservations", 0) < (0)) __PYX_ERR(0, 210, __pyx_L3_error)
+      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "min_rw_reservations", 0) < (0)) __PYX_ERR(0, 226, __pyx_L3_error)
       for (Py_ssize_t i = __pyx_nargs; i < 1; i++) {
-        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("min_rw_reservations", 1, 1, 1, i); __PYX_ERR(0, 210, __pyx_L3_error) }
+        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("min_rw_reservations", 1, 1, 1, i); __PYX_ERR(0, 226, __pyx_L3_error) }
       }
     } else if (unlikely(__pyx_nargs != 1)) {
       goto __pyx_L5_argtuple_error;
     } else {
       values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 210, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 226, __pyx_L3_error)
     }
     __pyx_v_reservations = ((PyObject*)values[0]);
   }
   goto __pyx_L6_skip;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("min_rw_reservations", 1, 1, 1, __pyx_nargs); __PYX_ERR(0, 210, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("min_rw_reservations", 1, 1, 1, __pyx_nargs); __PYX_ERR(0, 226, __pyx_L3_error)
   __pyx_L6_skip:;
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L3_error:;
@@ -6082,7 +6295,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   __Pyx_RefNannyFinishContext();
   return NULL;
   __pyx_L4_argument_unpacking_done:;
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_reservations), (&PyDict_Type), 1, "reservations", 1))) __PYX_ERR(0, 210, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_reservations), (&PyDict_Type), 1, "reservations", 1))) __PYX_ERR(0, 226, __pyx_L1_error)
   __pyx_r = __pyx_pf_6worker_14operator_state_4aria_11_aria_state_14min_rw_reservations(__pyx_self, __pyx_v_reservations);
 
   /* function exit code */
@@ -6111,7 +6324,7 @@ static PyObject *__pyx_pf_6worker_14operator_state_4aria_11_aria_state_14min_rw_
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("min_rw_reservations", 0);
   __Pyx_XDECREF(__pyx_r);
-  __pyx_t_1 = __pyx_f_6worker_14operator_state_4aria_11_aria_state_min_rw_reservations(__pyx_v_reservations, 1); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 210, __pyx_L1_error)
+  __pyx_t_1 = __pyx_f_6worker_14operator_state_4aria_11_aria_state_min_rw_reservations(__pyx_v_reservations, 1); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 226, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __pyx_r = __pyx_t_1;
   __pyx_t_1 = 0;
@@ -6128,7 +6341,7 @@ static PyObject *__pyx_pf_6worker_14operator_state_4aria_11_aria_state_14min_rw_
   return __pyx_r;
 }
 
-/* "worker/operator_state/aria/_aria_state.pyx":227
+/* "worker/operator_state/aria/_aria_state.pyx":243
  * 
  * 
  * cpdef set check_conflicts(dict write_sets, dict read_sets, dict writes):             # <<<<<<<<<<<<<<
@@ -6176,31 +6389,31 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conf
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("check_conflicts", 0);
 
-  /* "worker/operator_state/aria/_aria_state.pyx":229
+  /* "worker/operator_state/aria/_aria_state.pyx":245
  * cpdef set check_conflicts(dict write_sets, dict read_sets, dict writes):
  *     """Default Aria conflict detection (serializability)."""
  *     cdef set aborted = set()             # <<<<<<<<<<<<<<
  *     cdef dict minimized_writes = min_rw_reservations(writes)
  *     cdef tuple op_part
 */
-  __pyx_t_1 = PySet_New(0); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 229, __pyx_L1_error)
+  __pyx_t_1 = PySet_New(0); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 245, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __pyx_v_aborted = ((PyObject*)__pyx_t_1);
   __pyx_t_1 = 0;
 
-  /* "worker/operator_state/aria/_aria_state.pyx":230
+  /* "worker/operator_state/aria/_aria_state.pyx":246
  *     """Default Aria conflict detection (serializability)."""
  *     cdef set aborted = set()
  *     cdef dict minimized_writes = min_rw_reservations(writes)             # <<<<<<<<<<<<<<
  *     cdef tuple op_part
  *     cdef dict write_set
 */
-  __pyx_t_1 = __pyx_f_6worker_14operator_state_4aria_11_aria_state_min_rw_reservations(__pyx_v_writes, 0); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 230, __pyx_L1_error)
+  __pyx_t_1 = __pyx_f_6worker_14operator_state_4aria_11_aria_state_min_rw_reservations(__pyx_v_writes, 0); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 246, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __pyx_v_minimized_writes = ((PyObject*)__pyx_t_1);
   __pyx_t_1 = 0;
 
-  /* "worker/operator_state/aria/_aria_state.pyx":240
+  /* "worker/operator_state/aria/_aria_state.pyx":256
  *     cdef dict min_ws
  * 
  *     for op_part, write_set in write_sets.items():             # <<<<<<<<<<<<<<
@@ -6210,9 +6423,9 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conf
   __pyx_t_2 = 0;
   if (unlikely(__pyx_v_write_sets == Py_None)) {
     PyErr_Format(PyExc_AttributeError, "'NoneType' object has no attribute '%.30s'", "items");
-    __PYX_ERR(0, 240, __pyx_L1_error)
+    __PYX_ERR(0, 256, __pyx_L1_error)
   }
-  __pyx_t_5 = __Pyx_dict_iterator(__pyx_v_write_sets, 1, __pyx_mstate_global->__pyx_n_u_items, (&__pyx_t_3), (&__pyx_t_4)); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 240, __pyx_L1_error)
+  __pyx_t_5 = __Pyx_dict_iterator(__pyx_v_write_sets, 1, __pyx_mstate_global->__pyx_n_u_items, (&__pyx_t_3), (&__pyx_t_4)); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 256, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_5);
   __Pyx_XDECREF(__pyx_t_1);
   __pyx_t_1 = __pyx_t_5;
@@ -6220,17 +6433,17 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conf
   while (1) {
     __pyx_t_7 = __Pyx_dict_iter_next(__pyx_t_1, __pyx_t_3, &__pyx_t_2, &__pyx_t_5, &__pyx_t_6, NULL, __pyx_t_4);
     if (unlikely(__pyx_t_7 == 0)) break;
-    if (unlikely(__pyx_t_7 == -1)) __PYX_ERR(0, 240, __pyx_L1_error)
+    if (unlikely(__pyx_t_7 == -1)) __PYX_ERR(0, 256, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_5);
     __Pyx_GOTREF(__pyx_t_6);
-    if (!(likely(PyTuple_CheckExact(__pyx_t_5))||((__pyx_t_5) == Py_None) || __Pyx_RaiseUnexpectedTypeError("tuple", __pyx_t_5))) __PYX_ERR(0, 240, __pyx_L1_error)
-    if (!(likely(PyDict_CheckExact(__pyx_t_6))||((__pyx_t_6) == Py_None) || __Pyx_RaiseUnexpectedTypeError("dict", __pyx_t_6))) __PYX_ERR(0, 240, __pyx_L1_error)
+    if (!(likely(PyTuple_CheckExact(__pyx_t_5))||((__pyx_t_5) == Py_None) || __Pyx_RaiseUnexpectedTypeError("tuple", __pyx_t_5))) __PYX_ERR(0, 256, __pyx_L1_error)
+    if (!(likely(PyDict_CheckExact(__pyx_t_6))||((__pyx_t_6) == Py_None) || __Pyx_RaiseUnexpectedTypeError("dict", __pyx_t_6))) __PYX_ERR(0, 256, __pyx_L1_error)
     __Pyx_XDECREF_SET(__pyx_v_op_part, ((PyObject*)__pyx_t_5));
     __pyx_t_5 = 0;
     __Pyx_XDECREF_SET(__pyx_v_write_set, ((PyObject*)__pyx_t_6));
     __pyx_t_6 = 0;
 
-    /* "worker/operator_state/aria/_aria_state.pyx":241
+    /* "worker/operator_state/aria/_aria_state.pyx":257
  * 
  *     for op_part, write_set in write_sets.items():
  *         read_set = <dict>read_sets[op_part]             # <<<<<<<<<<<<<<
@@ -6239,9 +6452,9 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conf
 */
     if (unlikely(__pyx_v_read_sets == Py_None)) {
       PyErr_SetString(PyExc_TypeError, "'NoneType' object is not subscriptable");
-      __PYX_ERR(0, 241, __pyx_L1_error)
+      __PYX_ERR(0, 257, __pyx_L1_error)
     }
-    __pyx_t_6 = __Pyx_PyDict_GetItem(__pyx_v_read_sets, __pyx_v_op_part); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 241, __pyx_L1_error)
+    __pyx_t_6 = __Pyx_PyDict_GetItem(__pyx_v_read_sets, __pyx_v_op_part); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 257, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_6);
     __pyx_t_5 = __pyx_t_6;
     __Pyx_INCREF(__pyx_t_5);
@@ -6249,7 +6462,7 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conf
     __Pyx_XDECREF_SET(__pyx_v_read_set, ((PyObject*)__pyx_t_5));
     __pyx_t_5 = 0;
 
-    /* "worker/operator_state/aria/_aria_state.pyx":242
+    /* "worker/operator_state/aria/_aria_state.pyx":258
  *     for op_part, write_set in write_sets.items():
  *         read_set = <dict>read_sets[op_part]
  *         t_ids = set(read_set.keys())             # <<<<<<<<<<<<<<
@@ -6258,17 +6471,17 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conf
 */
     if (unlikely(__pyx_v_read_set == Py_None)) {
       PyErr_Format(PyExc_AttributeError, "'NoneType' object has no attribute '%.30s'", "keys");
-      __PYX_ERR(0, 242, __pyx_L1_error)
+      __PYX_ERR(0, 258, __pyx_L1_error)
     }
-    __pyx_t_5 = __Pyx_PyDict_Keys(__pyx_v_read_set); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 242, __pyx_L1_error)
+    __pyx_t_5 = __Pyx_PyDict_Keys(__pyx_v_read_set); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 258, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_5);
-    __pyx_t_6 = PySet_New(__pyx_t_5); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 242, __pyx_L1_error)
+    __pyx_t_6 = PySet_New(__pyx_t_5); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 258, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_6);
     __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
     __Pyx_XDECREF_SET(__pyx_v_t_ids, ((PyObject*)__pyx_t_6));
     __pyx_t_6 = 0;
 
-    /* "worker/operator_state/aria/_aria_state.pyx":243
+    /* "worker/operator_state/aria/_aria_state.pyx":259
  *         read_set = <dict>read_sets[op_part]
  *         t_ids = set(read_set.keys())
  *         t_ids.update(write_set.keys())             # <<<<<<<<<<<<<<
@@ -6277,16 +6490,16 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conf
 */
     if (unlikely(__pyx_v_write_set == Py_None)) {
       PyErr_Format(PyExc_AttributeError, "'NoneType' object has no attribute '%.30s'", "keys");
-      __PYX_ERR(0, 243, __pyx_L1_error)
+      __PYX_ERR(0, 259, __pyx_L1_error)
     }
-    __pyx_t_6 = __Pyx_PyDict_Keys(__pyx_v_write_set); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 243, __pyx_L1_error)
+    __pyx_t_6 = __Pyx_PyDict_Keys(__pyx_v_write_set); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 259, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_6);
-    __pyx_t_5 = __Pyx_CallUnboundCMethod1(&__pyx_mstate_global->__pyx_umethod_PySet_Type__update, __pyx_v_t_ids, __pyx_t_6); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 243, __pyx_L1_error)
+    __pyx_t_5 = __Pyx_CallUnboundCMethod1(&__pyx_mstate_global->__pyx_umethod_PySet_Type__update, __pyx_v_t_ids, __pyx_t_6); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 259, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_5);
     __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
     __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
 
-    /* "worker/operator_state/aria/_aria_state.pyx":244
+    /* "worker/operator_state/aria/_aria_state.pyx":260
  *         t_ids = set(read_set.keys())
  *         t_ids.update(write_set.keys())
  *         min_ws = <dict>minimized_writes[op_part]             # <<<<<<<<<<<<<<
@@ -6295,9 +6508,9 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conf
 */
     if (unlikely(__pyx_v_minimized_writes == Py_None)) {
       PyErr_SetString(PyExc_TypeError, "'NoneType' object is not subscriptable");
-      __PYX_ERR(0, 244, __pyx_L1_error)
+      __PYX_ERR(0, 260, __pyx_L1_error)
     }
-    __pyx_t_5 = __Pyx_PyDict_GetItem(__pyx_v_minimized_writes, __pyx_v_op_part); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 244, __pyx_L1_error)
+    __pyx_t_5 = __Pyx_PyDict_GetItem(__pyx_v_minimized_writes, __pyx_v_op_part); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 260, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_5);
     __pyx_t_6 = __pyx_t_5;
     __Pyx_INCREF(__pyx_t_6);
@@ -6305,7 +6518,7 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conf
     __Pyx_XDECREF_SET(__pyx_v_min_ws, ((PyObject*)__pyx_t_6));
     __pyx_t_6 = 0;
 
-    /* "worker/operator_state/aria/_aria_state.pyx":245
+    /* "worker/operator_state/aria/_aria_state.pyx":261
  *         t_ids.update(write_set.keys())
  *         min_ws = <dict>minimized_writes[op_part]
  *         for t_id in t_ids:             # <<<<<<<<<<<<<<
@@ -6313,7 +6526,7 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conf
  *             ws = write_set.get(t_id, {})
 */
     __pyx_t_8 = 0;
-    __pyx_t_5 = __Pyx_set_iterator(__pyx_v_t_ids, 1, (&__pyx_t_9), (&__pyx_t_7)); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 245, __pyx_L1_error)
+    __pyx_t_5 = __Pyx_set_iterator(__pyx_v_t_ids, 1, (&__pyx_t_9), (&__pyx_t_7)); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 261, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_5);
     __Pyx_XDECREF(__pyx_t_6);
     __pyx_t_6 = __pyx_t_5;
@@ -6321,13 +6534,13 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conf
     while (1) {
       __pyx_t_10 = __Pyx_set_iter_next(__pyx_t_6, __pyx_t_9, &__pyx_t_8, &__pyx_t_5, __pyx_t_7);
       if (unlikely(__pyx_t_10 == 0)) break;
-      if (unlikely(__pyx_t_10 == -1)) __PYX_ERR(0, 245, __pyx_L1_error)
+      if (unlikely(__pyx_t_10 == -1)) __PYX_ERR(0, 261, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_5);
-      __pyx_t_10 = __Pyx_PyLong_As_int(__pyx_t_5); if (unlikely((__pyx_t_10 == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 245, __pyx_L1_error)
+      __pyx_t_10 = __Pyx_PyLong_As_int(__pyx_t_5); if (unlikely((__pyx_t_10 == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 261, __pyx_L1_error)
       __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
       __pyx_v_t_id = __pyx_t_10;
 
-      /* "worker/operator_state/aria/_aria_state.pyx":246
+      /* "worker/operator_state/aria/_aria_state.pyx":262
  *         min_ws = <dict>minimized_writes[op_part]
  *         for t_id in t_ids:
  *             rs = read_set.get(t_id, set())             # <<<<<<<<<<<<<<
@@ -6336,21 +6549,21 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conf
 */
       if (unlikely(__pyx_v_read_set == Py_None)) {
         PyErr_Format(PyExc_AttributeError, "'NoneType' object has no attribute '%.30s'", "get");
-        __PYX_ERR(0, 246, __pyx_L1_error)
+        __PYX_ERR(0, 262, __pyx_L1_error)
       }
-      __pyx_t_5 = __Pyx_PyLong_From_int(__pyx_v_t_id); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 246, __pyx_L1_error)
+      __pyx_t_5 = __Pyx_PyLong_From_int(__pyx_v_t_id); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 262, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_5);
-      __pyx_t_11 = PySet_New(0); if (unlikely(!__pyx_t_11)) __PYX_ERR(0, 246, __pyx_L1_error)
+      __pyx_t_11 = PySet_New(0); if (unlikely(!__pyx_t_11)) __PYX_ERR(0, 262, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_11);
-      __pyx_t_12 = __Pyx_PyDict_GetItemDefault(__pyx_v_read_set, __pyx_t_5, __pyx_t_11); if (unlikely(!__pyx_t_12)) __PYX_ERR(0, 246, __pyx_L1_error)
+      __pyx_t_12 = __Pyx_PyDict_GetItemDefault(__pyx_v_read_set, __pyx_t_5, __pyx_t_11); if (unlikely(!__pyx_t_12)) __PYX_ERR(0, 262, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_12);
       __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
       __Pyx_DECREF(__pyx_t_11); __pyx_t_11 = 0;
-      if (!(likely(PySet_CheckExact(__pyx_t_12))||((__pyx_t_12) == Py_None) || __Pyx_RaiseUnexpectedTypeError("set", __pyx_t_12))) __PYX_ERR(0, 246, __pyx_L1_error)
+      if (!(likely(PySet_CheckExact(__pyx_t_12))||((__pyx_t_12) == Py_None) || __Pyx_RaiseUnexpectedTypeError("set", __pyx_t_12))) __PYX_ERR(0, 262, __pyx_L1_error)
       __Pyx_XDECREF_SET(__pyx_v_rs, ((PyObject*)__pyx_t_12));
       __pyx_t_12 = 0;
 
-      /* "worker/operator_state/aria/_aria_state.pyx":247
+      /* "worker/operator_state/aria/_aria_state.pyx":263
  *         for t_id in t_ids:
  *             rs = read_set.get(t_id, set())
  *             ws = write_set.get(t_id, {})             # <<<<<<<<<<<<<<
@@ -6359,51 +6572,51 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conf
 */
       if (unlikely(__pyx_v_write_set == Py_None)) {
         PyErr_Format(PyExc_AttributeError, "'NoneType' object has no attribute '%.30s'", "get");
-        __PYX_ERR(0, 247, __pyx_L1_error)
+        __PYX_ERR(0, 263, __pyx_L1_error)
       }
-      __pyx_t_12 = __Pyx_PyLong_From_int(__pyx_v_t_id); if (unlikely(!__pyx_t_12)) __PYX_ERR(0, 247, __pyx_L1_error)
+      __pyx_t_12 = __Pyx_PyLong_From_int(__pyx_v_t_id); if (unlikely(!__pyx_t_12)) __PYX_ERR(0, 263, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_12);
-      __pyx_t_11 = __Pyx_PyDict_NewPresized(0); if (unlikely(!__pyx_t_11)) __PYX_ERR(0, 247, __pyx_L1_error)
+      __pyx_t_11 = __Pyx_PyDict_NewPresized(0); if (unlikely(!__pyx_t_11)) __PYX_ERR(0, 263, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_11);
-      __pyx_t_5 = __Pyx_PyDict_GetItemDefault(__pyx_v_write_set, __pyx_t_12, __pyx_t_11); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 247, __pyx_L1_error)
+      __pyx_t_5 = __Pyx_PyDict_GetItemDefault(__pyx_v_write_set, __pyx_t_12, __pyx_t_11); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 263, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_5);
       __Pyx_DECREF(__pyx_t_12); __pyx_t_12 = 0;
       __Pyx_DECREF(__pyx_t_11); __pyx_t_11 = 0;
-      if (!(likely(PyDict_CheckExact(__pyx_t_5))||((__pyx_t_5) == Py_None) || __Pyx_RaiseUnexpectedTypeError("dict", __pyx_t_5))) __PYX_ERR(0, 247, __pyx_L1_error)
+      if (!(likely(PyDict_CheckExact(__pyx_t_5))||((__pyx_t_5) == Py_None) || __Pyx_RaiseUnexpectedTypeError("dict", __pyx_t_5))) __PYX_ERR(0, 263, __pyx_L1_error)
       __Pyx_XDECREF_SET(__pyx_v_ws, ((PyObject*)__pyx_t_5));
       __pyx_t_5 = 0;
 
-      /* "worker/operator_state/aria/_aria_state.pyx":248
+      /* "worker/operator_state/aria/_aria_state.pyx":264
  *             rs = read_set.get(t_id, set())
  *             ws = write_set.get(t_id, {})
  *             if has_conflicts(t_id, rs, min_ws) or has_conflicts(t_id, ws, min_ws):             # <<<<<<<<<<<<<<
  *                 aborted.add(t_id)
  *     return aborted
 */
-      __pyx_t_14 = __pyx_f_6worker_14operator_state_4aria_11_aria_state_has_conflicts(__pyx_v_t_id, __pyx_v_rs, __pyx_v_min_ws, 0); if (unlikely(__pyx_t_14 == ((int)-1) && PyErr_Occurred())) __PYX_ERR(0, 248, __pyx_L1_error)
+      __pyx_t_14 = __pyx_f_6worker_14operator_state_4aria_11_aria_state_has_conflicts(__pyx_v_t_id, __pyx_v_rs, __pyx_v_min_ws, 0); if (unlikely(__pyx_t_14 == ((int)-1) && PyErr_Occurred())) __PYX_ERR(0, 264, __pyx_L1_error)
       if (!__pyx_t_14) {
       } else {
         __pyx_t_13 = __pyx_t_14;
         goto __pyx_L8_bool_binop_done;
       }
-      __pyx_t_14 = __pyx_f_6worker_14operator_state_4aria_11_aria_state_has_conflicts(__pyx_v_t_id, __pyx_v_ws, __pyx_v_min_ws, 0); if (unlikely(__pyx_t_14 == ((int)-1) && PyErr_Occurred())) __PYX_ERR(0, 248, __pyx_L1_error)
+      __pyx_t_14 = __pyx_f_6worker_14operator_state_4aria_11_aria_state_has_conflicts(__pyx_v_t_id, __pyx_v_ws, __pyx_v_min_ws, 0); if (unlikely(__pyx_t_14 == ((int)-1) && PyErr_Occurred())) __PYX_ERR(0, 264, __pyx_L1_error)
       __pyx_t_13 = __pyx_t_14;
       __pyx_L8_bool_binop_done:;
       if (__pyx_t_13) {
 
-        /* "worker/operator_state/aria/_aria_state.pyx":249
+        /* "worker/operator_state/aria/_aria_state.pyx":265
  *             ws = write_set.get(t_id, {})
  *             if has_conflicts(t_id, rs, min_ws) or has_conflicts(t_id, ws, min_ws):
  *                 aborted.add(t_id)             # <<<<<<<<<<<<<<
  *     return aborted
  * 
 */
-        __pyx_t_5 = __Pyx_PyLong_From_int(__pyx_v_t_id); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 249, __pyx_L1_error)
+        __pyx_t_5 = __Pyx_PyLong_From_int(__pyx_v_t_id); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 265, __pyx_L1_error)
         __Pyx_GOTREF(__pyx_t_5);
-        __pyx_t_15 = PySet_Add(__pyx_v_aborted, __pyx_t_5); if (unlikely(__pyx_t_15 == ((int)-1))) __PYX_ERR(0, 249, __pyx_L1_error)
+        __pyx_t_15 = PySet_Add(__pyx_v_aborted, __pyx_t_5); if (unlikely(__pyx_t_15 == ((int)-1))) __PYX_ERR(0, 265, __pyx_L1_error)
         __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
 
-        /* "worker/operator_state/aria/_aria_state.pyx":248
+        /* "worker/operator_state/aria/_aria_state.pyx":264
  *             rs = read_set.get(t_id, set())
  *             ws = write_set.get(t_id, {})
  *             if has_conflicts(t_id, rs, min_ws) or has_conflicts(t_id, ws, min_ws):             # <<<<<<<<<<<<<<
@@ -6416,7 +6629,7 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conf
   }
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
 
-  /* "worker/operator_state/aria/_aria_state.pyx":250
+  /* "worker/operator_state/aria/_aria_state.pyx":266
  *             if has_conflicts(t_id, rs, min_ws) or has_conflicts(t_id, ws, min_ws):
  *                 aborted.add(t_id)
  *     return aborted             # <<<<<<<<<<<<<<
@@ -6428,7 +6641,7 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conf
   __pyx_r = __pyx_v_aborted;
   goto __pyx_L0;
 
-  /* "worker/operator_state/aria/_aria_state.pyx":227
+  /* "worker/operator_state/aria/_aria_state.pyx":243
  * 
  * 
  * cpdef set check_conflicts(dict write_sets, dict read_sets, dict writes):             # <<<<<<<<<<<<<<
@@ -6502,38 +6715,38 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   {
     PyObject ** const __pyx_pyargnames[] = {&__pyx_mstate_global->__pyx_n_u_write_sets,&__pyx_mstate_global->__pyx_n_u_read_sets,&__pyx_mstate_global->__pyx_n_u_writes,0};
     const Py_ssize_t __pyx_kwds_len = (__pyx_kwds) ? __Pyx_NumKwargs_FASTCALL(__pyx_kwds) : 0;
-    if (unlikely(__pyx_kwds_len) < 0) __PYX_ERR(0, 227, __pyx_L3_error)
+    if (unlikely(__pyx_kwds_len) < 0) __PYX_ERR(0, 243, __pyx_L3_error)
     if (__pyx_kwds_len > 0) {
       switch (__pyx_nargs) {
         case  3:
         values[2] = __Pyx_ArgRef_FASTCALL(__pyx_args, 2);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 227, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 243, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  2:
         values[1] = __Pyx_ArgRef_FASTCALL(__pyx_args, 1);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 227, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 243, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  1:
         values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 227, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 243, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  0: break;
         default: goto __pyx_L5_argtuple_error;
       }
       const Py_ssize_t kwd_pos_args = __pyx_nargs;
-      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "check_conflicts", 0) < (0)) __PYX_ERR(0, 227, __pyx_L3_error)
+      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "check_conflicts", 0) < (0)) __PYX_ERR(0, 243, __pyx_L3_error)
       for (Py_ssize_t i = __pyx_nargs; i < 3; i++) {
-        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("check_conflicts", 1, 3, 3, i); __PYX_ERR(0, 227, __pyx_L3_error) }
+        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("check_conflicts", 1, 3, 3, i); __PYX_ERR(0, 243, __pyx_L3_error) }
       }
     } else if (unlikely(__pyx_nargs != 3)) {
       goto __pyx_L5_argtuple_error;
     } else {
       values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 227, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 243, __pyx_L3_error)
       values[1] = __Pyx_ArgRef_FASTCALL(__pyx_args, 1);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 227, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 243, __pyx_L3_error)
       values[2] = __Pyx_ArgRef_FASTCALL(__pyx_args, 2);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 227, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 243, __pyx_L3_error)
     }
     __pyx_v_write_sets = ((PyObject*)values[0]);
     __pyx_v_read_sets = ((PyObject*)values[1]);
@@ -6541,7 +6754,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   }
   goto __pyx_L6_skip;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("check_conflicts", 1, 3, 3, __pyx_nargs); __PYX_ERR(0, 227, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("check_conflicts", 1, 3, 3, __pyx_nargs); __PYX_ERR(0, 243, __pyx_L3_error)
   __pyx_L6_skip:;
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L3_error:;
@@ -6552,9 +6765,9 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   __Pyx_RefNannyFinishContext();
   return NULL;
   __pyx_L4_argument_unpacking_done:;
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_write_sets), (&PyDict_Type), 1, "write_sets", 1))) __PYX_ERR(0, 227, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_read_sets), (&PyDict_Type), 1, "read_sets", 1))) __PYX_ERR(0, 227, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_writes), (&PyDict_Type), 1, "writes", 1))) __PYX_ERR(0, 227, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_write_sets), (&PyDict_Type), 1, "write_sets", 1))) __PYX_ERR(0, 243, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_read_sets), (&PyDict_Type), 1, "read_sets", 1))) __PYX_ERR(0, 243, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_writes), (&PyDict_Type), 1, "writes", 1))) __PYX_ERR(0, 243, __pyx_L1_error)
   __pyx_r = __pyx_pf_6worker_14operator_state_4aria_11_aria_state_16check_conflicts(__pyx_self, __pyx_v_write_sets, __pyx_v_read_sets, __pyx_v_writes);
 
   /* function exit code */
@@ -6583,7 +6796,7 @@ static PyObject *__pyx_pf_6worker_14operator_state_4aria_11_aria_state_16check_c
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("check_conflicts", 0);
   __Pyx_XDECREF(__pyx_r);
-  __pyx_t_1 = __pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conflicts(__pyx_v_write_sets, __pyx_v_read_sets, __pyx_v_writes, 1); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 227, __pyx_L1_error)
+  __pyx_t_1 = __pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conflicts(__pyx_v_write_sets, __pyx_v_read_sets, __pyx_v_writes, 1); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 243, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __pyx_r = __pyx_t_1;
   __pyx_t_1 = 0;
@@ -6600,7 +6813,7 @@ static PyObject *__pyx_pf_6worker_14operator_state_4aria_11_aria_state_16check_c
   return __pyx_r;
 }
 
-/* "worker/operator_state/aria/_aria_state.pyx":253
+/* "worker/operator_state/aria/_aria_state.pyx":269
  * 
  * 
  * cpdef set check_conflicts_snapshot_isolation(dict write_sets, dict writes):             # <<<<<<<<<<<<<<
@@ -6645,31 +6858,31 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conf
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("check_conflicts_snapshot_isolation", 0);
 
-  /* "worker/operator_state/aria/_aria_state.pyx":255
+  /* "worker/operator_state/aria/_aria_state.pyx":271
  * cpdef set check_conflicts_snapshot_isolation(dict write_sets, dict writes):
  *     """Snapshot-isolation conflict detection (WAW only)."""
  *     cdef set aborted = set()             # <<<<<<<<<<<<<<
  *     cdef dict minimized_writes = min_rw_reservations(writes)
  *     cdef tuple op_part
 */
-  __pyx_t_1 = PySet_New(0); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 255, __pyx_L1_error)
+  __pyx_t_1 = PySet_New(0); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 271, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __pyx_v_aborted = ((PyObject*)__pyx_t_1);
   __pyx_t_1 = 0;
 
-  /* "worker/operator_state/aria/_aria_state.pyx":256
+  /* "worker/operator_state/aria/_aria_state.pyx":272
  *     """Snapshot-isolation conflict detection (WAW only)."""
  *     cdef set aborted = set()
  *     cdef dict minimized_writes = min_rw_reservations(writes)             # <<<<<<<<<<<<<<
  *     cdef tuple op_part
  *     cdef dict ws_dict
 */
-  __pyx_t_1 = __pyx_f_6worker_14operator_state_4aria_11_aria_state_min_rw_reservations(__pyx_v_writes, 0); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 256, __pyx_L1_error)
+  __pyx_t_1 = __pyx_f_6worker_14operator_state_4aria_11_aria_state_min_rw_reservations(__pyx_v_writes, 0); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 272, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __pyx_v_minimized_writes = ((PyObject*)__pyx_t_1);
   __pyx_t_1 = 0;
 
-  /* "worker/operator_state/aria/_aria_state.pyx":264
+  /* "worker/operator_state/aria/_aria_state.pyx":280
  *     cdef dict min_ws
  * 
  *     for op_part in write_sets:             # <<<<<<<<<<<<<<
@@ -6679,9 +6892,9 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conf
   __pyx_t_2 = 0;
   if (unlikely(__pyx_v_write_sets == Py_None)) {
     PyErr_SetString(PyExc_TypeError, "'NoneType' object is not iterable");
-    __PYX_ERR(0, 264, __pyx_L1_error)
+    __PYX_ERR(0, 280, __pyx_L1_error)
   }
-  __pyx_t_5 = __Pyx_dict_iterator(__pyx_v_write_sets, 1, ((PyObject *)NULL), (&__pyx_t_3), (&__pyx_t_4)); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 264, __pyx_L1_error)
+  __pyx_t_5 = __Pyx_dict_iterator(__pyx_v_write_sets, 1, ((PyObject *)NULL), (&__pyx_t_3), (&__pyx_t_4)); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 280, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_5);
   __Pyx_XDECREF(__pyx_t_1);
   __pyx_t_1 = __pyx_t_5;
@@ -6689,13 +6902,13 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conf
   while (1) {
     __pyx_t_6 = __Pyx_dict_iter_next(__pyx_t_1, __pyx_t_3, &__pyx_t_2, &__pyx_t_5, NULL, NULL, __pyx_t_4);
     if (unlikely(__pyx_t_6 == 0)) break;
-    if (unlikely(__pyx_t_6 == -1)) __PYX_ERR(0, 264, __pyx_L1_error)
+    if (unlikely(__pyx_t_6 == -1)) __PYX_ERR(0, 280, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_5);
-    if (!(likely(PyTuple_CheckExact(__pyx_t_5))||((__pyx_t_5) == Py_None) || __Pyx_RaiseUnexpectedTypeError("tuple", __pyx_t_5))) __PYX_ERR(0, 264, __pyx_L1_error)
+    if (!(likely(PyTuple_CheckExact(__pyx_t_5))||((__pyx_t_5) == Py_None) || __Pyx_RaiseUnexpectedTypeError("tuple", __pyx_t_5))) __PYX_ERR(0, 280, __pyx_L1_error)
     __Pyx_XDECREF_SET(__pyx_v_op_part, ((PyObject*)__pyx_t_5));
     __pyx_t_5 = 0;
 
-    /* "worker/operator_state/aria/_aria_state.pyx":265
+    /* "worker/operator_state/aria/_aria_state.pyx":281
  * 
  *     for op_part in write_sets:
  *         ws_dict = <dict>write_sets[op_part]             # <<<<<<<<<<<<<<
@@ -6704,9 +6917,9 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conf
 */
     if (unlikely(__pyx_v_write_sets == Py_None)) {
       PyErr_SetString(PyExc_TypeError, "'NoneType' object is not subscriptable");
-      __PYX_ERR(0, 265, __pyx_L1_error)
+      __PYX_ERR(0, 281, __pyx_L1_error)
     }
-    __pyx_t_5 = __Pyx_PyDict_GetItem(__pyx_v_write_sets, __pyx_v_op_part); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 265, __pyx_L1_error)
+    __pyx_t_5 = __Pyx_PyDict_GetItem(__pyx_v_write_sets, __pyx_v_op_part); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 281, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_5);
     __pyx_t_7 = __pyx_t_5;
     __Pyx_INCREF(__pyx_t_7);
@@ -6714,7 +6927,7 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conf
     __Pyx_XDECREF_SET(__pyx_v_ws_dict, ((PyObject*)__pyx_t_7));
     __pyx_t_7 = 0;
 
-    /* "worker/operator_state/aria/_aria_state.pyx":266
+    /* "worker/operator_state/aria/_aria_state.pyx":282
  *     for op_part in write_sets:
  *         ws_dict = <dict>write_sets[op_part]
  *         t_ids = set(ws_dict.keys())             # <<<<<<<<<<<<<<
@@ -6723,17 +6936,17 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conf
 */
     if (unlikely(__pyx_v_ws_dict == Py_None)) {
       PyErr_Format(PyExc_AttributeError, "'NoneType' object has no attribute '%.30s'", "keys");
-      __PYX_ERR(0, 266, __pyx_L1_error)
+      __PYX_ERR(0, 282, __pyx_L1_error)
     }
-    __pyx_t_7 = __Pyx_PyDict_Keys(__pyx_v_ws_dict); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 266, __pyx_L1_error)
+    __pyx_t_7 = __Pyx_PyDict_Keys(__pyx_v_ws_dict); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 282, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_7);
-    __pyx_t_5 = PySet_New(__pyx_t_7); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 266, __pyx_L1_error)
+    __pyx_t_5 = PySet_New(__pyx_t_7); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 282, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_5);
     __Pyx_DECREF(__pyx_t_7); __pyx_t_7 = 0;
     __Pyx_XDECREF_SET(__pyx_v_t_ids, ((PyObject*)__pyx_t_5));
     __pyx_t_5 = 0;
 
-    /* "worker/operator_state/aria/_aria_state.pyx":267
+    /* "worker/operator_state/aria/_aria_state.pyx":283
  *         ws_dict = <dict>write_sets[op_part]
  *         t_ids = set(ws_dict.keys())
  *         min_ws = <dict>minimized_writes[op_part]             # <<<<<<<<<<<<<<
@@ -6742,9 +6955,9 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conf
 */
     if (unlikely(__pyx_v_minimized_writes == Py_None)) {
       PyErr_SetString(PyExc_TypeError, "'NoneType' object is not subscriptable");
-      __PYX_ERR(0, 267, __pyx_L1_error)
+      __PYX_ERR(0, 283, __pyx_L1_error)
     }
-    __pyx_t_5 = __Pyx_PyDict_GetItem(__pyx_v_minimized_writes, __pyx_v_op_part); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 267, __pyx_L1_error)
+    __pyx_t_5 = __Pyx_PyDict_GetItem(__pyx_v_minimized_writes, __pyx_v_op_part); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 283, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_5);
     __pyx_t_7 = __pyx_t_5;
     __Pyx_INCREF(__pyx_t_7);
@@ -6752,7 +6965,7 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conf
     __Pyx_XDECREF_SET(__pyx_v_min_ws, ((PyObject*)__pyx_t_7));
     __pyx_t_7 = 0;
 
-    /* "worker/operator_state/aria/_aria_state.pyx":268
+    /* "worker/operator_state/aria/_aria_state.pyx":284
  *         t_ids = set(ws_dict.keys())
  *         min_ws = <dict>minimized_writes[op_part]
  *         for t_id in t_ids:             # <<<<<<<<<<<<<<
@@ -6760,7 +6973,7 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conf
  *             if has_conflicts(t_id, ws, min_ws):
 */
     __pyx_t_8 = 0;
-    __pyx_t_5 = __Pyx_set_iterator(__pyx_v_t_ids, 1, (&__pyx_t_9), (&__pyx_t_6)); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 268, __pyx_L1_error)
+    __pyx_t_5 = __Pyx_set_iterator(__pyx_v_t_ids, 1, (&__pyx_t_9), (&__pyx_t_6)); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 284, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_5);
     __Pyx_XDECREF(__pyx_t_7);
     __pyx_t_7 = __pyx_t_5;
@@ -6768,13 +6981,13 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conf
     while (1) {
       __pyx_t_10 = __Pyx_set_iter_next(__pyx_t_7, __pyx_t_9, &__pyx_t_8, &__pyx_t_5, __pyx_t_6);
       if (unlikely(__pyx_t_10 == 0)) break;
-      if (unlikely(__pyx_t_10 == -1)) __PYX_ERR(0, 268, __pyx_L1_error)
+      if (unlikely(__pyx_t_10 == -1)) __PYX_ERR(0, 284, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_5);
-      __pyx_t_10 = __Pyx_PyLong_As_int(__pyx_t_5); if (unlikely((__pyx_t_10 == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 268, __pyx_L1_error)
+      __pyx_t_10 = __Pyx_PyLong_As_int(__pyx_t_5); if (unlikely((__pyx_t_10 == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 284, __pyx_L1_error)
       __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
       __pyx_v_t_id = __pyx_t_10;
 
-      /* "worker/operator_state/aria/_aria_state.pyx":269
+      /* "worker/operator_state/aria/_aria_state.pyx":285
  *         min_ws = <dict>minimized_writes[op_part]
  *         for t_id in t_ids:
  *             ws = ws_dict.get(t_id, set())             # <<<<<<<<<<<<<<
@@ -6783,43 +6996,43 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conf
 */
       if (unlikely(__pyx_v_ws_dict == Py_None)) {
         PyErr_Format(PyExc_AttributeError, "'NoneType' object has no attribute '%.30s'", "get");
-        __PYX_ERR(0, 269, __pyx_L1_error)
+        __PYX_ERR(0, 285, __pyx_L1_error)
       }
-      __pyx_t_5 = __Pyx_PyLong_From_int(__pyx_v_t_id); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 269, __pyx_L1_error)
+      __pyx_t_5 = __Pyx_PyLong_From_int(__pyx_v_t_id); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 285, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_5);
-      __pyx_t_11 = PySet_New(0); if (unlikely(!__pyx_t_11)) __PYX_ERR(0, 269, __pyx_L1_error)
+      __pyx_t_11 = PySet_New(0); if (unlikely(!__pyx_t_11)) __PYX_ERR(0, 285, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_11);
-      __pyx_t_12 = __Pyx_PyDict_GetItemDefault(__pyx_v_ws_dict, __pyx_t_5, __pyx_t_11); if (unlikely(!__pyx_t_12)) __PYX_ERR(0, 269, __pyx_L1_error)
+      __pyx_t_12 = __Pyx_PyDict_GetItemDefault(__pyx_v_ws_dict, __pyx_t_5, __pyx_t_11); if (unlikely(!__pyx_t_12)) __PYX_ERR(0, 285, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_12);
       __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
       __Pyx_DECREF(__pyx_t_11); __pyx_t_11 = 0;
-      if (!(likely(PyDict_CheckExact(__pyx_t_12))||((__pyx_t_12) == Py_None) || __Pyx_RaiseUnexpectedTypeError("dict", __pyx_t_12))) __PYX_ERR(0, 269, __pyx_L1_error)
+      if (!(likely(PyDict_CheckExact(__pyx_t_12))||((__pyx_t_12) == Py_None) || __Pyx_RaiseUnexpectedTypeError("dict", __pyx_t_12))) __PYX_ERR(0, 285, __pyx_L1_error)
       __Pyx_XDECREF_SET(__pyx_v_ws, ((PyObject*)__pyx_t_12));
       __pyx_t_12 = 0;
 
-      /* "worker/operator_state/aria/_aria_state.pyx":270
+      /* "worker/operator_state/aria/_aria_state.pyx":286
  *         for t_id in t_ids:
  *             ws = ws_dict.get(t_id, set())
  *             if has_conflicts(t_id, ws, min_ws):             # <<<<<<<<<<<<<<
  *                 aborted.add(t_id)
  *     return aborted
 */
-      __pyx_t_13 = __pyx_f_6worker_14operator_state_4aria_11_aria_state_has_conflicts(__pyx_v_t_id, __pyx_v_ws, __pyx_v_min_ws, 0); if (unlikely(__pyx_t_13 == ((int)-1) && PyErr_Occurred())) __PYX_ERR(0, 270, __pyx_L1_error)
+      __pyx_t_13 = __pyx_f_6worker_14operator_state_4aria_11_aria_state_has_conflicts(__pyx_v_t_id, __pyx_v_ws, __pyx_v_min_ws, 0); if (unlikely(__pyx_t_13 == ((int)-1) && PyErr_Occurred())) __PYX_ERR(0, 286, __pyx_L1_error)
       if (__pyx_t_13) {
 
-        /* "worker/operator_state/aria/_aria_state.pyx":271
+        /* "worker/operator_state/aria/_aria_state.pyx":287
  *             ws = ws_dict.get(t_id, set())
  *             if has_conflicts(t_id, ws, min_ws):
  *                 aborted.add(t_id)             # <<<<<<<<<<<<<<
  *     return aborted
  * 
 */
-        __pyx_t_12 = __Pyx_PyLong_From_int(__pyx_v_t_id); if (unlikely(!__pyx_t_12)) __PYX_ERR(0, 271, __pyx_L1_error)
+        __pyx_t_12 = __Pyx_PyLong_From_int(__pyx_v_t_id); if (unlikely(!__pyx_t_12)) __PYX_ERR(0, 287, __pyx_L1_error)
         __Pyx_GOTREF(__pyx_t_12);
-        __pyx_t_14 = PySet_Add(__pyx_v_aborted, __pyx_t_12); if (unlikely(__pyx_t_14 == ((int)-1))) __PYX_ERR(0, 271, __pyx_L1_error)
+        __pyx_t_14 = PySet_Add(__pyx_v_aborted, __pyx_t_12); if (unlikely(__pyx_t_14 == ((int)-1))) __PYX_ERR(0, 287, __pyx_L1_error)
         __Pyx_DECREF(__pyx_t_12); __pyx_t_12 = 0;
 
-        /* "worker/operator_state/aria/_aria_state.pyx":270
+        /* "worker/operator_state/aria/_aria_state.pyx":286
  *         for t_id in t_ids:
  *             ws = ws_dict.get(t_id, set())
  *             if has_conflicts(t_id, ws, min_ws):             # <<<<<<<<<<<<<<
@@ -6832,7 +7045,7 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conf
   }
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
 
-  /* "worker/operator_state/aria/_aria_state.pyx":272
+  /* "worker/operator_state/aria/_aria_state.pyx":288
  *             if has_conflicts(t_id, ws, min_ws):
  *                 aborted.add(t_id)
  *     return aborted             # <<<<<<<<<<<<<<
@@ -6844,7 +7057,7 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conf
   __pyx_r = __pyx_v_aborted;
   goto __pyx_L0;
 
-  /* "worker/operator_state/aria/_aria_state.pyx":253
+  /* "worker/operator_state/aria/_aria_state.pyx":269
  * 
  * 
  * cpdef set check_conflicts_snapshot_isolation(dict write_sets, dict writes):             # <<<<<<<<<<<<<<
@@ -6915,39 +7128,39 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   {
     PyObject ** const __pyx_pyargnames[] = {&__pyx_mstate_global->__pyx_n_u_write_sets,&__pyx_mstate_global->__pyx_n_u_writes,0};
     const Py_ssize_t __pyx_kwds_len = (__pyx_kwds) ? __Pyx_NumKwargs_FASTCALL(__pyx_kwds) : 0;
-    if (unlikely(__pyx_kwds_len) < 0) __PYX_ERR(0, 253, __pyx_L3_error)
+    if (unlikely(__pyx_kwds_len) < 0) __PYX_ERR(0, 269, __pyx_L3_error)
     if (__pyx_kwds_len > 0) {
       switch (__pyx_nargs) {
         case  2:
         values[1] = __Pyx_ArgRef_FASTCALL(__pyx_args, 1);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 253, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 269, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  1:
         values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 253, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 269, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  0: break;
         default: goto __pyx_L5_argtuple_error;
       }
       const Py_ssize_t kwd_pos_args = __pyx_nargs;
-      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "check_conflicts_snapshot_isolation", 0) < (0)) __PYX_ERR(0, 253, __pyx_L3_error)
+      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "check_conflicts_snapshot_isolation", 0) < (0)) __PYX_ERR(0, 269, __pyx_L3_error)
       for (Py_ssize_t i = __pyx_nargs; i < 2; i++) {
-        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("check_conflicts_snapshot_isolation", 1, 2, 2, i); __PYX_ERR(0, 253, __pyx_L3_error) }
+        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("check_conflicts_snapshot_isolation", 1, 2, 2, i); __PYX_ERR(0, 269, __pyx_L3_error) }
       }
     } else if (unlikely(__pyx_nargs != 2)) {
       goto __pyx_L5_argtuple_error;
     } else {
       values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 253, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 269, __pyx_L3_error)
       values[1] = __Pyx_ArgRef_FASTCALL(__pyx_args, 1);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 253, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 269, __pyx_L3_error)
     }
     __pyx_v_write_sets = ((PyObject*)values[0]);
     __pyx_v_writes = ((PyObject*)values[1]);
   }
   goto __pyx_L6_skip;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("check_conflicts_snapshot_isolation", 1, 2, 2, __pyx_nargs); __PYX_ERR(0, 253, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("check_conflicts_snapshot_isolation", 1, 2, 2, __pyx_nargs); __PYX_ERR(0, 269, __pyx_L3_error)
   __pyx_L6_skip:;
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L3_error:;
@@ -6958,8 +7171,8 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   __Pyx_RefNannyFinishContext();
   return NULL;
   __pyx_L4_argument_unpacking_done:;
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_write_sets), (&PyDict_Type), 1, "write_sets", 1))) __PYX_ERR(0, 253, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_writes), (&PyDict_Type), 1, "writes", 1))) __PYX_ERR(0, 253, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_write_sets), (&PyDict_Type), 1, "write_sets", 1))) __PYX_ERR(0, 269, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_writes), (&PyDict_Type), 1, "writes", 1))) __PYX_ERR(0, 269, __pyx_L1_error)
   __pyx_r = __pyx_pf_6worker_14operator_state_4aria_11_aria_state_18check_conflicts_snapshot_isolation(__pyx_self, __pyx_v_write_sets, __pyx_v_writes);
 
   /* function exit code */
@@ -6988,7 +7201,7 @@ static PyObject *__pyx_pf_6worker_14operator_state_4aria_11_aria_state_18check_c
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("check_conflicts_snapshot_isolation", 0);
   __Pyx_XDECREF(__pyx_r);
-  __pyx_t_1 = __pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conflicts_snapshot_isolation(__pyx_v_write_sets, __pyx_v_writes, 1); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 253, __pyx_L1_error)
+  __pyx_t_1 = __pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conflicts_snapshot_isolation(__pyx_v_write_sets, __pyx_v_writes, 1); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 269, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __pyx_r = __pyx_t_1;
   __pyx_t_1 = 0;
@@ -7005,7 +7218,7 @@ static PyObject *__pyx_pf_6worker_14operator_state_4aria_11_aria_state_18check_c
   return __pyx_r;
 }
 
-/* "worker/operator_state/aria/_aria_state.pyx":275
+/* "worker/operator_state/aria/_aria_state.pyx":291
  * 
  * 
  * cpdef set check_conflicts_deterministic_reordering(             # <<<<<<<<<<<<<<
@@ -7057,43 +7270,43 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conf
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("check_conflicts_deterministic_reordering", 0);
 
-  /* "worker/operator_state/aria/_aria_state.pyx":284
+  /* "worker/operator_state/aria/_aria_state.pyx":300
  * ):
  *     """Deterministic-reordering conflict detection."""
  *     cdef set aborted = set()             # <<<<<<<<<<<<<<
  *     cdef dict merged_reads = min_rw_reservations(global_reads)
  *     cdef dict minimized_writes = min_rw_reservations(writes)
 */
-  __pyx_t_1 = PySet_New(0); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 284, __pyx_L1_error)
+  __pyx_t_1 = PySet_New(0); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 300, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __pyx_v_aborted = ((PyObject*)__pyx_t_1);
   __pyx_t_1 = 0;
 
-  /* "worker/operator_state/aria/_aria_state.pyx":285
+  /* "worker/operator_state/aria/_aria_state.pyx":301
  *     """Deterministic-reordering conflict detection."""
  *     cdef set aborted = set()
  *     cdef dict merged_reads = min_rw_reservations(global_reads)             # <<<<<<<<<<<<<<
  *     cdef dict minimized_writes = min_rw_reservations(writes)
  *     cdef tuple op_name
 */
-  __pyx_t_1 = __pyx_f_6worker_14operator_state_4aria_11_aria_state_min_rw_reservations(__pyx_v_global_reads, 0); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 285, __pyx_L1_error)
+  __pyx_t_1 = __pyx_f_6worker_14operator_state_4aria_11_aria_state_min_rw_reservations(__pyx_v_global_reads, 0); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 301, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __pyx_v_merged_reads = ((PyObject*)__pyx_t_1);
   __pyx_t_1 = 0;
 
-  /* "worker/operator_state/aria/_aria_state.pyx":286
+  /* "worker/operator_state/aria/_aria_state.pyx":302
  *     cdef set aborted = set()
  *     cdef dict merged_reads = min_rw_reservations(global_reads)
  *     cdef dict minimized_writes = min_rw_reservations(writes)             # <<<<<<<<<<<<<<
  *     cdef tuple op_name
  *     cdef dict write_set
 */
-  __pyx_t_1 = __pyx_f_6worker_14operator_state_4aria_11_aria_state_min_rw_reservations(__pyx_v_writes, 0); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 286, __pyx_L1_error)
+  __pyx_t_1 = __pyx_f_6worker_14operator_state_4aria_11_aria_state_min_rw_reservations(__pyx_v_writes, 0); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 302, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __pyx_v_minimized_writes = ((PyObject*)__pyx_t_1);
   __pyx_t_1 = 0;
 
-  /* "worker/operator_state/aria/_aria_state.pyx":297
+  /* "worker/operator_state/aria/_aria_state.pyx":313
  *     cdef dict m_reads
  * 
  *     for op_name in write_sets:             # <<<<<<<<<<<<<<
@@ -7103,9 +7316,9 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conf
   __pyx_t_2 = 0;
   if (unlikely(__pyx_v_write_sets == Py_None)) {
     PyErr_SetString(PyExc_TypeError, "'NoneType' object is not iterable");
-    __PYX_ERR(0, 297, __pyx_L1_error)
+    __PYX_ERR(0, 313, __pyx_L1_error)
   }
-  __pyx_t_5 = __Pyx_dict_iterator(__pyx_v_write_sets, 1, ((PyObject *)NULL), (&__pyx_t_3), (&__pyx_t_4)); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 297, __pyx_L1_error)
+  __pyx_t_5 = __Pyx_dict_iterator(__pyx_v_write_sets, 1, ((PyObject *)NULL), (&__pyx_t_3), (&__pyx_t_4)); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 313, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_5);
   __Pyx_XDECREF(__pyx_t_1);
   __pyx_t_1 = __pyx_t_5;
@@ -7113,13 +7326,13 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conf
   while (1) {
     __pyx_t_6 = __Pyx_dict_iter_next(__pyx_t_1, __pyx_t_3, &__pyx_t_2, &__pyx_t_5, NULL, NULL, __pyx_t_4);
     if (unlikely(__pyx_t_6 == 0)) break;
-    if (unlikely(__pyx_t_6 == -1)) __PYX_ERR(0, 297, __pyx_L1_error)
+    if (unlikely(__pyx_t_6 == -1)) __PYX_ERR(0, 313, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_5);
-    if (!(likely(PyTuple_CheckExact(__pyx_t_5))||((__pyx_t_5) == Py_None) || __Pyx_RaiseUnexpectedTypeError("tuple", __pyx_t_5))) __PYX_ERR(0, 297, __pyx_L1_error)
+    if (!(likely(PyTuple_CheckExact(__pyx_t_5))||((__pyx_t_5) == Py_None) || __Pyx_RaiseUnexpectedTypeError("tuple", __pyx_t_5))) __PYX_ERR(0, 313, __pyx_L1_error)
     __Pyx_XDECREF_SET(__pyx_v_op_name, ((PyObject*)__pyx_t_5));
     __pyx_t_5 = 0;
 
-    /* "worker/operator_state/aria/_aria_state.pyx":298
+    /* "worker/operator_state/aria/_aria_state.pyx":314
  * 
  *     for op_name in write_sets:
  *         write_set = <dict>global_write_sets[op_name]             # <<<<<<<<<<<<<<
@@ -7128,9 +7341,9 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conf
 */
     if (unlikely(__pyx_v_global_write_sets == Py_None)) {
       PyErr_SetString(PyExc_TypeError, "'NoneType' object is not subscriptable");
-      __PYX_ERR(0, 298, __pyx_L1_error)
+      __PYX_ERR(0, 314, __pyx_L1_error)
     }
-    __pyx_t_5 = __Pyx_PyDict_GetItem(__pyx_v_global_write_sets, __pyx_v_op_name); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 298, __pyx_L1_error)
+    __pyx_t_5 = __Pyx_PyDict_GetItem(__pyx_v_global_write_sets, __pyx_v_op_name); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 314, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_5);
     __pyx_t_7 = __pyx_t_5;
     __Pyx_INCREF(__pyx_t_7);
@@ -7138,7 +7351,7 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conf
     __Pyx_XDECREF_SET(__pyx_v_write_set, ((PyObject*)__pyx_t_7));
     __pyx_t_7 = 0;
 
-    /* "worker/operator_state/aria/_aria_state.pyx":299
+    /* "worker/operator_state/aria/_aria_state.pyx":315
  *     for op_name in write_sets:
  *         write_set = <dict>global_write_sets[op_name]
  *         read_set = <dict>global_read_sets[op_name]             # <<<<<<<<<<<<<<
@@ -7147,9 +7360,9 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conf
 */
     if (unlikely(__pyx_v_global_read_sets == Py_None)) {
       PyErr_SetString(PyExc_TypeError, "'NoneType' object is not subscriptable");
-      __PYX_ERR(0, 299, __pyx_L1_error)
+      __PYX_ERR(0, 315, __pyx_L1_error)
     }
-    __pyx_t_7 = __Pyx_PyDict_GetItem(__pyx_v_global_read_sets, __pyx_v_op_name); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 299, __pyx_L1_error)
+    __pyx_t_7 = __Pyx_PyDict_GetItem(__pyx_v_global_read_sets, __pyx_v_op_name); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 315, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_7);
     __pyx_t_5 = __pyx_t_7;
     __Pyx_INCREF(__pyx_t_5);
@@ -7157,7 +7370,7 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conf
     __Pyx_XDECREF_SET(__pyx_v_read_set, ((PyObject*)__pyx_t_5));
     __pyx_t_5 = 0;
 
-    /* "worker/operator_state/aria/_aria_state.pyx":300
+    /* "worker/operator_state/aria/_aria_state.pyx":316
  *         write_set = <dict>global_write_sets[op_name]
  *         read_set = <dict>global_read_sets[op_name]
  *         t_ids = set((<dict>write_sets[op_name]).keys())             # <<<<<<<<<<<<<<
@@ -7166,24 +7379,24 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conf
 */
     if (unlikely(__pyx_v_write_sets == Py_None)) {
       PyErr_SetString(PyExc_TypeError, "'NoneType' object is not subscriptable");
-      __PYX_ERR(0, 300, __pyx_L1_error)
+      __PYX_ERR(0, 316, __pyx_L1_error)
     }
-    __pyx_t_5 = __Pyx_PyDict_GetItem(__pyx_v_write_sets, __pyx_v_op_name); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 300, __pyx_L1_error)
+    __pyx_t_5 = __Pyx_PyDict_GetItem(__pyx_v_write_sets, __pyx_v_op_name); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 316, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_5);
     if (unlikely(__pyx_t_5 == Py_None)) {
       PyErr_Format(PyExc_AttributeError, "'NoneType' object has no attribute '%.30s'", "keys");
-      __PYX_ERR(0, 300, __pyx_L1_error)
+      __PYX_ERR(0, 316, __pyx_L1_error)
     }
-    __pyx_t_7 = __Pyx_PyDict_Keys(((PyObject*)__pyx_t_5)); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 300, __pyx_L1_error)
+    __pyx_t_7 = __Pyx_PyDict_Keys(((PyObject*)__pyx_t_5)); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 316, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_7);
     __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
-    __pyx_t_5 = PySet_New(__pyx_t_7); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 300, __pyx_L1_error)
+    __pyx_t_5 = PySet_New(__pyx_t_7); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 316, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_5);
     __Pyx_DECREF(__pyx_t_7); __pyx_t_7 = 0;
     __Pyx_XDECREF_SET(__pyx_v_t_ids, ((PyObject*)__pyx_t_5));
     __pyx_t_5 = 0;
 
-    /* "worker/operator_state/aria/_aria_state.pyx":301
+    /* "worker/operator_state/aria/_aria_state.pyx":317
  *         read_set = <dict>global_read_sets[op_name]
  *         t_ids = set((<dict>write_sets[op_name]).keys())
  *         t_ids.update((<dict>read_sets[op_name]).keys())             # <<<<<<<<<<<<<<
@@ -7192,23 +7405,23 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conf
 */
     if (unlikely(__pyx_v_read_sets == Py_None)) {
       PyErr_SetString(PyExc_TypeError, "'NoneType' object is not subscriptable");
-      __PYX_ERR(0, 301, __pyx_L1_error)
+      __PYX_ERR(0, 317, __pyx_L1_error)
     }
-    __pyx_t_5 = __Pyx_PyDict_GetItem(__pyx_v_read_sets, __pyx_v_op_name); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 301, __pyx_L1_error)
+    __pyx_t_5 = __Pyx_PyDict_GetItem(__pyx_v_read_sets, __pyx_v_op_name); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 317, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_5);
     if (unlikely(__pyx_t_5 == Py_None)) {
       PyErr_Format(PyExc_AttributeError, "'NoneType' object has no attribute '%.30s'", "keys");
-      __PYX_ERR(0, 301, __pyx_L1_error)
+      __PYX_ERR(0, 317, __pyx_L1_error)
     }
-    __pyx_t_7 = __Pyx_PyDict_Keys(((PyObject*)__pyx_t_5)); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 301, __pyx_L1_error)
+    __pyx_t_7 = __Pyx_PyDict_Keys(((PyObject*)__pyx_t_5)); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 317, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_7);
     __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
-    __pyx_t_5 = __Pyx_CallUnboundCMethod1(&__pyx_mstate_global->__pyx_umethod_PySet_Type__update, __pyx_v_t_ids, __pyx_t_7); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 301, __pyx_L1_error)
+    __pyx_t_5 = __Pyx_CallUnboundCMethod1(&__pyx_mstate_global->__pyx_umethod_PySet_Type__update, __pyx_v_t_ids, __pyx_t_7); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 317, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_5);
     __Pyx_DECREF(__pyx_t_7); __pyx_t_7 = 0;
     __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
 
-    /* "worker/operator_state/aria/_aria_state.pyx":302
+    /* "worker/operator_state/aria/_aria_state.pyx":318
  *         t_ids = set((<dict>write_sets[op_name]).keys())
  *         t_ids.update((<dict>read_sets[op_name]).keys())
  *         min_ws = <dict>minimized_writes[op_name]             # <<<<<<<<<<<<<<
@@ -7217,9 +7430,9 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conf
 */
     if (unlikely(__pyx_v_minimized_writes == Py_None)) {
       PyErr_SetString(PyExc_TypeError, "'NoneType' object is not subscriptable");
-      __PYX_ERR(0, 302, __pyx_L1_error)
+      __PYX_ERR(0, 318, __pyx_L1_error)
     }
-    __pyx_t_5 = __Pyx_PyDict_GetItem(__pyx_v_minimized_writes, __pyx_v_op_name); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 302, __pyx_L1_error)
+    __pyx_t_5 = __Pyx_PyDict_GetItem(__pyx_v_minimized_writes, __pyx_v_op_name); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 318, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_5);
     __pyx_t_7 = __pyx_t_5;
     __Pyx_INCREF(__pyx_t_7);
@@ -7227,7 +7440,7 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conf
     __Pyx_XDECREF_SET(__pyx_v_min_ws, ((PyObject*)__pyx_t_7));
     __pyx_t_7 = 0;
 
-    /* "worker/operator_state/aria/_aria_state.pyx":303
+    /* "worker/operator_state/aria/_aria_state.pyx":319
  *         t_ids.update((<dict>read_sets[op_name]).keys())
  *         min_ws = <dict>minimized_writes[op_name]
  *         m_reads = <dict>merged_reads[op_name]             # <<<<<<<<<<<<<<
@@ -7236,9 +7449,9 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conf
 */
     if (unlikely(__pyx_v_merged_reads == Py_None)) {
       PyErr_SetString(PyExc_TypeError, "'NoneType' object is not subscriptable");
-      __PYX_ERR(0, 303, __pyx_L1_error)
+      __PYX_ERR(0, 319, __pyx_L1_error)
     }
-    __pyx_t_7 = __Pyx_PyDict_GetItem(__pyx_v_merged_reads, __pyx_v_op_name); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 303, __pyx_L1_error)
+    __pyx_t_7 = __Pyx_PyDict_GetItem(__pyx_v_merged_reads, __pyx_v_op_name); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 319, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_7);
     __pyx_t_5 = __pyx_t_7;
     __Pyx_INCREF(__pyx_t_5);
@@ -7246,7 +7459,7 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conf
     __Pyx_XDECREF_SET(__pyx_v_m_reads, ((PyObject*)__pyx_t_5));
     __pyx_t_5 = 0;
 
-    /* "worker/operator_state/aria/_aria_state.pyx":304
+    /* "worker/operator_state/aria/_aria_state.pyx":320
  *         min_ws = <dict>minimized_writes[op_name]
  *         m_reads = <dict>merged_reads[op_name]
  *         for t_id in t_ids:             # <<<<<<<<<<<<<<
@@ -7254,7 +7467,7 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conf
  *             if has_conflicts(t_id, ws, min_ws):
 */
     __pyx_t_8 = 0;
-    __pyx_t_7 = __Pyx_set_iterator(__pyx_v_t_ids, 1, (&__pyx_t_9), (&__pyx_t_6)); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 304, __pyx_L1_error)
+    __pyx_t_7 = __Pyx_set_iterator(__pyx_v_t_ids, 1, (&__pyx_t_9), (&__pyx_t_6)); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 320, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_7);
     __Pyx_XDECREF(__pyx_t_5);
     __pyx_t_5 = __pyx_t_7;
@@ -7262,13 +7475,13 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conf
     while (1) {
       __pyx_t_10 = __Pyx_set_iter_next(__pyx_t_5, __pyx_t_9, &__pyx_t_8, &__pyx_t_7, __pyx_t_6);
       if (unlikely(__pyx_t_10 == 0)) break;
-      if (unlikely(__pyx_t_10 == -1)) __PYX_ERR(0, 304, __pyx_L1_error)
+      if (unlikely(__pyx_t_10 == -1)) __PYX_ERR(0, 320, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_7);
-      __pyx_t_10 = __Pyx_PyLong_As_int(__pyx_t_7); if (unlikely((__pyx_t_10 == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 304, __pyx_L1_error)
+      __pyx_t_10 = __Pyx_PyLong_As_int(__pyx_t_7); if (unlikely((__pyx_t_10 == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 320, __pyx_L1_error)
       __Pyx_DECREF(__pyx_t_7); __pyx_t_7 = 0;
       __pyx_v_t_id = __pyx_t_10;
 
-      /* "worker/operator_state/aria/_aria_state.pyx":305
+      /* "worker/operator_state/aria/_aria_state.pyx":321
  *         m_reads = <dict>merged_reads[op_name]
  *         for t_id in t_ids:
  *             ws = write_set.get(t_id, set())             # <<<<<<<<<<<<<<
@@ -7277,42 +7490,42 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conf
 */
       if (unlikely(__pyx_v_write_set == Py_None)) {
         PyErr_Format(PyExc_AttributeError, "'NoneType' object has no attribute '%.30s'", "get");
-        __PYX_ERR(0, 305, __pyx_L1_error)
+        __PYX_ERR(0, 321, __pyx_L1_error)
       }
-      __pyx_t_7 = __Pyx_PyLong_From_int(__pyx_v_t_id); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 305, __pyx_L1_error)
+      __pyx_t_7 = __Pyx_PyLong_From_int(__pyx_v_t_id); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 321, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_7);
-      __pyx_t_11 = PySet_New(0); if (unlikely(!__pyx_t_11)) __PYX_ERR(0, 305, __pyx_L1_error)
+      __pyx_t_11 = PySet_New(0); if (unlikely(!__pyx_t_11)) __PYX_ERR(0, 321, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_11);
-      __pyx_t_12 = __Pyx_PyDict_GetItemDefault(__pyx_v_write_set, __pyx_t_7, __pyx_t_11); if (unlikely(!__pyx_t_12)) __PYX_ERR(0, 305, __pyx_L1_error)
+      __pyx_t_12 = __Pyx_PyDict_GetItemDefault(__pyx_v_write_set, __pyx_t_7, __pyx_t_11); if (unlikely(!__pyx_t_12)) __PYX_ERR(0, 321, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_12);
       __Pyx_DECREF(__pyx_t_7); __pyx_t_7 = 0;
       __Pyx_DECREF(__pyx_t_11); __pyx_t_11 = 0;
       __Pyx_XDECREF_SET(__pyx_v_ws, __pyx_t_12);
       __pyx_t_12 = 0;
 
-      /* "worker/operator_state/aria/_aria_state.pyx":306
+      /* "worker/operator_state/aria/_aria_state.pyx":322
  *         for t_id in t_ids:
  *             ws = write_set.get(t_id, set())
  *             if has_conflicts(t_id, ws, min_ws):             # <<<<<<<<<<<<<<
  *                 aborted.add(t_id)
  *                 continue
 */
-      __pyx_t_13 = __pyx_f_6worker_14operator_state_4aria_11_aria_state_has_conflicts(__pyx_v_t_id, __pyx_v_ws, __pyx_v_min_ws, 0); if (unlikely(__pyx_t_13 == ((int)-1) && PyErr_Occurred())) __PYX_ERR(0, 306, __pyx_L1_error)
+      __pyx_t_13 = __pyx_f_6worker_14operator_state_4aria_11_aria_state_has_conflicts(__pyx_v_t_id, __pyx_v_ws, __pyx_v_min_ws, 0); if (unlikely(__pyx_t_13 == ((int)-1) && PyErr_Occurred())) __PYX_ERR(0, 322, __pyx_L1_error)
       if (__pyx_t_13) {
 
-        /* "worker/operator_state/aria/_aria_state.pyx":307
+        /* "worker/operator_state/aria/_aria_state.pyx":323
  *             ws = write_set.get(t_id, set())
  *             if has_conflicts(t_id, ws, min_ws):
  *                 aborted.add(t_id)             # <<<<<<<<<<<<<<
  *                 continue
  *             war = has_conflicts(t_id, ws, m_reads)
 */
-        __pyx_t_12 = __Pyx_PyLong_From_int(__pyx_v_t_id); if (unlikely(!__pyx_t_12)) __PYX_ERR(0, 307, __pyx_L1_error)
+        __pyx_t_12 = __Pyx_PyLong_From_int(__pyx_v_t_id); if (unlikely(!__pyx_t_12)) __PYX_ERR(0, 323, __pyx_L1_error)
         __Pyx_GOTREF(__pyx_t_12);
-        __pyx_t_14 = PySet_Add(__pyx_v_aborted, __pyx_t_12); if (unlikely(__pyx_t_14 == ((int)-1))) __PYX_ERR(0, 307, __pyx_L1_error)
+        __pyx_t_14 = PySet_Add(__pyx_v_aborted, __pyx_t_12); if (unlikely(__pyx_t_14 == ((int)-1))) __PYX_ERR(0, 323, __pyx_L1_error)
         __Pyx_DECREF(__pyx_t_12); __pyx_t_12 = 0;
 
-        /* "worker/operator_state/aria/_aria_state.pyx":308
+        /* "worker/operator_state/aria/_aria_state.pyx":324
  *             if has_conflicts(t_id, ws, min_ws):
  *                 aborted.add(t_id)
  *                 continue             # <<<<<<<<<<<<<<
@@ -7321,7 +7534,7 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conf
 */
         goto __pyx_L5_continue;
 
-        /* "worker/operator_state/aria/_aria_state.pyx":306
+        /* "worker/operator_state/aria/_aria_state.pyx":322
  *         for t_id in t_ids:
  *             ws = write_set.get(t_id, set())
  *             if has_conflicts(t_id, ws, min_ws):             # <<<<<<<<<<<<<<
@@ -7330,17 +7543,17 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conf
 */
       }
 
-      /* "worker/operator_state/aria/_aria_state.pyx":309
+      /* "worker/operator_state/aria/_aria_state.pyx":325
  *                 aborted.add(t_id)
  *                 continue
  *             war = has_conflicts(t_id, ws, m_reads)             # <<<<<<<<<<<<<<
  *             rs = read_set.get(t_id, set())
  *             raw = has_conflicts(t_id, rs, min_ws)
 */
-      __pyx_t_13 = __pyx_f_6worker_14operator_state_4aria_11_aria_state_has_conflicts(__pyx_v_t_id, __pyx_v_ws, __pyx_v_m_reads, 0); if (unlikely(__pyx_t_13 == ((int)-1) && PyErr_Occurred())) __PYX_ERR(0, 309, __pyx_L1_error)
+      __pyx_t_13 = __pyx_f_6worker_14operator_state_4aria_11_aria_state_has_conflicts(__pyx_v_t_id, __pyx_v_ws, __pyx_v_m_reads, 0); if (unlikely(__pyx_t_13 == ((int)-1) && PyErr_Occurred())) __PYX_ERR(0, 325, __pyx_L1_error)
       __pyx_v_war = __pyx_t_13;
 
-      /* "worker/operator_state/aria/_aria_state.pyx":310
+      /* "worker/operator_state/aria/_aria_state.pyx":326
  *                 continue
  *             war = has_conflicts(t_id, ws, m_reads)
  *             rs = read_set.get(t_id, set())             # <<<<<<<<<<<<<<
@@ -7349,30 +7562,30 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conf
 */
       if (unlikely(__pyx_v_read_set == Py_None)) {
         PyErr_Format(PyExc_AttributeError, "'NoneType' object has no attribute '%.30s'", "get");
-        __PYX_ERR(0, 310, __pyx_L1_error)
+        __PYX_ERR(0, 326, __pyx_L1_error)
       }
-      __pyx_t_12 = __Pyx_PyLong_From_int(__pyx_v_t_id); if (unlikely(!__pyx_t_12)) __PYX_ERR(0, 310, __pyx_L1_error)
+      __pyx_t_12 = __Pyx_PyLong_From_int(__pyx_v_t_id); if (unlikely(!__pyx_t_12)) __PYX_ERR(0, 326, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_12);
-      __pyx_t_11 = PySet_New(0); if (unlikely(!__pyx_t_11)) __PYX_ERR(0, 310, __pyx_L1_error)
+      __pyx_t_11 = PySet_New(0); if (unlikely(!__pyx_t_11)) __PYX_ERR(0, 326, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_11);
-      __pyx_t_7 = __Pyx_PyDict_GetItemDefault(__pyx_v_read_set, __pyx_t_12, __pyx_t_11); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 310, __pyx_L1_error)
+      __pyx_t_7 = __Pyx_PyDict_GetItemDefault(__pyx_v_read_set, __pyx_t_12, __pyx_t_11); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 326, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_7);
       __Pyx_DECREF(__pyx_t_12); __pyx_t_12 = 0;
       __Pyx_DECREF(__pyx_t_11); __pyx_t_11 = 0;
       __Pyx_XDECREF_SET(__pyx_v_rs, __pyx_t_7);
       __pyx_t_7 = 0;
 
-      /* "worker/operator_state/aria/_aria_state.pyx":311
+      /* "worker/operator_state/aria/_aria_state.pyx":327
  *             war = has_conflicts(t_id, ws, m_reads)
  *             rs = read_set.get(t_id, set())
  *             raw = has_conflicts(t_id, rs, min_ws)             # <<<<<<<<<<<<<<
  *             if not war or not raw:
  *                 continue
 */
-      __pyx_t_13 = __pyx_f_6worker_14operator_state_4aria_11_aria_state_has_conflicts(__pyx_v_t_id, __pyx_v_rs, __pyx_v_min_ws, 0); if (unlikely(__pyx_t_13 == ((int)-1) && PyErr_Occurred())) __PYX_ERR(0, 311, __pyx_L1_error)
+      __pyx_t_13 = __pyx_f_6worker_14operator_state_4aria_11_aria_state_has_conflicts(__pyx_v_t_id, __pyx_v_rs, __pyx_v_min_ws, 0); if (unlikely(__pyx_t_13 == ((int)-1) && PyErr_Occurred())) __PYX_ERR(0, 327, __pyx_L1_error)
       __pyx_v_raw = __pyx_t_13;
 
-      /* "worker/operator_state/aria/_aria_state.pyx":312
+      /* "worker/operator_state/aria/_aria_state.pyx":328
  *             rs = read_set.get(t_id, set())
  *             raw = has_conflicts(t_id, rs, min_ws)
  *             if not war or not raw:             # <<<<<<<<<<<<<<
@@ -7390,7 +7603,7 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conf
       __pyx_L9_bool_binop_done:;
       if (__pyx_t_13) {
 
-        /* "worker/operator_state/aria/_aria_state.pyx":313
+        /* "worker/operator_state/aria/_aria_state.pyx":329
  *             raw = has_conflicts(t_id, rs, min_ws)
  *             if not war or not raw:
  *                 continue             # <<<<<<<<<<<<<<
@@ -7399,7 +7612,7 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conf
 */
         goto __pyx_L5_continue;
 
-        /* "worker/operator_state/aria/_aria_state.pyx":312
+        /* "worker/operator_state/aria/_aria_state.pyx":328
  *             rs = read_set.get(t_id, set())
  *             raw = has_conflicts(t_id, rs, min_ws)
  *             if not war or not raw:             # <<<<<<<<<<<<<<
@@ -7408,16 +7621,16 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conf
 */
       }
 
-      /* "worker/operator_state/aria/_aria_state.pyx":314
+      /* "worker/operator_state/aria/_aria_state.pyx":330
  *             if not war or not raw:
  *                 continue
  *             aborted.add(t_id)             # <<<<<<<<<<<<<<
  *     return aborted
  * 
 */
-      __pyx_t_7 = __Pyx_PyLong_From_int(__pyx_v_t_id); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 314, __pyx_L1_error)
+      __pyx_t_7 = __Pyx_PyLong_From_int(__pyx_v_t_id); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 330, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_7);
-      __pyx_t_14 = PySet_Add(__pyx_v_aborted, __pyx_t_7); if (unlikely(__pyx_t_14 == ((int)-1))) __PYX_ERR(0, 314, __pyx_L1_error)
+      __pyx_t_14 = PySet_Add(__pyx_v_aborted, __pyx_t_7); if (unlikely(__pyx_t_14 == ((int)-1))) __PYX_ERR(0, 330, __pyx_L1_error)
       __Pyx_DECREF(__pyx_t_7); __pyx_t_7 = 0;
       __pyx_L5_continue:;
     }
@@ -7425,7 +7638,7 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conf
   }
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
 
-  /* "worker/operator_state/aria/_aria_state.pyx":315
+  /* "worker/operator_state/aria/_aria_state.pyx":331
  *                 continue
  *             aborted.add(t_id)
  *     return aborted             # <<<<<<<<<<<<<<
@@ -7437,7 +7650,7 @@ static PyObject *__pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conf
   __pyx_r = __pyx_v_aborted;
   goto __pyx_L0;
 
-  /* "worker/operator_state/aria/_aria_state.pyx":275
+  /* "worker/operator_state/aria/_aria_state.pyx":291
  * 
  * 
  * cpdef set check_conflicts_deterministic_reordering(             # <<<<<<<<<<<<<<
@@ -7516,56 +7729,56 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   {
     PyObject ** const __pyx_pyargnames[] = {&__pyx_mstate_global->__pyx_n_u_write_sets,&__pyx_mstate_global->__pyx_n_u_read_sets,&__pyx_mstate_global->__pyx_n_u_writes,&__pyx_mstate_global->__pyx_n_u_global_reads,&__pyx_mstate_global->__pyx_n_u_global_write_sets,&__pyx_mstate_global->__pyx_n_u_global_read_sets,0};
     const Py_ssize_t __pyx_kwds_len = (__pyx_kwds) ? __Pyx_NumKwargs_FASTCALL(__pyx_kwds) : 0;
-    if (unlikely(__pyx_kwds_len) < 0) __PYX_ERR(0, 275, __pyx_L3_error)
+    if (unlikely(__pyx_kwds_len) < 0) __PYX_ERR(0, 291, __pyx_L3_error)
     if (__pyx_kwds_len > 0) {
       switch (__pyx_nargs) {
         case  6:
         values[5] = __Pyx_ArgRef_FASTCALL(__pyx_args, 5);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[5])) __PYX_ERR(0, 275, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[5])) __PYX_ERR(0, 291, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  5:
         values[4] = __Pyx_ArgRef_FASTCALL(__pyx_args, 4);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[4])) __PYX_ERR(0, 275, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[4])) __PYX_ERR(0, 291, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  4:
         values[3] = __Pyx_ArgRef_FASTCALL(__pyx_args, 3);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[3])) __PYX_ERR(0, 275, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[3])) __PYX_ERR(0, 291, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  3:
         values[2] = __Pyx_ArgRef_FASTCALL(__pyx_args, 2);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 275, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 291, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  2:
         values[1] = __Pyx_ArgRef_FASTCALL(__pyx_args, 1);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 275, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 291, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  1:
         values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 275, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 291, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  0: break;
         default: goto __pyx_L5_argtuple_error;
       }
       const Py_ssize_t kwd_pos_args = __pyx_nargs;
-      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "check_conflicts_deterministic_reordering", 0) < (0)) __PYX_ERR(0, 275, __pyx_L3_error)
+      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "check_conflicts_deterministic_reordering", 0) < (0)) __PYX_ERR(0, 291, __pyx_L3_error)
       for (Py_ssize_t i = __pyx_nargs; i < 6; i++) {
-        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("check_conflicts_deterministic_reordering", 1, 6, 6, i); __PYX_ERR(0, 275, __pyx_L3_error) }
+        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("check_conflicts_deterministic_reordering", 1, 6, 6, i); __PYX_ERR(0, 291, __pyx_L3_error) }
       }
     } else if (unlikely(__pyx_nargs != 6)) {
       goto __pyx_L5_argtuple_error;
     } else {
       values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 275, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 291, __pyx_L3_error)
       values[1] = __Pyx_ArgRef_FASTCALL(__pyx_args, 1);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 275, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 291, __pyx_L3_error)
       values[2] = __Pyx_ArgRef_FASTCALL(__pyx_args, 2);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 275, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 291, __pyx_L3_error)
       values[3] = __Pyx_ArgRef_FASTCALL(__pyx_args, 3);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[3])) __PYX_ERR(0, 275, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[3])) __PYX_ERR(0, 291, __pyx_L3_error)
       values[4] = __Pyx_ArgRef_FASTCALL(__pyx_args, 4);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[4])) __PYX_ERR(0, 275, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[4])) __PYX_ERR(0, 291, __pyx_L3_error)
       values[5] = __Pyx_ArgRef_FASTCALL(__pyx_args, 5);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[5])) __PYX_ERR(0, 275, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[5])) __PYX_ERR(0, 291, __pyx_L3_error)
     }
     __pyx_v_write_sets = ((PyObject*)values[0]);
     __pyx_v_read_sets = ((PyObject*)values[1]);
@@ -7576,7 +7789,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   }
   goto __pyx_L6_skip;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("check_conflicts_deterministic_reordering", 1, 6, 6, __pyx_nargs); __PYX_ERR(0, 275, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("check_conflicts_deterministic_reordering", 1, 6, 6, __pyx_nargs); __PYX_ERR(0, 291, __pyx_L3_error)
   __pyx_L6_skip:;
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L3_error:;
@@ -7587,12 +7800,12 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   __Pyx_RefNannyFinishContext();
   return NULL;
   __pyx_L4_argument_unpacking_done:;
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_write_sets), (&PyDict_Type), 1, "write_sets", 1))) __PYX_ERR(0, 276, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_read_sets), (&PyDict_Type), 1, "read_sets", 1))) __PYX_ERR(0, 277, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_writes), (&PyDict_Type), 1, "writes", 1))) __PYX_ERR(0, 278, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_global_reads), (&PyDict_Type), 1, "global_reads", 1))) __PYX_ERR(0, 279, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_global_write_sets), (&PyDict_Type), 1, "global_write_sets", 1))) __PYX_ERR(0, 280, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_global_read_sets), (&PyDict_Type), 1, "global_read_sets", 1))) __PYX_ERR(0, 281, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_write_sets), (&PyDict_Type), 1, "write_sets", 1))) __PYX_ERR(0, 292, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_read_sets), (&PyDict_Type), 1, "read_sets", 1))) __PYX_ERR(0, 293, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_writes), (&PyDict_Type), 1, "writes", 1))) __PYX_ERR(0, 294, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_global_reads), (&PyDict_Type), 1, "global_reads", 1))) __PYX_ERR(0, 295, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_global_write_sets), (&PyDict_Type), 1, "global_write_sets", 1))) __PYX_ERR(0, 296, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_global_read_sets), (&PyDict_Type), 1, "global_read_sets", 1))) __PYX_ERR(0, 297, __pyx_L1_error)
   __pyx_r = __pyx_pf_6worker_14operator_state_4aria_11_aria_state_20check_conflicts_deterministic_reordering(__pyx_self, __pyx_v_write_sets, __pyx_v_read_sets, __pyx_v_writes, __pyx_v_global_reads, __pyx_v_global_write_sets, __pyx_v_global_read_sets);
 
   /* function exit code */
@@ -7621,7 +7834,7 @@ static PyObject *__pyx_pf_6worker_14operator_state_4aria_11_aria_state_20check_c
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("check_conflicts_deterministic_reordering", 0);
   __Pyx_XDECREF(__pyx_r);
-  __pyx_t_1 = __pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conflicts_deterministic_reordering(__pyx_v_write_sets, __pyx_v_read_sets, __pyx_v_writes, __pyx_v_global_reads, __pyx_v_global_write_sets, __pyx_v_global_read_sets, 1); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 275, __pyx_L1_error)
+  __pyx_t_1 = __pyx_f_6worker_14operator_state_4aria_11_aria_state_check_conflicts_deterministic_reordering(__pyx_v_write_sets, __pyx_v_read_sets, __pyx_v_writes, __pyx_v_global_reads, __pyx_v_global_write_sets, __pyx_v_global_read_sets, 1); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 291, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __pyx_r = __pyx_t_1;
   __pyx_t_1 = 0;
@@ -7638,7 +7851,7 @@ static PyObject *__pyx_pf_6worker_14operator_state_4aria_11_aria_state_20check_c
   return __pyx_r;
 }
 
-/* "worker/operator_state/aria/_aria_state.pyx":318
+/* "worker/operator_state/aria/_aria_state.pyx":334
  * 
  * 
  * cpdef void remove_aborted_from_rw_sets(             # <<<<<<<<<<<<<<
@@ -7683,7 +7896,7 @@ static void __pyx_f_6worker_14operator_state_4aria_11_aria_state_remove_aborted_
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("remove_aborted_from_rw_sets", 0);
 
-  /* "worker/operator_state/aria/_aria_state.pyx":327
+  /* "worker/operator_state/aria/_aria_state.pyx":343
  * ):
  *     """Remove aborted transaction IDs from all read/write sets and reservations."""
  *     if not global_logic_aborts:             # <<<<<<<<<<<<<<
@@ -7694,14 +7907,14 @@ static void __pyx_f_6worker_14operator_state_4aria_11_aria_state_remove_aborted_
   else
   {
     Py_ssize_t __pyx_temp = __Pyx_PySet_GET_SIZE(__pyx_v_global_logic_aborts);
-    if (unlikely(((!CYTHON_ASSUME_SAFE_SIZE) && __pyx_temp < 0))) __PYX_ERR(0, 327, __pyx_L1_error)
+    if (unlikely(((!CYTHON_ASSUME_SAFE_SIZE) && __pyx_temp < 0))) __PYX_ERR(0, 343, __pyx_L1_error)
     __pyx_t_1 = (__pyx_temp != 0);
   }
 
   __pyx_t_2 = (!__pyx_t_1);
   if (__pyx_t_2) {
 
-    /* "worker/operator_state/aria/_aria_state.pyx":328
+    /* "worker/operator_state/aria/_aria_state.pyx":344
  *     """Remove aborted transaction IDs from all read/write sets and reservations."""
  *     if not global_logic_aborts:
  *         return             # <<<<<<<<<<<<<<
@@ -7710,7 +7923,7 @@ static void __pyx_f_6worker_14operator_state_4aria_11_aria_state_remove_aborted_
 */
     goto __pyx_L0;
 
-    /* "worker/operator_state/aria/_aria_state.pyx":327
+    /* "worker/operator_state/aria/_aria_state.pyx":343
  * ):
  *     """Remove aborted transaction IDs from all read/write sets and reservations."""
  *     if not global_logic_aborts:             # <<<<<<<<<<<<<<
@@ -7719,7 +7932,7 @@ static void __pyx_f_6worker_14operator_state_4aria_11_aria_state_remove_aborted_
 */
   }
 
-  /* "worker/operator_state/aria/_aria_state.pyx":337
+  /* "worker/operator_state/aria/_aria_state.pyx":353
  *     cdef list new_tids
  * 
  *     for op_part in operator_partitions:             # <<<<<<<<<<<<<<
@@ -7727,7 +7940,7 @@ static void __pyx_f_6worker_14operator_state_4aria_11_aria_state_remove_aborted_
  *         for tid in list(op_dict.keys()):
 */
   __pyx_t_4 = 0;
-  __pyx_t_7 = __Pyx_set_iterator(__pyx_v_operator_partitions, 1, (&__pyx_t_5), (&__pyx_t_6)); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 337, __pyx_L1_error)
+  __pyx_t_7 = __Pyx_set_iterator(__pyx_v_operator_partitions, 1, (&__pyx_t_5), (&__pyx_t_6)); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 353, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_7);
   __Pyx_XDECREF(__pyx_t_3);
   __pyx_t_3 = __pyx_t_7;
@@ -7735,13 +7948,13 @@ static void __pyx_f_6worker_14operator_state_4aria_11_aria_state_remove_aborted_
   while (1) {
     __pyx_t_8 = __Pyx_set_iter_next(__pyx_t_3, __pyx_t_5, &__pyx_t_4, &__pyx_t_7, __pyx_t_6);
     if (unlikely(__pyx_t_8 == 0)) break;
-    if (unlikely(__pyx_t_8 == -1)) __PYX_ERR(0, 337, __pyx_L1_error)
+    if (unlikely(__pyx_t_8 == -1)) __PYX_ERR(0, 353, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_7);
-    if (!(likely(PyTuple_CheckExact(__pyx_t_7))||((__pyx_t_7) == Py_None) || __Pyx_RaiseUnexpectedTypeError("tuple", __pyx_t_7))) __PYX_ERR(0, 337, __pyx_L1_error)
+    if (!(likely(PyTuple_CheckExact(__pyx_t_7))||((__pyx_t_7) == Py_None) || __Pyx_RaiseUnexpectedTypeError("tuple", __pyx_t_7))) __PYX_ERR(0, 353, __pyx_L1_error)
     __Pyx_XDECREF_SET(__pyx_v_op_part, ((PyObject*)__pyx_t_7));
     __pyx_t_7 = 0;
 
-    /* "worker/operator_state/aria/_aria_state.pyx":338
+    /* "worker/operator_state/aria/_aria_state.pyx":354
  * 
  *     for op_part in operator_partitions:
  *         op_dict = <dict>read_sets[op_part]             # <<<<<<<<<<<<<<
@@ -7750,9 +7963,9 @@ static void __pyx_f_6worker_14operator_state_4aria_11_aria_state_remove_aborted_
 */
     if (unlikely(__pyx_v_read_sets == Py_None)) {
       PyErr_SetString(PyExc_TypeError, "'NoneType' object is not subscriptable");
-      __PYX_ERR(0, 338, __pyx_L1_error)
+      __PYX_ERR(0, 354, __pyx_L1_error)
     }
-    __pyx_t_7 = __Pyx_PyDict_GetItem(__pyx_v_read_sets, __pyx_v_op_part); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 338, __pyx_L1_error)
+    __pyx_t_7 = __Pyx_PyDict_GetItem(__pyx_v_read_sets, __pyx_v_op_part); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 354, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_7);
     __pyx_t_9 = __pyx_t_7;
     __Pyx_INCREF(__pyx_t_9);
@@ -7760,7 +7973,7 @@ static void __pyx_f_6worker_14operator_state_4aria_11_aria_state_remove_aborted_
     __Pyx_XDECREF_SET(__pyx_v_op_dict, ((PyObject*)__pyx_t_9));
     __pyx_t_9 = 0;
 
-    /* "worker/operator_state/aria/_aria_state.pyx":339
+    /* "worker/operator_state/aria/_aria_state.pyx":355
  *     for op_part in operator_partitions:
  *         op_dict = <dict>read_sets[op_part]
  *         for tid in list(op_dict.keys()):             # <<<<<<<<<<<<<<
@@ -7769,11 +7982,11 @@ static void __pyx_f_6worker_14operator_state_4aria_11_aria_state_remove_aborted_
 */
     if (unlikely(__pyx_v_op_dict == Py_None)) {
       PyErr_Format(PyExc_AttributeError, "'NoneType' object has no attribute '%.30s'", "keys");
-      __PYX_ERR(0, 339, __pyx_L1_error)
+      __PYX_ERR(0, 355, __pyx_L1_error)
     }
-    __pyx_t_9 = __Pyx_PyDict_Keys(__pyx_v_op_dict); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 339, __pyx_L1_error)
+    __pyx_t_9 = __Pyx_PyDict_Keys(__pyx_v_op_dict); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 355, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_9);
-    __pyx_t_7 = __Pyx_PySequence_ListKeepNew(__pyx_t_9); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 339, __pyx_L1_error)
+    __pyx_t_7 = __Pyx_PySequence_ListKeepNew(__pyx_t_9); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 355, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_7);
     __Pyx_DECREF(__pyx_t_9); __pyx_t_9 = 0;
     __pyx_t_9 = __pyx_t_7; __Pyx_INCREF(__pyx_t_9);
@@ -7783,36 +7996,36 @@ static void __pyx_f_6worker_14operator_state_4aria_11_aria_state_remove_aborted_
       {
         Py_ssize_t __pyx_temp = __Pyx_PyList_GET_SIZE(__pyx_t_9);
         #if !CYTHON_ASSUME_SAFE_SIZE
-        if (unlikely((__pyx_temp < 0))) __PYX_ERR(0, 339, __pyx_L1_error)
+        if (unlikely((__pyx_temp < 0))) __PYX_ERR(0, 355, __pyx_L1_error)
         #endif
         if (__pyx_t_10 >= __pyx_temp) break;
       }
       __pyx_t_7 = __Pyx_PyList_GetItemRefFast(__pyx_t_9, __pyx_t_10, __Pyx_ReferenceSharing_OwnStrongReference);
       ++__pyx_t_10;
-      if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 339, __pyx_L1_error)
+      if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 355, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_7);
-      __pyx_t_8 = __Pyx_PyLong_As_int(__pyx_t_7); if (unlikely((__pyx_t_8 == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 339, __pyx_L1_error)
+      __pyx_t_8 = __Pyx_PyLong_As_int(__pyx_t_7); if (unlikely((__pyx_t_8 == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 355, __pyx_L1_error)
       __Pyx_DECREF(__pyx_t_7); __pyx_t_7 = 0;
       __pyx_v_tid = __pyx_t_8;
 
-      /* "worker/operator_state/aria/_aria_state.pyx":340
+      /* "worker/operator_state/aria/_aria_state.pyx":356
  *         op_dict = <dict>read_sets[op_part]
  *         for tid in list(op_dict.keys()):
  *             if tid in global_logic_aborts:             # <<<<<<<<<<<<<<
  *                 del op_dict[tid]
  * 
 */
-      __pyx_t_7 = __Pyx_PyLong_From_int(__pyx_v_tid); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 340, __pyx_L1_error)
+      __pyx_t_7 = __Pyx_PyLong_From_int(__pyx_v_tid); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 356, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_7);
       if (unlikely(__pyx_v_global_logic_aborts == Py_None)) {
         PyErr_SetString(PyExc_TypeError, "'NoneType' object is not iterable");
-        __PYX_ERR(0, 340, __pyx_L1_error)
+        __PYX_ERR(0, 356, __pyx_L1_error)
       }
-      __pyx_t_2 = (__Pyx_PySet_ContainsTF(__pyx_t_7, __pyx_v_global_logic_aborts, Py_EQ)); if (unlikely((__pyx_t_2 < 0))) __PYX_ERR(0, 340, __pyx_L1_error)
+      __pyx_t_2 = (__Pyx_PySet_ContainsTF(__pyx_t_7, __pyx_v_global_logic_aborts, Py_EQ)); if (unlikely((__pyx_t_2 < 0))) __PYX_ERR(0, 356, __pyx_L1_error)
       __Pyx_DECREF(__pyx_t_7); __pyx_t_7 = 0;
       if (__pyx_t_2) {
 
-        /* "worker/operator_state/aria/_aria_state.pyx":341
+        /* "worker/operator_state/aria/_aria_state.pyx":357
  *         for tid in list(op_dict.keys()):
  *             if tid in global_logic_aborts:
  *                 del op_dict[tid]             # <<<<<<<<<<<<<<
@@ -7821,14 +8034,14 @@ static void __pyx_f_6worker_14operator_state_4aria_11_aria_state_remove_aborted_
 */
         if (unlikely(__pyx_v_op_dict == Py_None)) {
           PyErr_SetString(PyExc_TypeError, "'NoneType' object is not subscriptable");
-          __PYX_ERR(0, 341, __pyx_L1_error)
+          __PYX_ERR(0, 357, __pyx_L1_error)
         }
-        __pyx_t_7 = __Pyx_PyLong_From_int(__pyx_v_tid); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 341, __pyx_L1_error)
+        __pyx_t_7 = __Pyx_PyLong_From_int(__pyx_v_tid); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 357, __pyx_L1_error)
         __Pyx_GOTREF(__pyx_t_7);
-        if (unlikely((PyDict_DelItem(__pyx_v_op_dict, __pyx_t_7) < 0))) __PYX_ERR(0, 341, __pyx_L1_error)
+        if (unlikely((PyDict_DelItem(__pyx_v_op_dict, __pyx_t_7) < 0))) __PYX_ERR(0, 357, __pyx_L1_error)
         __Pyx_DECREF(__pyx_t_7); __pyx_t_7 = 0;
 
-        /* "worker/operator_state/aria/_aria_state.pyx":340
+        /* "worker/operator_state/aria/_aria_state.pyx":356
  *         op_dict = <dict>read_sets[op_part]
  *         for tid in list(op_dict.keys()):
  *             if tid in global_logic_aborts:             # <<<<<<<<<<<<<<
@@ -7837,7 +8050,7 @@ static void __pyx_f_6worker_14operator_state_4aria_11_aria_state_remove_aborted_
 */
       }
 
-      /* "worker/operator_state/aria/_aria_state.pyx":339
+      /* "worker/operator_state/aria/_aria_state.pyx":355
  *     for op_part in operator_partitions:
  *         op_dict = <dict>read_sets[op_part]
  *         for tid in list(op_dict.keys()):             # <<<<<<<<<<<<<<
@@ -7847,7 +8060,7 @@ static void __pyx_f_6worker_14operator_state_4aria_11_aria_state_remove_aborted_
     }
     __Pyx_DECREF(__pyx_t_9); __pyx_t_9 = 0;
 
-    /* "worker/operator_state/aria/_aria_state.pyx":343
+    /* "worker/operator_state/aria/_aria_state.pyx":359
  *                 del op_dict[tid]
  * 
  *         op_dict = <dict>write_sets[op_part]             # <<<<<<<<<<<<<<
@@ -7856,9 +8069,9 @@ static void __pyx_f_6worker_14operator_state_4aria_11_aria_state_remove_aborted_
 */
     if (unlikely(__pyx_v_write_sets == Py_None)) {
       PyErr_SetString(PyExc_TypeError, "'NoneType' object is not subscriptable");
-      __PYX_ERR(0, 343, __pyx_L1_error)
+      __PYX_ERR(0, 359, __pyx_L1_error)
     }
-    __pyx_t_9 = __Pyx_PyDict_GetItem(__pyx_v_write_sets, __pyx_v_op_part); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 343, __pyx_L1_error)
+    __pyx_t_9 = __Pyx_PyDict_GetItem(__pyx_v_write_sets, __pyx_v_op_part); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 359, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_9);
     __pyx_t_7 = __pyx_t_9;
     __Pyx_INCREF(__pyx_t_7);
@@ -7866,7 +8079,7 @@ static void __pyx_f_6worker_14operator_state_4aria_11_aria_state_remove_aborted_
     __Pyx_DECREF_SET(__pyx_v_op_dict, ((PyObject*)__pyx_t_7));
     __pyx_t_7 = 0;
 
-    /* "worker/operator_state/aria/_aria_state.pyx":344
+    /* "worker/operator_state/aria/_aria_state.pyx":360
  * 
  *         op_dict = <dict>write_sets[op_part]
  *         for tid in list(op_dict.keys()):             # <<<<<<<<<<<<<<
@@ -7875,11 +8088,11 @@ static void __pyx_f_6worker_14operator_state_4aria_11_aria_state_remove_aborted_
 */
     if (unlikely(__pyx_v_op_dict == Py_None)) {
       PyErr_Format(PyExc_AttributeError, "'NoneType' object has no attribute '%.30s'", "keys");
-      __PYX_ERR(0, 344, __pyx_L1_error)
+      __PYX_ERR(0, 360, __pyx_L1_error)
     }
-    __pyx_t_7 = __Pyx_PyDict_Keys(__pyx_v_op_dict); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 344, __pyx_L1_error)
+    __pyx_t_7 = __Pyx_PyDict_Keys(__pyx_v_op_dict); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 360, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_7);
-    __pyx_t_9 = __Pyx_PySequence_ListKeepNew(__pyx_t_7); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 344, __pyx_L1_error)
+    __pyx_t_9 = __Pyx_PySequence_ListKeepNew(__pyx_t_7); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 360, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_9);
     __Pyx_DECREF(__pyx_t_7); __pyx_t_7 = 0;
     __pyx_t_7 = __pyx_t_9; __Pyx_INCREF(__pyx_t_7);
@@ -7889,36 +8102,36 @@ static void __pyx_f_6worker_14operator_state_4aria_11_aria_state_remove_aborted_
       {
         Py_ssize_t __pyx_temp = __Pyx_PyList_GET_SIZE(__pyx_t_7);
         #if !CYTHON_ASSUME_SAFE_SIZE
-        if (unlikely((__pyx_temp < 0))) __PYX_ERR(0, 344, __pyx_L1_error)
+        if (unlikely((__pyx_temp < 0))) __PYX_ERR(0, 360, __pyx_L1_error)
         #endif
         if (__pyx_t_10 >= __pyx_temp) break;
       }
       __pyx_t_9 = __Pyx_PyList_GetItemRefFast(__pyx_t_7, __pyx_t_10, __Pyx_ReferenceSharing_OwnStrongReference);
       ++__pyx_t_10;
-      if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 344, __pyx_L1_error)
+      if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 360, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_9);
-      __pyx_t_8 = __Pyx_PyLong_As_int(__pyx_t_9); if (unlikely((__pyx_t_8 == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 344, __pyx_L1_error)
+      __pyx_t_8 = __Pyx_PyLong_As_int(__pyx_t_9); if (unlikely((__pyx_t_8 == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 360, __pyx_L1_error)
       __Pyx_DECREF(__pyx_t_9); __pyx_t_9 = 0;
       __pyx_v_tid = __pyx_t_8;
 
-      /* "worker/operator_state/aria/_aria_state.pyx":345
+      /* "worker/operator_state/aria/_aria_state.pyx":361
  *         op_dict = <dict>write_sets[op_part]
  *         for tid in list(op_dict.keys()):
  *             if tid in global_logic_aborts:             # <<<<<<<<<<<<<<
  *                 del op_dict[tid]
  * 
 */
-      __pyx_t_9 = __Pyx_PyLong_From_int(__pyx_v_tid); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 345, __pyx_L1_error)
+      __pyx_t_9 = __Pyx_PyLong_From_int(__pyx_v_tid); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 361, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_9);
       if (unlikely(__pyx_v_global_logic_aborts == Py_None)) {
         PyErr_SetString(PyExc_TypeError, "'NoneType' object is not iterable");
-        __PYX_ERR(0, 345, __pyx_L1_error)
+        __PYX_ERR(0, 361, __pyx_L1_error)
       }
-      __pyx_t_2 = (__Pyx_PySet_ContainsTF(__pyx_t_9, __pyx_v_global_logic_aborts, Py_EQ)); if (unlikely((__pyx_t_2 < 0))) __PYX_ERR(0, 345, __pyx_L1_error)
+      __pyx_t_2 = (__Pyx_PySet_ContainsTF(__pyx_t_9, __pyx_v_global_logic_aborts, Py_EQ)); if (unlikely((__pyx_t_2 < 0))) __PYX_ERR(0, 361, __pyx_L1_error)
       __Pyx_DECREF(__pyx_t_9); __pyx_t_9 = 0;
       if (__pyx_t_2) {
 
-        /* "worker/operator_state/aria/_aria_state.pyx":346
+        /* "worker/operator_state/aria/_aria_state.pyx":362
  *         for tid in list(op_dict.keys()):
  *             if tid in global_logic_aborts:
  *                 del op_dict[tid]             # <<<<<<<<<<<<<<
@@ -7927,14 +8140,14 @@ static void __pyx_f_6worker_14operator_state_4aria_11_aria_state_remove_aborted_
 */
         if (unlikely(__pyx_v_op_dict == Py_None)) {
           PyErr_SetString(PyExc_TypeError, "'NoneType' object is not subscriptable");
-          __PYX_ERR(0, 346, __pyx_L1_error)
+          __PYX_ERR(0, 362, __pyx_L1_error)
         }
-        __pyx_t_9 = __Pyx_PyLong_From_int(__pyx_v_tid); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 346, __pyx_L1_error)
+        __pyx_t_9 = __Pyx_PyLong_From_int(__pyx_v_tid); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 362, __pyx_L1_error)
         __Pyx_GOTREF(__pyx_t_9);
-        if (unlikely((PyDict_DelItem(__pyx_v_op_dict, __pyx_t_9) < 0))) __PYX_ERR(0, 346, __pyx_L1_error)
+        if (unlikely((PyDict_DelItem(__pyx_v_op_dict, __pyx_t_9) < 0))) __PYX_ERR(0, 362, __pyx_L1_error)
         __Pyx_DECREF(__pyx_t_9); __pyx_t_9 = 0;
 
-        /* "worker/operator_state/aria/_aria_state.pyx":345
+        /* "worker/operator_state/aria/_aria_state.pyx":361
  *         op_dict = <dict>write_sets[op_part]
  *         for tid in list(op_dict.keys()):
  *             if tid in global_logic_aborts:             # <<<<<<<<<<<<<<
@@ -7943,7 +8156,7 @@ static void __pyx_f_6worker_14operator_state_4aria_11_aria_state_remove_aborted_
 */
       }
 
-      /* "worker/operator_state/aria/_aria_state.pyx":344
+      /* "worker/operator_state/aria/_aria_state.pyx":360
  * 
  *         op_dict = <dict>write_sets[op_part]
  *         for tid in list(op_dict.keys()):             # <<<<<<<<<<<<<<
@@ -7953,7 +8166,7 @@ static void __pyx_f_6worker_14operator_state_4aria_11_aria_state_remove_aborted_
     }
     __Pyx_DECREF(__pyx_t_7); __pyx_t_7 = 0;
 
-    /* "worker/operator_state/aria/_aria_state.pyx":348
+    /* "worker/operator_state/aria/_aria_state.pyx":364
  *                 del op_dict[tid]
  * 
  *         op_dict = <dict>reads[op_part]             # <<<<<<<<<<<<<<
@@ -7962,9 +8175,9 @@ static void __pyx_f_6worker_14operator_state_4aria_11_aria_state_remove_aborted_
 */
     if (unlikely(__pyx_v_reads == Py_None)) {
       PyErr_SetString(PyExc_TypeError, "'NoneType' object is not subscriptable");
-      __PYX_ERR(0, 348, __pyx_L1_error)
+      __PYX_ERR(0, 364, __pyx_L1_error)
     }
-    __pyx_t_7 = __Pyx_PyDict_GetItem(__pyx_v_reads, __pyx_v_op_part); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 348, __pyx_L1_error)
+    __pyx_t_7 = __Pyx_PyDict_GetItem(__pyx_v_reads, __pyx_v_op_part); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 364, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_7);
     __pyx_t_9 = __pyx_t_7;
     __Pyx_INCREF(__pyx_t_9);
@@ -7972,7 +8185,7 @@ static void __pyx_f_6worker_14operator_state_4aria_11_aria_state_remove_aborted_
     __Pyx_DECREF_SET(__pyx_v_op_dict, ((PyObject*)__pyx_t_9));
     __pyx_t_9 = 0;
 
-    /* "worker/operator_state/aria/_aria_state.pyx":349
+    /* "worker/operator_state/aria/_aria_state.pyx":365
  * 
  *         op_dict = <dict>reads[op_part]
  *         for key in op_dict:             # <<<<<<<<<<<<<<
@@ -7982,9 +8195,9 @@ static void __pyx_f_6worker_14operator_state_4aria_11_aria_state_remove_aborted_
     __pyx_t_10 = 0;
     if (unlikely(__pyx_v_op_dict == Py_None)) {
       PyErr_SetString(PyExc_TypeError, "'NoneType' object is not iterable");
-      __PYX_ERR(0, 349, __pyx_L1_error)
+      __PYX_ERR(0, 365, __pyx_L1_error)
     }
-    __pyx_t_7 = __Pyx_dict_iterator(__pyx_v_op_dict, 1, ((PyObject *)NULL), (&__pyx_t_11), (&__pyx_t_8)); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 349, __pyx_L1_error)
+    __pyx_t_7 = __Pyx_dict_iterator(__pyx_v_op_dict, 1, ((PyObject *)NULL), (&__pyx_t_11), (&__pyx_t_8)); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 365, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_7);
     __Pyx_XDECREF(__pyx_t_9);
     __pyx_t_9 = __pyx_t_7;
@@ -7992,12 +8205,12 @@ static void __pyx_f_6worker_14operator_state_4aria_11_aria_state_remove_aborted_
     while (1) {
       __pyx_t_12 = __Pyx_dict_iter_next(__pyx_t_9, __pyx_t_11, &__pyx_t_10, &__pyx_t_7, NULL, NULL, __pyx_t_8);
       if (unlikely(__pyx_t_12 == 0)) break;
-      if (unlikely(__pyx_t_12 == -1)) __PYX_ERR(0, 349, __pyx_L1_error)
+      if (unlikely(__pyx_t_12 == -1)) __PYX_ERR(0, 365, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_7);
       __Pyx_XDECREF_SET(__pyx_v_key, __pyx_t_7);
       __pyx_t_7 = 0;
 
-      /* "worker/operator_state/aria/_aria_state.pyx":350
+      /* "worker/operator_state/aria/_aria_state.pyx":366
  *         op_dict = <dict>reads[op_part]
  *         for key in op_dict:
  *             t_ids = <list>op_dict[key]             # <<<<<<<<<<<<<<
@@ -8006,9 +8219,9 @@ static void __pyx_f_6worker_14operator_state_4aria_11_aria_state_remove_aborted_
 */
       if (unlikely(__pyx_v_op_dict == Py_None)) {
         PyErr_SetString(PyExc_TypeError, "'NoneType' object is not subscriptable");
-        __PYX_ERR(0, 350, __pyx_L1_error)
+        __PYX_ERR(0, 366, __pyx_L1_error)
       }
-      __pyx_t_7 = __Pyx_PyDict_GetItem(__pyx_v_op_dict, __pyx_v_key); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 350, __pyx_L1_error)
+      __pyx_t_7 = __Pyx_PyDict_GetItem(__pyx_v_op_dict, __pyx_v_key); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 366, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_7);
       __pyx_t_13 = __pyx_t_7;
       __Pyx_INCREF(__pyx_t_13);
@@ -8016,7 +8229,7 @@ static void __pyx_f_6worker_14operator_state_4aria_11_aria_state_remove_aborted_
       __Pyx_XDECREF_SET(__pyx_v_t_ids, ((PyObject*)__pyx_t_13));
       __pyx_t_13 = 0;
 
-      /* "worker/operator_state/aria/_aria_state.pyx":351
+      /* "worker/operator_state/aria/_aria_state.pyx":367
  *         for key in op_dict:
  *             t_ids = <list>op_dict[key]
  *             new_tids = [tid for tid in t_ids if tid not in global_logic_aborts]             # <<<<<<<<<<<<<<
@@ -8024,11 +8237,11 @@ static void __pyx_f_6worker_14operator_state_4aria_11_aria_state_remove_aborted_
  * 
 */
       { /* enter inner scope */
-        __pyx_t_13 = PyList_New(0); if (unlikely(!__pyx_t_13)) __PYX_ERR(0, 351, __pyx_L1_error)
+        __pyx_t_13 = PyList_New(0); if (unlikely(!__pyx_t_13)) __PYX_ERR(0, 367, __pyx_L1_error)
         __Pyx_GOTREF(__pyx_t_13);
         if (unlikely(__pyx_v_t_ids == Py_None)) {
           PyErr_SetString(PyExc_TypeError, "'NoneType' object is not iterable");
-          __PYX_ERR(0, 351, __pyx_L1_error)
+          __PYX_ERR(0, 367, __pyx_L1_error)
         }
         __pyx_t_7 = __pyx_v_t_ids; __Pyx_INCREF(__pyx_t_7);
         __pyx_t_14 = 0;
@@ -8036,29 +8249,29 @@ static void __pyx_f_6worker_14operator_state_4aria_11_aria_state_remove_aborted_
           {
             Py_ssize_t __pyx_temp = __Pyx_PyList_GET_SIZE(__pyx_t_7);
             #if !CYTHON_ASSUME_SAFE_SIZE
-            if (unlikely((__pyx_temp < 0))) __PYX_ERR(0, 351, __pyx_L1_error)
+            if (unlikely((__pyx_temp < 0))) __PYX_ERR(0, 367, __pyx_L1_error)
             #endif
             if (__pyx_t_14 >= __pyx_temp) break;
           }
           __pyx_t_15 = __Pyx_PyList_GetItemRefFast(__pyx_t_7, __pyx_t_14, __Pyx_ReferenceSharing_OwnStrongReference);
           ++__pyx_t_14;
-          if (unlikely(!__pyx_t_15)) __PYX_ERR(0, 351, __pyx_L1_error)
+          if (unlikely(!__pyx_t_15)) __PYX_ERR(0, 367, __pyx_L1_error)
           __Pyx_GOTREF(__pyx_t_15);
-          __pyx_t_12 = __Pyx_PyLong_As_int(__pyx_t_15); if (unlikely((__pyx_t_12 == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 351, __pyx_L1_error)
+          __pyx_t_12 = __Pyx_PyLong_As_int(__pyx_t_15); if (unlikely((__pyx_t_12 == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 367, __pyx_L1_error)
           __Pyx_DECREF(__pyx_t_15); __pyx_t_15 = 0;
           __pyx_7genexpr__pyx_v_tid = __pyx_t_12;
-          __pyx_t_15 = __Pyx_PyLong_From_int(__pyx_7genexpr__pyx_v_tid); if (unlikely(!__pyx_t_15)) __PYX_ERR(0, 351, __pyx_L1_error)
+          __pyx_t_15 = __Pyx_PyLong_From_int(__pyx_7genexpr__pyx_v_tid); if (unlikely(!__pyx_t_15)) __PYX_ERR(0, 367, __pyx_L1_error)
           __Pyx_GOTREF(__pyx_t_15);
           if (unlikely(__pyx_v_global_logic_aborts == Py_None)) {
             PyErr_SetString(PyExc_TypeError, "'NoneType' object is not iterable");
-            __PYX_ERR(0, 351, __pyx_L1_error)
+            __PYX_ERR(0, 367, __pyx_L1_error)
           }
-          __pyx_t_2 = (__Pyx_PySet_ContainsTF(__pyx_t_15, __pyx_v_global_logic_aborts, Py_NE)); if (unlikely((__pyx_t_2 < 0))) __PYX_ERR(0, 351, __pyx_L1_error)
+          __pyx_t_2 = (__Pyx_PySet_ContainsTF(__pyx_t_15, __pyx_v_global_logic_aborts, Py_NE)); if (unlikely((__pyx_t_2 < 0))) __PYX_ERR(0, 367, __pyx_L1_error)
           __Pyx_DECREF(__pyx_t_15); __pyx_t_15 = 0;
           if (__pyx_t_2) {
-            __pyx_t_15 = __Pyx_PyLong_From_int(__pyx_7genexpr__pyx_v_tid); if (unlikely(!__pyx_t_15)) __PYX_ERR(0, 351, __pyx_L1_error)
+            __pyx_t_15 = __Pyx_PyLong_From_int(__pyx_7genexpr__pyx_v_tid); if (unlikely(!__pyx_t_15)) __PYX_ERR(0, 367, __pyx_L1_error)
             __Pyx_GOTREF(__pyx_t_15);
-            if (unlikely(__Pyx_ListComp_Append(__pyx_t_13, (PyObject*)__pyx_t_15))) __PYX_ERR(0, 351, __pyx_L1_error)
+            if (unlikely(__Pyx_ListComp_Append(__pyx_t_13, (PyObject*)__pyx_t_15))) __PYX_ERR(0, 367, __pyx_L1_error)
             __Pyx_DECREF(__pyx_t_15); __pyx_t_15 = 0;
           }
         }
@@ -8067,7 +8280,7 @@ static void __pyx_f_6worker_14operator_state_4aria_11_aria_state_remove_aborted_
       __Pyx_XDECREF_SET(__pyx_v_new_tids, ((PyObject*)__pyx_t_13));
       __pyx_t_13 = 0;
 
-      /* "worker/operator_state/aria/_aria_state.pyx":352
+      /* "worker/operator_state/aria/_aria_state.pyx":368
  *             t_ids = <list>op_dict[key]
  *             new_tids = [tid for tid in t_ids if tid not in global_logic_aborts]
  *             op_dict[key] = new_tids             # <<<<<<<<<<<<<<
@@ -8076,13 +8289,13 @@ static void __pyx_f_6worker_14operator_state_4aria_11_aria_state_remove_aborted_
 */
       if (unlikely(__pyx_v_op_dict == Py_None)) {
         PyErr_SetString(PyExc_TypeError, "'NoneType' object is not subscriptable");
-        __PYX_ERR(0, 352, __pyx_L1_error)
+        __PYX_ERR(0, 368, __pyx_L1_error)
       }
-      if (unlikely((PyDict_SetItem(__pyx_v_op_dict, __pyx_v_key, __pyx_v_new_tids) < 0))) __PYX_ERR(0, 352, __pyx_L1_error)
+      if (unlikely((PyDict_SetItem(__pyx_v_op_dict, __pyx_v_key, __pyx_v_new_tids) < 0))) __PYX_ERR(0, 368, __pyx_L1_error)
     }
     __Pyx_DECREF(__pyx_t_9); __pyx_t_9 = 0;
 
-    /* "worker/operator_state/aria/_aria_state.pyx":354
+    /* "worker/operator_state/aria/_aria_state.pyx":370
  *             op_dict[key] = new_tids
  * 
  *         op_dict = <dict>writes_dict[op_part]             # <<<<<<<<<<<<<<
@@ -8091,9 +8304,9 @@ static void __pyx_f_6worker_14operator_state_4aria_11_aria_state_remove_aborted_
 */
     if (unlikely(__pyx_v_writes_dict == Py_None)) {
       PyErr_SetString(PyExc_TypeError, "'NoneType' object is not subscriptable");
-      __PYX_ERR(0, 354, __pyx_L1_error)
+      __PYX_ERR(0, 370, __pyx_L1_error)
     }
-    __pyx_t_9 = __Pyx_PyDict_GetItem(__pyx_v_writes_dict, __pyx_v_op_part); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 354, __pyx_L1_error)
+    __pyx_t_9 = __Pyx_PyDict_GetItem(__pyx_v_writes_dict, __pyx_v_op_part); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 370, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_9);
     __pyx_t_13 = __pyx_t_9;
     __Pyx_INCREF(__pyx_t_13);
@@ -8101,7 +8314,7 @@ static void __pyx_f_6worker_14operator_state_4aria_11_aria_state_remove_aborted_
     __Pyx_DECREF_SET(__pyx_v_op_dict, ((PyObject*)__pyx_t_13));
     __pyx_t_13 = 0;
 
-    /* "worker/operator_state/aria/_aria_state.pyx":355
+    /* "worker/operator_state/aria/_aria_state.pyx":371
  * 
  *         op_dict = <dict>writes_dict[op_part]
  *         for key in op_dict:             # <<<<<<<<<<<<<<
@@ -8111,9 +8324,9 @@ static void __pyx_f_6worker_14operator_state_4aria_11_aria_state_remove_aborted_
     __pyx_t_11 = 0;
     if (unlikely(__pyx_v_op_dict == Py_None)) {
       PyErr_SetString(PyExc_TypeError, "'NoneType' object is not iterable");
-      __PYX_ERR(0, 355, __pyx_L1_error)
+      __PYX_ERR(0, 371, __pyx_L1_error)
     }
-    __pyx_t_9 = __Pyx_dict_iterator(__pyx_v_op_dict, 1, ((PyObject *)NULL), (&__pyx_t_10), (&__pyx_t_8)); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 355, __pyx_L1_error)
+    __pyx_t_9 = __Pyx_dict_iterator(__pyx_v_op_dict, 1, ((PyObject *)NULL), (&__pyx_t_10), (&__pyx_t_8)); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 371, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_9);
     __Pyx_XDECREF(__pyx_t_13);
     __pyx_t_13 = __pyx_t_9;
@@ -8121,12 +8334,12 @@ static void __pyx_f_6worker_14operator_state_4aria_11_aria_state_remove_aborted_
     while (1) {
       __pyx_t_12 = __Pyx_dict_iter_next(__pyx_t_13, __pyx_t_10, &__pyx_t_11, &__pyx_t_9, NULL, NULL, __pyx_t_8);
       if (unlikely(__pyx_t_12 == 0)) break;
-      if (unlikely(__pyx_t_12 == -1)) __PYX_ERR(0, 355, __pyx_L1_error)
+      if (unlikely(__pyx_t_12 == -1)) __PYX_ERR(0, 371, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_9);
       __Pyx_XDECREF_SET(__pyx_v_key, __pyx_t_9);
       __pyx_t_9 = 0;
 
-      /* "worker/operator_state/aria/_aria_state.pyx":356
+      /* "worker/operator_state/aria/_aria_state.pyx":372
  *         op_dict = <dict>writes_dict[op_part]
  *         for key in op_dict:
  *             t_ids = <list>op_dict[key]             # <<<<<<<<<<<<<<
@@ -8135,9 +8348,9 @@ static void __pyx_f_6worker_14operator_state_4aria_11_aria_state_remove_aborted_
 */
       if (unlikely(__pyx_v_op_dict == Py_None)) {
         PyErr_SetString(PyExc_TypeError, "'NoneType' object is not subscriptable");
-        __PYX_ERR(0, 356, __pyx_L1_error)
+        __PYX_ERR(0, 372, __pyx_L1_error)
       }
-      __pyx_t_9 = __Pyx_PyDict_GetItem(__pyx_v_op_dict, __pyx_v_key); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 356, __pyx_L1_error)
+      __pyx_t_9 = __Pyx_PyDict_GetItem(__pyx_v_op_dict, __pyx_v_key); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 372, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_9);
       __pyx_t_7 = __pyx_t_9;
       __Pyx_INCREF(__pyx_t_7);
@@ -8145,18 +8358,18 @@ static void __pyx_f_6worker_14operator_state_4aria_11_aria_state_remove_aborted_
       __Pyx_XDECREF_SET(__pyx_v_t_ids, ((PyObject*)__pyx_t_7));
       __pyx_t_7 = 0;
 
-      /* "worker/operator_state/aria/_aria_state.pyx":357
+      /* "worker/operator_state/aria/_aria_state.pyx":373
  *         for key in op_dict:
  *             t_ids = <list>op_dict[key]
  *             new_tids = [tid for tid in t_ids if tid not in global_logic_aborts]             # <<<<<<<<<<<<<<
  *             op_dict[key] = new_tids
 */
       { /* enter inner scope */
-        __pyx_t_7 = PyList_New(0); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 357, __pyx_L1_error)
+        __pyx_t_7 = PyList_New(0); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 373, __pyx_L1_error)
         __Pyx_GOTREF(__pyx_t_7);
         if (unlikely(__pyx_v_t_ids == Py_None)) {
           PyErr_SetString(PyExc_TypeError, "'NoneType' object is not iterable");
-          __PYX_ERR(0, 357, __pyx_L1_error)
+          __PYX_ERR(0, 373, __pyx_L1_error)
         }
         __pyx_t_9 = __pyx_v_t_ids; __Pyx_INCREF(__pyx_t_9);
         __pyx_t_14 = 0;
@@ -8164,29 +8377,29 @@ static void __pyx_f_6worker_14operator_state_4aria_11_aria_state_remove_aborted_
           {
             Py_ssize_t __pyx_temp = __Pyx_PyList_GET_SIZE(__pyx_t_9);
             #if !CYTHON_ASSUME_SAFE_SIZE
-            if (unlikely((__pyx_temp < 0))) __PYX_ERR(0, 357, __pyx_L1_error)
+            if (unlikely((__pyx_temp < 0))) __PYX_ERR(0, 373, __pyx_L1_error)
             #endif
             if (__pyx_t_14 >= __pyx_temp) break;
           }
           __pyx_t_15 = __Pyx_PyList_GetItemRefFast(__pyx_t_9, __pyx_t_14, __Pyx_ReferenceSharing_OwnStrongReference);
           ++__pyx_t_14;
-          if (unlikely(!__pyx_t_15)) __PYX_ERR(0, 357, __pyx_L1_error)
+          if (unlikely(!__pyx_t_15)) __PYX_ERR(0, 373, __pyx_L1_error)
           __Pyx_GOTREF(__pyx_t_15);
-          __pyx_t_12 = __Pyx_PyLong_As_int(__pyx_t_15); if (unlikely((__pyx_t_12 == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 357, __pyx_L1_error)
+          __pyx_t_12 = __Pyx_PyLong_As_int(__pyx_t_15); if (unlikely((__pyx_t_12 == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 373, __pyx_L1_error)
           __Pyx_DECREF(__pyx_t_15); __pyx_t_15 = 0;
           __pyx_8genexpr1__pyx_v_tid = __pyx_t_12;
-          __pyx_t_15 = __Pyx_PyLong_From_int(__pyx_8genexpr1__pyx_v_tid); if (unlikely(!__pyx_t_15)) __PYX_ERR(0, 357, __pyx_L1_error)
+          __pyx_t_15 = __Pyx_PyLong_From_int(__pyx_8genexpr1__pyx_v_tid); if (unlikely(!__pyx_t_15)) __PYX_ERR(0, 373, __pyx_L1_error)
           __Pyx_GOTREF(__pyx_t_15);
           if (unlikely(__pyx_v_global_logic_aborts == Py_None)) {
             PyErr_SetString(PyExc_TypeError, "'NoneType' object is not iterable");
-            __PYX_ERR(0, 357, __pyx_L1_error)
+            __PYX_ERR(0, 373, __pyx_L1_error)
           }
-          __pyx_t_2 = (__Pyx_PySet_ContainsTF(__pyx_t_15, __pyx_v_global_logic_aborts, Py_NE)); if (unlikely((__pyx_t_2 < 0))) __PYX_ERR(0, 357, __pyx_L1_error)
+          __pyx_t_2 = (__Pyx_PySet_ContainsTF(__pyx_t_15, __pyx_v_global_logic_aborts, Py_NE)); if (unlikely((__pyx_t_2 < 0))) __PYX_ERR(0, 373, __pyx_L1_error)
           __Pyx_DECREF(__pyx_t_15); __pyx_t_15 = 0;
           if (__pyx_t_2) {
-            __pyx_t_15 = __Pyx_PyLong_From_int(__pyx_8genexpr1__pyx_v_tid); if (unlikely(!__pyx_t_15)) __PYX_ERR(0, 357, __pyx_L1_error)
+            __pyx_t_15 = __Pyx_PyLong_From_int(__pyx_8genexpr1__pyx_v_tid); if (unlikely(!__pyx_t_15)) __PYX_ERR(0, 373, __pyx_L1_error)
             __Pyx_GOTREF(__pyx_t_15);
-            if (unlikely(__Pyx_ListComp_Append(__pyx_t_7, (PyObject*)__pyx_t_15))) __PYX_ERR(0, 357, __pyx_L1_error)
+            if (unlikely(__Pyx_ListComp_Append(__pyx_t_7, (PyObject*)__pyx_t_15))) __PYX_ERR(0, 373, __pyx_L1_error)
             __Pyx_DECREF(__pyx_t_15); __pyx_t_15 = 0;
           }
         }
@@ -8195,22 +8408,22 @@ static void __pyx_f_6worker_14operator_state_4aria_11_aria_state_remove_aborted_
       __Pyx_XDECREF_SET(__pyx_v_new_tids, ((PyObject*)__pyx_t_7));
       __pyx_t_7 = 0;
 
-      /* "worker/operator_state/aria/_aria_state.pyx":358
+      /* "worker/operator_state/aria/_aria_state.pyx":374
  *             t_ids = <list>op_dict[key]
  *             new_tids = [tid for tid in t_ids if tid not in global_logic_aborts]
  *             op_dict[key] = new_tids             # <<<<<<<<<<<<<<
 */
       if (unlikely(__pyx_v_op_dict == Py_None)) {
         PyErr_SetString(PyExc_TypeError, "'NoneType' object is not subscriptable");
-        __PYX_ERR(0, 358, __pyx_L1_error)
+        __PYX_ERR(0, 374, __pyx_L1_error)
       }
-      if (unlikely((PyDict_SetItem(__pyx_v_op_dict, __pyx_v_key, __pyx_v_new_tids) < 0))) __PYX_ERR(0, 358, __pyx_L1_error)
+      if (unlikely((PyDict_SetItem(__pyx_v_op_dict, __pyx_v_key, __pyx_v_new_tids) < 0))) __PYX_ERR(0, 374, __pyx_L1_error)
     }
     __Pyx_DECREF(__pyx_t_13); __pyx_t_13 = 0;
   }
   __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
 
-  /* "worker/operator_state/aria/_aria_state.pyx":318
+  /* "worker/operator_state/aria/_aria_state.pyx":334
  * 
  * 
  * cpdef void remove_aborted_from_rw_sets(             # <<<<<<<<<<<<<<
@@ -8281,56 +8494,56 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   {
     PyObject ** const __pyx_pyargnames[] = {&__pyx_mstate_global->__pyx_n_u_operator_partitions,&__pyx_mstate_global->__pyx_n_u_read_sets,&__pyx_mstate_global->__pyx_n_u_write_sets,&__pyx_mstate_global->__pyx_n_u_reads,&__pyx_mstate_global->__pyx_n_u_writes_dict,&__pyx_mstate_global->__pyx_n_u_global_logic_aborts,0};
     const Py_ssize_t __pyx_kwds_len = (__pyx_kwds) ? __Pyx_NumKwargs_FASTCALL(__pyx_kwds) : 0;
-    if (unlikely(__pyx_kwds_len) < 0) __PYX_ERR(0, 318, __pyx_L3_error)
+    if (unlikely(__pyx_kwds_len) < 0) __PYX_ERR(0, 334, __pyx_L3_error)
     if (__pyx_kwds_len > 0) {
       switch (__pyx_nargs) {
         case  6:
         values[5] = __Pyx_ArgRef_FASTCALL(__pyx_args, 5);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[5])) __PYX_ERR(0, 318, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[5])) __PYX_ERR(0, 334, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  5:
         values[4] = __Pyx_ArgRef_FASTCALL(__pyx_args, 4);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[4])) __PYX_ERR(0, 318, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[4])) __PYX_ERR(0, 334, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  4:
         values[3] = __Pyx_ArgRef_FASTCALL(__pyx_args, 3);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[3])) __PYX_ERR(0, 318, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[3])) __PYX_ERR(0, 334, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  3:
         values[2] = __Pyx_ArgRef_FASTCALL(__pyx_args, 2);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 318, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 334, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  2:
         values[1] = __Pyx_ArgRef_FASTCALL(__pyx_args, 1);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 318, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 334, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  1:
         values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 318, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 334, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  0: break;
         default: goto __pyx_L5_argtuple_error;
       }
       const Py_ssize_t kwd_pos_args = __pyx_nargs;
-      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "remove_aborted_from_rw_sets", 0) < (0)) __PYX_ERR(0, 318, __pyx_L3_error)
+      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "remove_aborted_from_rw_sets", 0) < (0)) __PYX_ERR(0, 334, __pyx_L3_error)
       for (Py_ssize_t i = __pyx_nargs; i < 6; i++) {
-        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("remove_aborted_from_rw_sets", 1, 6, 6, i); __PYX_ERR(0, 318, __pyx_L3_error) }
+        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("remove_aborted_from_rw_sets", 1, 6, 6, i); __PYX_ERR(0, 334, __pyx_L3_error) }
       }
     } else if (unlikely(__pyx_nargs != 6)) {
       goto __pyx_L5_argtuple_error;
     } else {
       values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 318, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 334, __pyx_L3_error)
       values[1] = __Pyx_ArgRef_FASTCALL(__pyx_args, 1);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 318, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 334, __pyx_L3_error)
       values[2] = __Pyx_ArgRef_FASTCALL(__pyx_args, 2);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 318, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[2])) __PYX_ERR(0, 334, __pyx_L3_error)
       values[3] = __Pyx_ArgRef_FASTCALL(__pyx_args, 3);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[3])) __PYX_ERR(0, 318, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[3])) __PYX_ERR(0, 334, __pyx_L3_error)
       values[4] = __Pyx_ArgRef_FASTCALL(__pyx_args, 4);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[4])) __PYX_ERR(0, 318, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[4])) __PYX_ERR(0, 334, __pyx_L3_error)
       values[5] = __Pyx_ArgRef_FASTCALL(__pyx_args, 5);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[5])) __PYX_ERR(0, 318, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[5])) __PYX_ERR(0, 334, __pyx_L3_error)
     }
     __pyx_v_operator_partitions = ((PyObject*)values[0]);
     __pyx_v_read_sets = ((PyObject*)values[1]);
@@ -8341,7 +8554,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   }
   goto __pyx_L6_skip;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("remove_aborted_from_rw_sets", 1, 6, 6, __pyx_nargs); __PYX_ERR(0, 318, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("remove_aborted_from_rw_sets", 1, 6, 6, __pyx_nargs); __PYX_ERR(0, 334, __pyx_L3_error)
   __pyx_L6_skip:;
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L3_error:;
@@ -8352,12 +8565,12 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   __Pyx_RefNannyFinishContext();
   return NULL;
   __pyx_L4_argument_unpacking_done:;
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_operator_partitions), (&PySet_Type), 1, "operator_partitions", 1))) __PYX_ERR(0, 319, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_read_sets), (&PyDict_Type), 1, "read_sets", 1))) __PYX_ERR(0, 320, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_write_sets), (&PyDict_Type), 1, "write_sets", 1))) __PYX_ERR(0, 321, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_reads), (&PyDict_Type), 1, "reads", 1))) __PYX_ERR(0, 322, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_writes_dict), (&PyDict_Type), 1, "writes_dict", 1))) __PYX_ERR(0, 323, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_global_logic_aborts), (&PySet_Type), 1, "global_logic_aborts", 1))) __PYX_ERR(0, 324, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_operator_partitions), (&PySet_Type), 1, "operator_partitions", 1))) __PYX_ERR(0, 335, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_read_sets), (&PyDict_Type), 1, "read_sets", 1))) __PYX_ERR(0, 336, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_write_sets), (&PyDict_Type), 1, "write_sets", 1))) __PYX_ERR(0, 337, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_reads), (&PyDict_Type), 1, "reads", 1))) __PYX_ERR(0, 338, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_writes_dict), (&PyDict_Type), 1, "writes_dict", 1))) __PYX_ERR(0, 339, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_global_logic_aborts), (&PySet_Type), 1, "global_logic_aborts", 1))) __PYX_ERR(0, 340, __pyx_L1_error)
   __pyx_r = __pyx_pf_6worker_14operator_state_4aria_11_aria_state_22remove_aborted_from_rw_sets(__pyx_self, __pyx_v_operator_partitions, __pyx_v_read_sets, __pyx_v_write_sets, __pyx_v_reads, __pyx_v_writes_dict, __pyx_v_global_logic_aborts);
 
   /* function exit code */
@@ -8386,8 +8599,8 @@ static PyObject *__pyx_pf_6worker_14operator_state_4aria_11_aria_state_22remove_
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("remove_aborted_from_rw_sets", 0);
   __Pyx_XDECREF(__pyx_r);
-  __pyx_f_6worker_14operator_state_4aria_11_aria_state_remove_aborted_from_rw_sets(__pyx_v_operator_partitions, __pyx_v_read_sets, __pyx_v_write_sets, __pyx_v_reads, __pyx_v_writes_dict, __pyx_v_global_logic_aborts, 1); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 318, __pyx_L1_error)
-  __pyx_t_1 = __Pyx_void_to_None(NULL); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 318, __pyx_L1_error)
+  __pyx_f_6worker_14operator_state_4aria_11_aria_state_remove_aborted_from_rw_sets(__pyx_v_operator_partitions, __pyx_v_read_sets, __pyx_v_write_sets, __pyx_v_reads, __pyx_v_writes_dict, __pyx_v_global_logic_aborts, 1); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 334, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_void_to_None(NULL); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 334, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __pyx_r = __pyx_t_1;
   __pyx_t_1 = 0;
@@ -8855,112 +9068,113 @@ __Pyx_RefNannySetupContext("PyInit__aria_state", 0);
   #if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x030E0000
   PyUnstable_Object_EnableDeferredRefcount(__pyx_t_2);
   #endif
+  __Pyx_CyFunction_SetDefaultsTuple(__pyx_t_2, __pyx_mstate_global->__pyx_tuple[0]);
   if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_state_get_immediate, __pyx_t_2) < (0)) __PYX_ERR(0, 149, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
 
-  /* "worker/operator_state/aria/_aria_state.pyx":170
+  /* "worker/operator_state/aria/_aria_state.pyx":186
  * 
  * 
  * cpdef set commit(             # <<<<<<<<<<<<<<
  *     dict write_sets,
  *     dict data,
 */
-  __pyx_t_2 = __Pyx_CyFunction_New(&__pyx_mdef_6worker_14operator_state_4aria_11_aria_state_11commit, 0, __pyx_mstate_global->__pyx_n_u_commit, NULL, __pyx_mstate_global->__pyx_n_u_worker_operator_state_aria__aria, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[5])); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 170, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_CyFunction_New(&__pyx_mdef_6worker_14operator_state_4aria_11_aria_state_11commit, 0, __pyx_mstate_global->__pyx_n_u_commit, NULL, __pyx_mstate_global->__pyx_n_u_worker_operator_state_aria__aria, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[5])); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 186, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   #if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x030E0000
   PyUnstable_Object_EnableDeferredRefcount(__pyx_t_2);
   #endif
-  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_commit, __pyx_t_2) < (0)) __PYX_ERR(0, 170, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_commit, __pyx_t_2) < (0)) __PYX_ERR(0, 186, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
 
-  /* "worker/operator_state/aria/_aria_state.pyx":198
+  /* "worker/operator_state/aria/_aria_state.pyx":214
  * # ---------------------------------------------------------------------------
  * 
  * cpdef bint has_conflicts(int t_id, object keys, dict reservations):             # <<<<<<<<<<<<<<
  *     """Return True if any key in *keys* has a reservation with a lower t_id."""
  *     cdef object key
 */
-  __pyx_t_2 = __Pyx_CyFunction_New(&__pyx_mdef_6worker_14operator_state_4aria_11_aria_state_13has_conflicts, 0, __pyx_mstate_global->__pyx_n_u_has_conflicts, NULL, __pyx_mstate_global->__pyx_n_u_worker_operator_state_aria__aria, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[6])); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 198, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_CyFunction_New(&__pyx_mdef_6worker_14operator_state_4aria_11_aria_state_13has_conflicts, 0, __pyx_mstate_global->__pyx_n_u_has_conflicts, NULL, __pyx_mstate_global->__pyx_n_u_worker_operator_state_aria__aria, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[6])); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 214, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   #if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x030E0000
   PyUnstable_Object_EnableDeferredRefcount(__pyx_t_2);
   #endif
-  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_has_conflicts, __pyx_t_2) < (0)) __PYX_ERR(0, 198, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_has_conflicts, __pyx_t_2) < (0)) __PYX_ERR(0, 214, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
 
-  /* "worker/operator_state/aria/_aria_state.pyx":210
+  /* "worker/operator_state/aria/_aria_state.pyx":226
  * 
  * 
  * cpdef dict min_rw_reservations(dict reservations):             # <<<<<<<<<<<<<<
  *     """For each (operator_partition -> key -> [t_ids]), compute the minimum t_id."""
  *     cdef dict result = {}
 */
-  __pyx_t_2 = __Pyx_CyFunction_New(&__pyx_mdef_6worker_14operator_state_4aria_11_aria_state_15min_rw_reservations, 0, __pyx_mstate_global->__pyx_n_u_min_rw_reservations, NULL, __pyx_mstate_global->__pyx_n_u_worker_operator_state_aria__aria, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[7])); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 210, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_CyFunction_New(&__pyx_mdef_6worker_14operator_state_4aria_11_aria_state_15min_rw_reservations, 0, __pyx_mstate_global->__pyx_n_u_min_rw_reservations, NULL, __pyx_mstate_global->__pyx_n_u_worker_operator_state_aria__aria, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[7])); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 226, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   #if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x030E0000
   PyUnstable_Object_EnableDeferredRefcount(__pyx_t_2);
   #endif
-  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_min_rw_reservations, __pyx_t_2) < (0)) __PYX_ERR(0, 210, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_min_rw_reservations, __pyx_t_2) < (0)) __PYX_ERR(0, 226, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
 
-  /* "worker/operator_state/aria/_aria_state.pyx":227
+  /* "worker/operator_state/aria/_aria_state.pyx":243
  * 
  * 
  * cpdef set check_conflicts(dict write_sets, dict read_sets, dict writes):             # <<<<<<<<<<<<<<
  *     """Default Aria conflict detection (serializability)."""
  *     cdef set aborted = set()
 */
-  __pyx_t_2 = __Pyx_CyFunction_New(&__pyx_mdef_6worker_14operator_state_4aria_11_aria_state_17check_conflicts, 0, __pyx_mstate_global->__pyx_n_u_check_conflicts, NULL, __pyx_mstate_global->__pyx_n_u_worker_operator_state_aria__aria, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[8])); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 227, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_CyFunction_New(&__pyx_mdef_6worker_14operator_state_4aria_11_aria_state_17check_conflicts, 0, __pyx_mstate_global->__pyx_n_u_check_conflicts, NULL, __pyx_mstate_global->__pyx_n_u_worker_operator_state_aria__aria, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[8])); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 243, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   #if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x030E0000
   PyUnstable_Object_EnableDeferredRefcount(__pyx_t_2);
   #endif
-  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_check_conflicts, __pyx_t_2) < (0)) __PYX_ERR(0, 227, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_check_conflicts, __pyx_t_2) < (0)) __PYX_ERR(0, 243, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
 
-  /* "worker/operator_state/aria/_aria_state.pyx":253
+  /* "worker/operator_state/aria/_aria_state.pyx":269
  * 
  * 
  * cpdef set check_conflicts_snapshot_isolation(dict write_sets, dict writes):             # <<<<<<<<<<<<<<
  *     """Snapshot-isolation conflict detection (WAW only)."""
  *     cdef set aborted = set()
 */
-  __pyx_t_2 = __Pyx_CyFunction_New(&__pyx_mdef_6worker_14operator_state_4aria_11_aria_state_19check_conflicts_snapshot_isolation, 0, __pyx_mstate_global->__pyx_n_u_check_conflicts_snapshot_isolati, NULL, __pyx_mstate_global->__pyx_n_u_worker_operator_state_aria__aria, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[9])); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 253, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_CyFunction_New(&__pyx_mdef_6worker_14operator_state_4aria_11_aria_state_19check_conflicts_snapshot_isolation, 0, __pyx_mstate_global->__pyx_n_u_check_conflicts_snapshot_isolati, NULL, __pyx_mstate_global->__pyx_n_u_worker_operator_state_aria__aria, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[9])); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 269, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   #if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x030E0000
   PyUnstable_Object_EnableDeferredRefcount(__pyx_t_2);
   #endif
-  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_check_conflicts_snapshot_isolati, __pyx_t_2) < (0)) __PYX_ERR(0, 253, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_check_conflicts_snapshot_isolati, __pyx_t_2) < (0)) __PYX_ERR(0, 269, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
 
-  /* "worker/operator_state/aria/_aria_state.pyx":275
+  /* "worker/operator_state/aria/_aria_state.pyx":291
  * 
  * 
  * cpdef set check_conflicts_deterministic_reordering(             # <<<<<<<<<<<<<<
  *     dict write_sets,
  *     dict read_sets,
 */
-  __pyx_t_2 = __Pyx_CyFunction_New(&__pyx_mdef_6worker_14operator_state_4aria_11_aria_state_21check_conflicts_deterministic_reordering, 0, __pyx_mstate_global->__pyx_n_u_check_conflicts_deterministic_re, NULL, __pyx_mstate_global->__pyx_n_u_worker_operator_state_aria__aria, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[10])); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 275, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_CyFunction_New(&__pyx_mdef_6worker_14operator_state_4aria_11_aria_state_21check_conflicts_deterministic_reordering, 0, __pyx_mstate_global->__pyx_n_u_check_conflicts_deterministic_re, NULL, __pyx_mstate_global->__pyx_n_u_worker_operator_state_aria__aria, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[10])); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 291, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   #if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x030E0000
   PyUnstable_Object_EnableDeferredRefcount(__pyx_t_2);
   #endif
-  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_check_conflicts_deterministic_re, __pyx_t_2) < (0)) __PYX_ERR(0, 275, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_check_conflicts_deterministic_re, __pyx_t_2) < (0)) __PYX_ERR(0, 291, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
 
-  /* "worker/operator_state/aria/_aria_state.pyx":318
+  /* "worker/operator_state/aria/_aria_state.pyx":334
  * 
  * 
  * cpdef void remove_aborted_from_rw_sets(             # <<<<<<<<<<<<<<
  *     set operator_partitions,
  *     dict read_sets,
 */
-  __pyx_t_2 = __Pyx_CyFunction_New(&__pyx_mdef_6worker_14operator_state_4aria_11_aria_state_23remove_aborted_from_rw_sets, 0, __pyx_mstate_global->__pyx_n_u_remove_aborted_from_rw_sets, NULL, __pyx_mstate_global->__pyx_n_u_worker_operator_state_aria__aria, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[11])); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 318, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_CyFunction_New(&__pyx_mdef_6worker_14operator_state_4aria_11_aria_state_23remove_aborted_from_rw_sets, 0, __pyx_mstate_global->__pyx_n_u_remove_aborted_from_rw_sets, NULL, __pyx_mstate_global->__pyx_n_u_worker_operator_state_aria__aria, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[11])); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 334, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   #if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x030E0000
   PyUnstable_Object_EnableDeferredRefcount(__pyx_t_2);
   #endif
-  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_remove_aborted_from_rw_sets, __pyx_t_2) < (0)) __PYX_ERR(0, 318, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_remove_aborted_from_rw_sets, __pyx_t_2) < (0)) __PYX_ERR(0, 334, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
 
   /* "worker/operator_state/aria/_aria_state.pyx":1
@@ -9010,7 +9224,7 @@ __Pyx_RefNannySetupContext("PyInit__aria_state", 0);
 
 static int __Pyx_InitCachedBuiltins(__pyx_mstatetype *__pyx_mstate) {
   CYTHON_UNUSED_VAR(__pyx_mstate);
-  __pyx_builtin_min = __Pyx_GetBuiltinName(__pyx_mstate->__pyx_n_u_min); if (!__pyx_builtin_min) __PYX_ERR(0, 222, __pyx_L1_error)
+  __pyx_builtin_min = __Pyx_GetBuiltinName(__pyx_mstate->__pyx_n_u_min); if (!__pyx_builtin_min) __PYX_ERR(0, 238, __pyx_L1_error)
 
   /* Cached unbound methods */
   __pyx_mstate->__pyx_umethod_PyDict_Type_get.type = (PyObject*)&PyDict_Type;
@@ -9035,47 +9249,80 @@ static int __Pyx_InitCachedConstants(__pyx_mstatetype *__pyx_mstate) {
   __Pyx_RefNannyDeclarations
   CYTHON_UNUSED_VAR(__pyx_mstate);
   __Pyx_RefNannySetupContext("__Pyx_InitCachedConstants", 0);
+
+  /* "worker/operator_state/aria/_aria_state.pyx":149
+ * 
+ * 
+ * cpdef object state_get_immediate(             # <<<<<<<<<<<<<<
+ *     dict data,
+ *     object fallback_commit_buffer,
+*/
+  __pyx_mstate_global->__pyx_tuple[0] = PyTuple_Pack(1, Py_None); if (unlikely(!__pyx_mstate_global->__pyx_tuple[0])) __PYX_ERR(0, 149, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_mstate_global->__pyx_tuple[0]);
+  __Pyx_GIVEREF(__pyx_mstate_global->__pyx_tuple[0]);
+  #if CYTHON_IMMORTAL_CONSTANTS
+  {
+    PyObject **table = __pyx_mstate->__pyx_tuple;
+    for (Py_ssize_t i=0; i<1; ++i) {
+      #if CYTHON_COMPILING_IN_CPYTHON_FREETHREADING
+      #if PY_VERSION_HEX < 0x030E0000
+      if (_Py_IsOwnedByCurrentThread(table[i]) && Py_REFCNT(table[i]) == 1)
+      #else
+      if (PyUnstable_Object_IsUniquelyReferenced(table[i]))
+      #endif
+      {
+        Py_SET_REFCNT(table[i], _Py_IMMORTAL_REFCNT_LOCAL);
+      }
+      #else
+      Py_SET_REFCNT(table[i], _Py_IMMORTAL_INITIAL_REFCNT);
+      #endif
+    }
+  }
+  #endif
   __Pyx_RefNannyFinishContext();
   return 0;
+  __pyx_L1_error:;
+  __Pyx_RefNannyFinishContext();
+  return -1;
 }
 /* #### Code section: init_constants ### */
 
 static int __Pyx_InitConstants(__pyx_mstatetype *__pyx_mstate) {
   CYTHON_UNUSED_VAR(__pyx_mstate);
   {
-    const struct { const unsigned int length: 8; } index[] = {{1},{179},{1},{8},{42},{20},{19},{18},{15},{40},{34},{17},{18},{6},{4},{15},{9},{22},{14},{13},{8},{3},{19},{16},{12},{17},{13},{13},{5},{3},{4},{8},{3},{19},{10},{8},{13},{18},{19},{9},{3},{14},{12},{9},{5},{27},{12},{12},{10},{9},{19},{9},{4},{8},{6},{5},{6},{38},{37},{10},{6},{11},{237},{109},{153},{115},{189},{91},{108},{53},{76},{229},{106},{109}};
-    #if (CYTHON_COMPRESS_STRINGS) == 3 && __PYX_LIMITED_VERSION_HEX >= 0x030e0000 /* compression: zstd (1311 bytes) */
-const char* const cstring = "(\265/\375`\002\t\255(\000v\373\310: \263\033\000\234 (GP\023\014\320\200\365\324\256\272\322\353\200\212\343\333\316H\333l3u\36499\255|\264\275\354\356:\206\273E\367\251*\027y7S\267v\317\252\225\357\272\337\006\257\000\255\000\301\000\242\305\0211M\334\030\325\247\026[:\213en_\314u\r\237\266\246\317\231\0351?\265\354\316p\014\317\301/\026%\007\003cmN\316lY\215\233\317\253\201\371\345\333\236\332\324\032'\30695\016\333q\274%-\274\311\253\202o\371\314#\310\262)\263-u\346\227\353\262\274,\220\343\r\226\230\306\3675A\315\301\021\343\022Du\016\234\265\200\255\215\315\034\007\313\314\311\214\312\300\231\0067\336\373\222\242\014\335\340\346\"\276\301'8\226\027|\205\2742`R`\300\362\304\\\314'\337`\216\304\374\236X\226I<\202;\203\245\246\361\334\t\310/\215\203\230\353\227V\273p\264~:\221n#b\0271ZC\377@\n\241z\"\037.\346\321\266Z\255\215\222\3676\232\250\265\326\216y\304\265Z\266\234DG\234\3057\362\2426k9j\232\332\334\231\237\327\254\335\322b\022\035\365\355\304\033wZkw\016\343l\273\363\2764\314\363\211\303\333n\033M\3124ic\305\022\235Y\2333\265hb<Z\276\357\314\236x6Ce\326\222\344\235\231\267f/\337\343\245\361\214\263\344\305\343\345w\344\271V\323\"\216xeX\274g\2665\3143\3076\326\222zg\3135m\233\267\334'\036O-f\276s\231k'\346x\264\344\254\324\001\246\236\300\257\270\337E\365mW\205A#\220\000\220\355'C\267\325\234\033\3665\035\366\375\024\317\322\340\257*\240\336\370\210>\220\272\277f\344W\242\357\341W\272\313\365\303O\220\020z\207\021O\344\343J\013F\253\310\333\024v\177u\236}\314\247<C\250\216_\340\333|FG\235\326/a\205y\227\347}\225\260\332\376\353\317x\230\347I\021N9\177=\205o\350\337i\205u\226\364dZc\037\366O\276\242\243L\253H\265}\326j\247\352_\213\237u\223N\223\032\350P5\377\330\037\3613\235\243\007\364\004\323\032\252\237z\321\260\373\350\n\246\025\246\272T\014\207\235JO\231VW/H\007H!U/\246\203\351^a\256\264`\304\372\r9\032\3372\300\275\204N\265R/V\273\325\267\212\000T<\304W}\235\256\n\377\004)t`rp\375\002\227\353gE7\322\311\250\267_\372(~tb\371\323%\361Vz\252\26420\020""\372\235\355K\336\246\233Q!\302\2240\324\251\250\247/q\352\331\274\tJvUI\344\031B\273\325\254\347\366\016\232\276\320E\013\324\016eS\257J\241\216\251\377\341Q\236\204\367\251\"\265\342\177\237$\354;}\245\005\245\025)$\320\273)\023/6\362\370\274H\304B\320\213\2510U$b\204z\225o\000C\377yV\377x.\037z\020U\332\221r\237\322\210\227\323\030\357v\\z\323\003\264\333\322\223\024\3651\221B\001\200\352\25019\202\206\206FR\220\224\024\n\215\001 \204\030\204\354\314\003\242\352 5\004\032\023\2320AR\220\242\372\224\2261\347\225E\231\324\272\231p\373\271s\336\340\372\255\364*P\311\356l\212\344x\245\216.\014E\001u\266K\264\205Vs\004\257h\350\332\010f\313\321\333@\217\035\314V\035\241\213d\342\255\220^VJ\351g\n\325\344\303\270\230n%\266\315^\261(\3038\375J\234\217[\351*\370\313SR6\333j\351]'\272\326\013\020%I\344b\322\215/\372\313 \203\311\203\030\022\353f!B\034xc\274C\242\332\246\021\207h\341\031\312\324\342\324\223zh\314c\326\215<7L\322\254j\000B\340>&i\234\000\032IRB\343E\257\220\227(=h\033\264\000`\223=`\365 \332\253<\030\t\212\300\311%G\000?\274\346J\200\370\321v\276\277s\013e\365\321@W\322\005\251 \033\014;\313\240\320&`\227\246\304j\372\264\r\332\200\343\037\004\2254 g\001\0025\230\257\305O\204\032\261\325\262\244\037.pv\3147\324\301\0140|Ns\3355\220\202%d\346\030\241\r\250\312@\355\016\223\236Y\213\373\357\250\337\302Y\211\217J}\223\215\203\250\343\312\303u2!P\3001\314]D\034\315S\221\306W+Xl|\021\006K\321o,\0337\026\312\3079\225:Q\201\341T\005p\361\247\320\373\025\340\266Q\227\352T\236S\021\352\031\230-\361g\355q1\326\200\256\003\267h\275\376\tu-\252\032\252\376\324\3158\026\221\347\013\036\376\333d\264NI\246\367@\364J\313\226\347\032\315\240\211C\214&\215>q\223Q\177\315\251-1\003\265G~\300\032\356L\216P\261d\301/\n\244\313y`t ]H\372/Pb\326A1\224E\302\206\330\221/\350\257\204rX\r";
-    PyObject *data = __Pyx_DecompressString(cstring, 1311, 3);
+    const struct { const unsigned int length: 8; } index[] = {{1},{179},{1},{8},{42},{20},{19},{18},{15},{40},{34},{17},{18},{6},{4},{15},{9},{22},{18},{14},{13},{8},{3},{19},{16},{12},{17},{13},{13},{5},{3},{4},{8},{3},{19},{10},{8},{13},{18},{19},{9},{3},{14},{12},{9},{5},{27},{12},{12},{10},{9},{19},{9},{4},{8},{6},{5},{6},{38},{37},{10},{6},{11},{237},{109},{153},{171},{115},{189},{108},{53},{76},{229},{106},{109}};
+    #if (CYTHON_COMPRESS_STRINGS) == 3 && __PYX_LIMITED_VERSION_HEX >= 0x030e0000 /* compression: zstd (1371 bytes) */
+const char* const cstring = "(\265/\375`d\t\215*\000\246}\320: \225\033\000\034\266(\017\024\020\024\200\241\365\324\256\272\322\353`b\332Uf\304n\326cEGr\245t\t&\366\250\002P\353.W\203\335\343FP\200\337*^\002\360\030\235\005\344\004\266\000\266\000\312\000a\346;\227\231\206EK\216\245\016mO\210g\341\306\250>u\330\3229,o\373\322\360ii\372\034\255\210\371\251ew\3045\374\007\317X\226\033\r\215\265?7\263e=n>\257\007\337\366\324\246\3668q\317\251m\330\212\342Mi\341M^\027\354\223\317,~\031;e\266\245\316\374r]\2267\343\343x\177%\236\361}\315O\363O\304\270\374P}\373\306\230\257\265\261y\343_\2319\231Q\3317\352o\343\275/\031\312\320\375m\036b\036|~by\277W\311\253\203\246\205\346+O\314\303|\362\375\335H\314\357\211e\231\304\342\267\363W\352\031\277\255|\374\316\370\207\271\236i\005]\205Z]\335 %0\001\254v1\034\014\367\002s`i\365p$\334\307Dn\242\264\202>\302\004\260\260#\021\3610\213\266\325jm\224\274>\242\211Zk\255\230EL\243e\313IT\264Y\354C^\264f-GMS\233;\363\363\232\264[ZL\242\242\3669\361\266\235\326\332}\303=\333\356\274\357\014\363|\332\266\r\363\216&-ye\232\334\261a\211\216\326\336L\035\232\030\213\226\357;\342mO<\216\250\314Z\222\274\243yi\366\362-\336\031\3176K^,^~E\236i4\035\366\204W\206\303{r[fK\303<s\274c-\251w\266\\\317\266y\313}b\361\324\001c_yk\254[\364\335\220kH\255\"\251A\206\2078\345P&\200\201\035\354\333\2762QL\000 \354\300#\321h\300\250V\324\201\333\352O\354\373`\257\323a\336o\3610\017\376\252\003*\217\237\350\004\252\373uJ\236E\372\"\376\245\273\\\037\374\005\n\240\207(\351HD\256\324\240\264\222|\215a\367W\347\331\307\274\312;\200\252\370\007~\315w\364\205\324\352)\2540\357\362\274\263\024\326\332\177}\034\017\363BiB\352\346\257\277\360\017\335K\255\260\016\223\246Pk\354\303~\312c\364\005\324JRk?\203\225[u/\306\217]\245\347\244\0078T\315?\366O<N\007\351\002]\001\265\202\252\247n<\344F:\003j\205\251.\225\003\"\347\022\256\324\240\224\361\037n9>\206\200\373\n\334\212\245n\260r,o%\005\270x\211\277\372@}\005~\013\023\n\002\366]\337\300\345*z\301\225p6\252\317?}\026_\372\327\307\274I\367""\322U\257\376B@\000\372\240\355O\276\206\303Q%\300\026\020\304\271\250\251_\221\332\325\274\nJ\366\325\211\344\035\000r\013\030\337\373(\340\353\304\272*\224.V\022\361<\211\004S\2603\231(\241~\345\037>\320{>\243{:\227\007=\311\212\3474\246\273\335\226\336\024\001\205v\324n\340c\334/\243\252\251W\275\030\361\013\036\005\246\216C\267\207\304r\272\327\3034D%\251\032\013\271Z\272\222\242D\247\222.\246\232(R\272\353m\375\366\225\202\356\252\376M\200\371\25015\202\306fD$-H\251\320\0300\204\030\204\314\316\003r\372\0365D\232\032\232`\302\004\005II}J\313\0307\346\213\241(u\205\260\365\003\361<\3025\256\344\030\002]\273c\246 \2176\352\030\300\035\024\320v4\310\341\026\332\027\311\235\022\242\307\372\341\373\033`\270\331\250j\314{\347$\310(yr\233W\3503\235~\351\023\t\340#*\343\022j\213\277\202\267\363\305\363s\246c\006_\177\"\313\350\266\224\371\317\020>k)4\2368\211\006\246m\207\302\363\203\021evSk\210\272\r\330HP.\014\342\032\252e\235`i\213\214\234\211\260\005\tmi\230\212\276\026\345\233\367(\030B\350X\270J\030\001>\001\240!\302\206\004\374l\374~\"\356\004hcY\353Z\206zEA06a\276\311\320\224A\201{\336\306\354\361\224->%\274|\272H\331\260\375.y\266\205\301\037\201\32676e\357b\316\357\206\260\347\305_\034\277\246\245S4A\004\370*\002M\301\016,\320]nQ\316\330\323\207\037\333\000\024\tN\217\303\311\270\200\302\n\000\365`z\353'\222\253mPY\302\010*\230\356\300\020u5k\023|\233]\375\032\326\230\034\271tD\351\003J\033\250\270#N\317\254\355\376g\3407\304W\302\3622\\\336\306)\352\223\362nO\035:w-g6\243\245\2300\003Iy\260\202\313\220\027\361s\\\204C\315\252$\224.\341\\K\201h\375q\346\027v\006\360PkWv\336t\260TA\331\250\262\326\257\200*e\341Q\306\tZa\275\031\277\010\242y\216?}\345\371\252I\3317\245\266\263\017\003\217\365s>\021\014%\026zH\230\213[\003\n\2039\274\355\304\261\363F\333\217>\033&|\236\254\340\031t#y\017\353\340\356\016\302\322\001=A\254\367D\272\t\n\322y\007\014\246pe\255m\310\227s2U\220C\024Fa\23587*\250\251\204\306O\r";
+    PyObject *data = __Pyx_DecompressString(cstring, 1371, 3);
     if (unlikely(!data)) __PYX_ERR(0, 1, __pyx_L1_error)
     const char* const bytes = __Pyx_PyBytes_AsString(data);
     #if !CYTHON_ASSUME_SAFE_MACROS
     if (likely(bytes)); else { Py_DECREF(data); __PYX_ERR(0, 1, __pyx_L1_error) }
     #endif
-    #elif (CYTHON_COMPRESS_STRINGS) == 2 /* compression: bz2 (1392 bytes) */
-const char* const cstring = "BZh91AY&SY\034\330$\257\000\001\024\377\377\377\377\377\376\355\353\377\361\277\361y\240\277\377\377\373@@@@@@@@@@@@@\000@\000P\005L6`\312*\222\030\003\002I\t\024\332\231\033\0104\214\324\321\247\206\224\310h\300M6\246\206F\324\032h\320210\232x\215\006\220J \t\242`\2012\247\265O(z\2151\014L\021\210\032\031\014\203 444\321\223jz2#\t\020\2054\224\363*{\"\237\251\232\247\251\345\036\241\240\032\000\000\000\000\000\000\001\240\320\r\016\000\001\240\000h\014\200\000\001\240\0004\320\000\000\000\001\240\007\000\000\320\0004\006@\000\000\320\000\032h\000\000\000\000\320\t\227]vW\223\232\023/\341B\035\206\211\246\364W\262Z\\\245\261\316-\2637*{\000\321+\205\306LLm\261\201\004\254\032\301\021\325\3102\377\270\205\376\335X\270gB\334\032\030\320\306\223m\266!\214[P\306\225\325\366^\014\302\224\312SE\322\025\220J\315\001Ml\344bmIt\212I\260%\032\014\030\r\323C\216\002\326+$j\311,\213\021\t\200\350\202\007\202\214\305[y \031\035PD\215\032\225\004\210\025\022PzS\322\301\244\240\304\240\331\270\026\272\335\002CJu\346\325\216,\356*\333\2263\241e\362w\241n\005\253\273\267\272D\211R\325\360\246\241\246\254\027\004\330?\t\207\217:\233\006B\210\211'(p\322\201\003\312\242\245\226\374\315\271%\344\351\332\273\343\214)\343\236\343\311\350\206\226gD#I\252\241\024\272\310\352\222\\N\310k\333\365$\220\272\363\224\027m4vTM\212\347h\220(\r\305\270\244\221\270&\025*P\310{0.\306N\t\212\213\030p\014Y\210PX\264@\272Y\376KIr\313q\003lho,\3032\\\360M\221\027&Zx\267\367\003|\034\375M==\264\354\333}\256QogUg?s3&\030\312\333\221|\235\242\343\210\352W#'\030\2301\027]\366[g\025\255\201\031\252\275\225\324V\253\t\013Uk\212p#T\366\036K\200\241\372\305\211k\221\213\036W{\210\310\031}\037n\247h6\2568RK\225,K]\246\364Lr\265\261[\207\211-\275\210\316dr\220\340\220s\320\033O-\336\3346\033\334k\177g\r\025\267\244\352rO\033Fn(i\024\325Q\021P\302mj\232j4\315\204\306\344\263C\244\256\202_\230=\355Uj\243\003?\240\216iz\206D.f\354\321\3347\274\234\244\177\252\310\260x\301e\006\304v\204\331\265\234I\276\340k)1\206\265~""\265\"\301\210*\271\311\277CoG\212\3335\372\252\333\351pR\345\003\216I\014\373\332\023\0336&F\244j\342\327n\235\250-\226\353\277_\262oF2y[\221'\262E\260\"\220\305\207\254\320\3354\231H2\264\"\230\350\275\007&l1\236\200\265\316\020\337\213sbI\330\363\227)jz\364U\031\\\234,LT4\374\255\353\232k\272r\316\244\301A\254\262L\014\303\352\013$\312d/6D`*\025]_\246ok\212d\022\032\221\246\342R{\227\263-\243r\\\270Vf\312$\263-Mm\362jb\315\343H\232\315\253\275r\316D\232l\356\031:\021\234]\010J3\206\377\036\251\226=(\3068\221\231G`@Y90e\030\315\006\275t\363^mxQ\313\311\005\033\271\300\271w\303\262\247G\301h\025*@\0325\220\2324s\361/\315\235\320\344l\272\212\225?\025\325\214\340\003\343\0069\021\250\315cZM\354\271\314R\016m\301\232uP\221\001E\215\022\223\036%&\350(A\210Mg(\303\343C\0040L-\342\260\254\3343]\265f\324\305\260K\013\020\2604\030\030\231f\375c\212_\021\206v\224\030:\030{V\216\216}#\177\307\301j\262\366\003e\253\3460IN\362z\027\3050\313Q-qHC\"\200\265\020|\203Yo#\220\272\234/\246\210\311K\031\231k%\\\246\312\365\226\300\312\263\0175h\025\234(\014l\233&\006\002\262=\352\017\034\344\036\363\346sr&r\240\306\033\206b\321\305\264\345\370X\213@prl9\233\021\311\206\031\223\226P\316Y5?[\360x\346L\2163\\\3059\t'\327\355b,[!\007t\360I Q\340yH\306\306L\262\201\212c\271\373\253\032\342\245\337?\255\020\3058\r\252\006\354e4\267O\273\272l\231\355U\343\311\033\306\205\217\000\343@\251\032\252m\222sq\314|\354r\343Y\250\321\327\310V\231\3725j\005v\215\024\217Z\242U\370\021\221\016\242R:\272_P\016\033\212\331P\215\303\221AQT\374\346\220\3621\334\321\306\253q\312\347\2547x\332\016\214\313\206&,\365<\317\315'\337\233\230%\315^\242i\247\223\036\032\246i\022\326.\231\243\334\231\332\310\323\222\245\346^\351HWL\323/\036\311\347D\225\315\310\346\252\307\025\347\005\361x,\255\006\025\352\326\202ib\327 \263\n\252\250\"\367\253\305X\265\341\343\003\250\"\025aY\271p\355J\312\370W,\026\035\022\356Z13,\362\032\206\337\376.\344\212p\241 9\260I^";
-    PyObject *data = __Pyx_DecompressString(cstring, 1392, 2);
+    #elif (CYTHON_COMPRESS_STRINGS) == 2 /* compression: bz2 (1442 bytes) */
+const char* const cstring = "BZh91AY&SYV\275\303\335\000\001$\177\377\377\377\377\377\355\353\377\361\277\361}\240\277\377\377\373@@@@@@@@@@@@@\000@\000P\005\2302\320h\241B6\200\200\222(\204j\003G\244\036\241\350\323I\352o\023E\r4\321\264\324\321\265\036\246\201\243CM\003C\324=F\215\251\352\031<\220J L\232j4\324h\322h\304\000\000\000\320\000\000\000\000\006\203C&\206\200$D\021\004\303Hjm&\251\372Q\345\017M&\000\021\220\3654\006\0200\010h\302i\203 \322y\016\000\000\000\001\240\000\000\000\r\006\200\000\000\001\220\006\200\001\300\000\000\0004\000\000\000\001\240\320\000\000\0002\000\320\000\333\216vb\364\356u\333\311N\234\260\265\234\375\317\326\356\035\325\365\237a\020}\214o\353R\300u\016\371\337i\211\215\2660 \225sr\021\027\360\030\204w\364\363\013\377\335X\270g\022\32041\241\215&\333lC\030\271\304\306\225\225\267\332\014\005 \312)\241d%{ \242\302\002\251\255\347C\023jK\205\332UI\214\n#Y\201\200q\032\334\034ejS0j\305,J\221\t\200\256\0300Z\207\021H<\205\364\206\302!l&\025\225\330\324\230V@\254\212\203\322\311\334\3220bLl\234\031\254\245#\010\021[74u\377V\226\216~\217;\335\245\236\3556\325\240\357\313\216\356\215\023\026\266l\227P\\\210|k\204\006T\236vI'\201\307\013*\222\224*\177\356\315\010V\202\320\233\036\214=\215\274c\213\223\223\255xs\235Dx\031\363$FCOC\243\216P\205\321\n\321\036\002U\204\352\206\277\257\362\222B\313\322S%\233M\035z\223B\235\206\211A@3\254\352I\033\202aQQ\021\021\324\270\277\024\234s\024\212\227p\014X\020\240\251X\201y\031\275\332\311b\2538\206\330\320\335\361\030\314Wb\n\321\242,L\264\357^\364\r\361\366>\255\177?=\035[o\362\343\025\376yS1\3350d\303\031G\201\\\034\305G\021\365S\241\223\321y\202\361\215\343\271\032\264\367\265M\2143\r\3264\347(\253\010\213]\027\0315\021\252o\036GQ&\236\272\230\227\334\214Z\215\376\206\251x1\363xU\273\021\324\326}\253\007\271iZ\251\277bYn\231\273\326TXuz\027,.\262:HpP\034\320m8x\232| \336qp[w\362P\247?\216\3518\246_\234gK\r\3439\263\027\0326\3432\315\371\226\374`\304\236-<\264\301\322\313f\340\375|\331\271\263\300rs\252I\261\205\341-f\276H""\357\326\007\222\214M5eL\0360X\301\265\016\311LXD\314\223\355\0072x\220pu\340\313\301\002n\224_Ns\253\313\364j\323\243\207\343t\327\243XQt\240\341$\206}Z\323\0337\246F\204e\315\272\2775h\025\307K\267W|\332\206XT\321D\261\350\300\325b\352\331A\371$:\306\363qh\320+\254\271v\"\213\217i\226<\241[.@\333\025\353^I\336\363\026(\262{\265R\2066&\352\363\024\206\237\352\342\261\257F\274p\344f \301\254\244X\030G\326\024\213'x\300fT0\025\n\355\263bl\362\352K\302CX\2153\226|zvF\355D\361k{t\034{\205\207\033\3153\263\tYG`\336.\0078x\356Y\320\223M\235\246N\240\314.\244%\031\221\267\206S,u\326\213\30720Q\370\010\n\247%\314b\370A\273u\036\026\232\2735\035=\020P\323\231\005\213>M\364\307=l\363\206f\254\022L[\025%+\222\331\307\311Kv\2725\347k5r|\331c`+{E\022\224\314\261\255$\366Z\346)\0076\320\303*\346D\200\242\3254\234\207\2119:\n\252\220b\022YF\250t\320\271\013\222\353\372\264,3\2146\345S*B\320J\024B\201\222\\c\030\362~X\342x*\030d4\2316\217\252\355\355\361\321\310\3047\352\370,\357\0260\027\210\230Us'\266}\265\335L2\326K`SP\302\312\025\304\036p\361/\2320\030\364\005\263h`6\r\265\352\007\306\327\254vZ\330\327\2605\333d\237\307\245v\340T\031\355\236\331\277z\276@@\241\200wA\3456M\354\t\235Sb\223\214\307\313\364nz\035{\203-Z\035\030=.\315\226\351\206\031\223\255\022\233\300\272\322|oC\000\354\231\031\246\301P\300N6\275{\263*_\010_\r\351\304&u\350\010\206\253U2\353\203\021\217\277\232\252\334\304\243\3167\032h\304\220\2154\013\265\210\200\272{\037\r\363wM\345\2570\204\306\372\026\257\327\034\260\244\254\245>\004\355+\005\206\263\207\246bl\025\232]~\242\323h5+\326\017#J\210\316\372\210\257\346%&\017\021\032\340\303\005`>\370\227\364\214\221\234de\007IE\3345H\t\007\336\222@\266~g\357\333\032\241\266\037\355,E*vh\252%\253%\036Yw\232b\360\360\024\013\231\362RQ\032\246B\314\357\032\224\371\034\373\033W5\361\326_\237o\245\202\316\336\355D\262N\321+\257\326sH\245N{M\313\332\320UV\013\253R\265\202h\257[\020U\205)JVI\264\322\321J\225\264;\334t\202\034*]U\271p\355Z\221d\356\254T*:\022K\213\025""\213\317\357\241Fv\331\r\277\274]\311\024\341BAZ\367\017t";
+    PyObject *data = __Pyx_DecompressString(cstring, 1442, 2);
     if (unlikely(!data)) __PYX_ERR(0, 1, __pyx_L1_error)
     const char* const bytes = __Pyx_PyBytes_AsString(data);
     #if !CYTHON_ASSUME_SAFE_MACROS
     if (likely(bytes)); else { Py_DECREF(data); __PYX_ERR(0, 1, __pyx_L1_error) }
     #endif
-    #elif (CYTHON_COMPRESS_STRINGS) != 0 /* compression: zlib (1299 bytes) */
-const char* const cstring = "x\332\275TMo\333F\020\265Z\331\226c5\261\024W\212\323\030!\321\300nPD\256j'\3758\244P>\234\244\207\300j\201\0309-V\344\312bL\221\024wi[-Z\370\310\343\036\367\270G\036u\3141\307\036u\344\321?\301?\241\263KY\241]7h\201\242\002A\355\354\356\314\2747\363\206\215\227>#\006\353af<\036\262\236\357\031\0165l\342:\035\022bF\334\241AY\350X\214\204\352\222g\354<\335\271\267\365\355\226\201=\333\010\311\033b1j\320\250c\271\230RB\r\277kt\"\307e\216g\260a@h\303x\3215\206~dx\204\330\006\363\215\000\356\345\035X\217x\006%L-\214u\354y>\303\314\361=\004\356\216\267\267n\330N\010I\234\003\242\274\267\261KI\343\007l\333\010.\222C?\334'\341\206\037(\254~\210(\370\222\r\034:x\003\251w\266\321\010\206G\010\355\300kg\370\004\250\240\227\344\210\375D\272\270\343\207\214\330\250\033\372}\024\222>\004\304t\350Y\216\337\260\374\320\217\200\004\241V\217X\373\310\362\275\256\013\256\027Md\023\250L\337\361\034\312\034\013\202\370\241MB\300}\361\036\365p@{>C\016\365\335\214 \322%@{\2049\214\364\225\t\371\220\003\314Cl\221\016\266\366-\277\337w\230\215\031\266\tv\321\241\303z\220\002\333\024\372\3030\352\343\240\213]W\335D\331U\324\211\272]\022\242.\246\014\240\221\300\362\203\3419\003\241n\344YHe\335s\375\016Du\375=@\256kA'[*\007\202\236\344\355\263\365a\010h\365a\017\323\034AG\031\223\242)>t\237\014\341\241\010`\002'\0045\202\007\205\207\020\215\222\360@\327@\235\372v\344\022\004?\017\367\341\177\332KeN\215\000\207P%\360\370\353\016\235\256\002?\010\"\226C\210\320 \302n\026w\312I\223Q\335> \350\274\002\016'\347yx\2603\001\006+\0334\023\271L\213JUp\272@N\277Ol\007\254l\013`\300\236\215\220\332@(\n\240\207\344\000\273Q\366\242\231n\033\347u\333P\212m\344t\373\241[\272\251\252\241\357\331\352\325\344\215lh\312q\341\264:3\373\2310\323\342\352x\365\253QaTI\213\346\330\334\032\265F\355\323\332\314\354B\274\310\233ii\231o\217o~\2314\223VZ\272\316\037\214W\356&\225\304LKK\374c\3765\177%\276\227m\351$\321\010\216?\211w\371#\336\025/\336oUxm\\_\227\203\244\220\226\252|M\224eK\266\323R9~\316[i\271\302W\304""\035\201\305\020\216\313\327\342\337DK\274\222[r\220.\3259\023M\321J\227*i\271\312\357\211\201\234\2236\244\005\227\033bY\264\205\003\267\316\237\\\213\031\337\342T\005\324n\327\301\032\210BZ\\\214\233\307\205\223\342MEuJpiJP\301\272\"M\331\31485\3713q_\026\316C\237\342\255\213\"\200|-\361\337\340\275<\331\262J\266\300W\305\233d.\301\272\216b%\237\362\271x*+Y\001[\374\265 \352\344\322\3749\362g\305;\200\202\346\300\034%tt\357\355\340\335\334;\373\017\363\"0\205\244\306\221\004\273\006\215\372Qb\210\004`\327\240\210\260<-\315\314\226\216\243\370q<\320\371y\004A\241]Wc\034\037r|\002\000\333\261\243vO\212\363\307,\336\214\201Lm\322q\315\353\033a\212\346\t\370V\370\272\250\010\023R\032\323\224+\242&\"-\200\342*`\375.i%\355\323+*e.\324\363L!\323PK\274\000U/\210\212J9\201v\235\337?S\322\022/B\311\332'\240SU9|:73[\177Om\376\0226\213\361VL\271\251\024\362PV\344ZRH \370b\374PT\305\003\271\014T\354\344N\202\223A6\"\032|.yu\\\375B\271\250@\233\261\305Aj\237\362]\035Zkp\223cU\366\337!NW1\374@\350\372\377\322\203\361\314\rQPa\027\342y\025t\312\277\306]-B\200\035\201\004\037\t\r|0\0251\254O\313\231to\313r\262=2\325\264\230J\216OA|&P\272\225\274\032\351\000z\006\006b^\320L\327\n\356\257j\0102\335U\263.\303\301\202Z\347Fo\001Z\240C>\323\363:\257\024\222+\3442\214#\350\367$?\246\377\350\356,\314\t\316\356\002@\370\212\211u\235\251\254`\026\305\0239/\017\222\237G\305\321\263\267M%\0055\367\315\314uQ6!\356\277t\005\222\360M\271y\231\304K\377\255\304!\323\325\231\331\317\245y\326\234\032\377E\326@D\245[B\303\336\006\016\037\201\236\nYg\001\\Z\251\217\353w\223:|\345k#h\325m\3014\307\005U\273&\177!vu*0\207\200cE\256\353o\274\352\335\237!\255\341|";
-    PyObject *data = __Pyx_DecompressString(cstring, 1299, 1);
+    #elif (CYTHON_COMPRESS_STRINGS) != 0 /* compression: zlib (1360 bytes) */
+const char* const cstring = "x\332\265UMs\323F\030\216[;v\210\013\266\t6II\221\007\206\224\351`\352\022\350\307\201\216\371\010\320\003\023\267\035\030N;ki\035\213\310\222\254]\305\270\235v8\352\270\307=\352\250\243\217\0349\366\350\243\216\376\t\376\t}w\345\010\205\206N;\323z<\362~\274\037\317\373<\357+\267\236:\214hl\200\231v\177\302\006\216\255\231T3\210e\366\210\207\031\261&\032e\236\2513\342I#[\333\177\270\177c\367\233]\r\333\206\346\221\227DgT\243~O\2670\245\204jN_\353\371\246\305L[c\023\227\320\226\366\244\257M\034_\263\t14\346h.\330e\035\330\200\330\032%L.\264\035l\333\016\303\314tl\004\356\246}\260\243\031\246\007I\314#\"\275\367\260EI\353{l\030\010\014\311\330\361\016\211w\323q%V\307C\024|\311M\354\231\370&\222\317\344\240\345N^!\264\017\217\375\311\003(\005=%\257\330\217\244\217{\216\307\210\201\372\2363D\036\031B@L'\266n:-\335\361\034\037\212 T\037\020\375\020\351\216\335\267\300\365\375-2\010034m\2232S\207 \216g\020\017p\277oGm\354\322\201\303\220I\035+)\020)\n\320\001a&#C\271\205|\310\204\312=\254\223\036\326\017ug84\231\201\0316\010\266\320\330d\003H\201\r\n\3720\214\206\330\355c\313\222\226(1E=\277\337'^z*\215\021\220KQ\037S\006`\211\253;\356\344\304\006\241\276o\353H\3428\260\234\036\344\261\234\003\250E\261C\227Gi\240\314\376x=\366\000\277\272\034`\232)\331\224\233%\215\262BzH&\360\245\010\200C\225\010X\203/\362\306\020\215\022\357H\261\"o\035\303\267\010\202\217\215\207\360\233\252+\267\351\306\305\036\360\006\036\177=\241\351\312u\\\327g\031\204\010\215|l%q\323\232T1R\377#\202N\366\304xy\237\205\007'K`\2602\240\213|\213\2516\223\014\246\013d\016\207\3040a\227\034\001\01483\020\222\007\010\371.\250J\216\260\345'\017\232tr\353d'\267d\017\2672\235\374wVJT)\350\273j\325j\371D\006\210\362:\267\250\255\024>\025\3158\277=\333\376r\232\233V\343|s\326\334\235v\246\335E}\245\260\026\254\363v\\\332\340{\263\255/\242v\324\211K\347\371\235\331\346\365\250\0325\343R\205\177\314\277\342\317\304wa74#\177\n\327\237\004\317\371=\336\027O\336\035Uy}\326\330\tGQ..\325\3705Q\016;a7.\225\203\307""\274\023\227\253|S\\\025XL\340\272|.\370Mt\304\263p7\034\305\225\006g\242-:q\245\032\227k\374\206\030\205\253\241\001i\301\345\242\330\020]a\202\325\311\233s\001\343\273\234\312\200\312\355<\354F\"\027\347\327\203\366\353\334<\277%KM\013\254\244\005JXg\302f\330Njj\363G\342v\230;\t=\305\333\020y\000\371\"\304\037\300{z\262\r\231l\215o\213\227\321j\204\025\217b3\233\362\261x\030V\023\002;\374\205 \362\346\324\374\231\342\217\311;\002B3`^Etz\343\315\350\355\352[\343\217\346\373\300\026gW\266?\203G\241\316Q\330Y\254\256\024J\263\342\226\330\221\311\327\203\333\022K\\\2760\273\220\244\205\250\224_\341\335\270Z\007U;\342\347p\003\224\305\363J\235c>\026x^\376L\211W\210\272\363|\361\265\037\334\017F\300\347\254\366y\224\213T\304[\201\316A\212\013\3749\270w\023\215nq,a\375\016\241\372QG\272\256\007wEM\334Q\321\215\350j\204\243\021@\335X\242\214\3632\373\017!\206\242\201\327k\2407,\027%\300~\234\022\250\342\276\312P:\033\340`\314\361\034\270\354\006\246<\225\320\030 \001\336\353\313\346T\022|-\232\242=\007\337*\337\021U\321\204\224Z\232rS\324\205\257z5\277\r\264~+\201.\316\310\224\231P\217\223fNCUx\016\032$'\252\0316\316\363\333\307M_\341yP\267;\207\221\222\"cI\177\343]i\305S\252Y\017vA\202\246l\346\273a5\274&y\375\020_\265\023\321\376G\242f+\027EN\206]\013\2122h\n\262\316-\325\324 \263\017-}O(\241G\351P\300zQNF\341rX\216\366\246M9}M\331\336\017\241\231\233P\322\245\350\331T\005P35\022EA\2239\221p\177\225C\225\364q-\221\002.\326\344:3\312k\300\223\n\371H\315\177Q\312\230i\274\r\030o\230\207yv\354\377\221m\001\346\016'\266\000\020\336\212rj SY\302\314\213\007a1<\212~\232\346\247\217\336\264\245^\362=\322N\\\327\3036\304\375\227\256P$\274\243\266N\353\303\322\177\333\207\352\265P\270\0226\217\305\251\363_\302:4Q\351\222P\260\367\240\206\217\240\237r\211\262\000.\2566f\215\353Q\003\3765\352S\220\352\262`\252\3065\311]\233?\021\317U*\330N\000\307f\270\243\3763\244v\177\002\205(\006\273";
+    PyObject *data = __Pyx_DecompressString(cstring, 1360, 1);
     if (unlikely(!data)) __PYX_ERR(0, 1, __pyx_L1_error)
     const char* const bytes = __Pyx_PyBytes_AsString(data);
     #if !CYTHON_ASSUME_SAFE_MACROS
     if (likely(bytes)); else { Py_DECREF(data); __PYX_ERR(0, 1, __pyx_L1_error) }
     #endif
-    #else /* compression: none (2562 bytes) */
-const char* const bytes = ".Note that Cython is deliberately stricter than PEP-484 and rejects subclasses of builtin types. If you need to pass subclasses then set the 'annotation_typing' directive to False.?add_noteworker/operator_state/aria/_aria_state.pyx__Pyx_PyDict_NextRefaborted_from_remoteasyncio.coroutinescheck_conflictscheck_conflicts_deterministic_reorderingcheck_conflicts_snapshot_isolation__class_getitem__cline_in_tracebackcommitdatadeal_with_readsdelta_mapfallback_commit_buffer_fast_deepcopyfast_deepcopy__func__getglobal_logic_abortsglobal_read_setsglobal_readsglobal_write_setshas_conflicts_is_coroutineitemskeykeys__main__minmin_rw_reservations__module____name__operator_nameoperator_partitionoperator_partitionspartitionpopput_write_sets__qualname__read_setsreadsremove_aborted_from_rw_setsreservations__set_name__setdefaultstate_getstate_get_immediatestate_putt_id__test__updatevaluevaluesworker.operator_state.aria._aria_stateworker.operator_state.aria._fast_copywrite_setswriteswrites_dict\200\001\360\022\000\005\033\230!\330\004\035\320\0350\260\001\260\021\330\004!\320!4\260A\260Q\360\026\000\005\t\210\013\2201\330\010\024\220F\320\032+\2501\250A\330\010\023\2206\320\031)\250\021\250!\330\010\020\220\003\2202\220V\230:\240Q\240i\250u\260A\330\010\r\210W\220B\220f\230I\240Q\240i\250u\260A\330\010\021\220\026\320\027'\240q\250\001\330\010\022\220&\230\014\240A\240Q\330\010\014\210H\220A\330\014\021\220\031\230$\230a\230y\250\001\330\014\017\210}\230A\230V\2404\240q\330\020\027\220t\2301\230A\330\020\021\330\014\022\220-\230q\240\006\240d\250!\330\014\021\220\030\230\024\230Q\230i\240q\330\014\022\220-\230q\240\006\240d\250!\330\014\017\210t\2204\220s\230$\230a\330\020\021\330\014\023\2204\220q\230\001\330\004\013\2101\200\001\340\004\032\230!\330\004!\320!4\260A\260Q\360\020\000\005\t\210\013\2201\330\010\022\220&\230\n\240!\2401\330\010\020\220\003\2201\220G\2305\240\001\330\010\021\220\026\320\027'\240q\250\001\330\010\014\210H\220A\330\014\021\220\027\230\004\230A\230Y\240a\330""\014\017\210}\230A\230V\2404\240q\330\020\027\220t\2301\230A\330\004\013\2101\200\001\340\004\032\230!\330\004!\320!4\260A\260Q\360\024\000\005\t\210\t\220\035\230j\250\006\250a\330\010\023\2206\230\031\240!\2401\330\010\020\220\003\2201\220H\230E\240\021\330\010\r\210W\220A\220Y\230e\2401\330\010\021\220\026\320\027'\240q\250\001\330\010\014\210H\220A\330\014\021\220\030\230\024\230Q\230i\240q\330\014\021\220\031\230$\230a\230v\240Q\330\014\017\210}\230A\230V\2404\240x\250s\260-\270q\300\006\300d\310!\330\020\027\220t\2301\230A\330\004\013\2101\200\001\360\024\000\005\026\220_\240A\330\004\026\220f\230J\240a\240q\330\004\032\230&\240\006\240a\240q\360\010\000\005\010\200u\210C\210q\330\010\021\220\026\220u\230A\230Q\330\010\016\210a\210w\220a\340\010\r\210Q\210i\220u\230A\340\004\007\200t\2103\210a\330\010\026\220f\230I\240Q\240a\330\010\023\2207\230!\2301\340\010\021\220\021\220'\230\021\230!\200\001\360 \000\005\026\220_\240A\330\004\031\230\026\230u\240A\240Q\330\004\035\230V\2409\250A\250Q\360\n\000\005\010\200t\2103\210a\330\010\026\220f\230H\240A\240Q\330\010\023\2207\230!\2301\340\010\020\220\001\220\027\230\001\230\021\340\004\007\200u\210C\210q\330\010\023\2205\230\014\240A\240Q\330\010\020\220\004\220A\220Q\340\010\024\220A\220Y\230a\360\006\000\005\027\220f\230J\240a\240q\330\004\007\200u\210C\210q\330\010\021\220\026\220u\230A\230Q\330\010\013\2104\210s\220!\330\014\023\220>\240\021\240&\250\001\250\021\340\004\013\210>\230\022\2306\240\024\240Q\240d\250$\250a\250q\200\001\360\022\000\005\026\220_\240A\340\004\007\200u\210C\210q\330\010\022\320\022(\250\001\250\021\330\010\013\2103\210c\220\021\330\014\025\220W\230A\230Q\330\014\017\210t\2203\220a\330\020\027\220~\240Q\240f\250A\250Q\340\004\013\210>\230\022\2306\240\024\240Q\240d\250$\250a\250q\200\001\360\022\000\005\027\220f\230J\240a\240q\330\004\032\230&\240\006\240a\240q\360\010\000\005\010\200u\210C\210q\330\010\021\220\026\220u\230A\230Q\330\010\016\210a\210w\220a\340\010\r\210Q\210i\220u\230A""\340\004\007\200t\2103\210a\330\010\026\220f\230I\240Q\240a\330\010\023\2207\230!\2301\340\010\021\220\021\220'\230\021\230!\320\000\030\230\001\360\010\000\005\t\210\007\210q\330\010\013\2104\210s\220!\330\014\026\220l\240!\2401\330\014\017\210u\220H\230B\230a\330\020\027\220q\330\004\013\2101\200\001\340\004\027\220q\360\014\000\005\t\210\t\220\037\240\014\250F\260!\330\010\022\220!\330\010\014\210E\220\031\230!\2306\240\034\250V\2601\330\014\017\210q\330\020\027\220q\230\007\230s\240!\2401\330\010\016\210a\210{\230!\330\004\013\2101\200\001\360\022\000\005\010\200t\2101\330\010\t\360\022\000\005\t\210\013\2201\330\010\022\220&\230\t\240\021\240!\330\010\014\210G\2204\220q\230\007\230u\240A\330\014\017\210t\2203\220a\330\020\024\220G\2301\230A\340\010\022\220&\230\n\240!\2401\330\010\014\210G\2204\220q\230\007\230u\240A\330\014\017\210t\2203\220a\330\020\024\220G\2301\230A\340\010\022\220&\230\005\230Q\230a\330\010\014\210G\2201\330\014\024\220F\230'\240\021\240!\330\014\027\220q\230\004\230D\240\007\240v\250S\260\004\260G\2701\330\014\023\2201\220G\2301\340\010\022\220&\230\013\2401\240A\330\010\014\210G\2201\330\014\024\220F\230'\240\021\240!\330\014\027\220q\230\004\230D\240\007\240v\250S\260\004\260G\2701\330\014\023\2201\220G\2301\200\001\360\020\000\005\032\230\026\230u\240A\240Q\330\004\035\230V\2409\250A\250Q\360\010\000\005\010\200t\2103\210a\330\010\026\220f\230H\240A\240Q\330\010\023\2207\230!\2301\340\010\020\220\001\220\027\230\001\230\021\340\004\007\200u\210C\210q\330\010\023\2205\230\014\240A\240Q\330\010\020\220\004\220A\220Q\340\010\024\220A\220Y\230a\200\001\360\016\000\005#\240!\360\014\000\005\t\210\t\220\026\220z\240\026\240q\330\010\034\230A\330\010\014\210F\220&\230\002\230&\240\001\330\014\017\210u\220G\2301\330\021\027\320\027)\250\027\260\001\260\026\260q\330\020\037\230t\2401\240A\330\t\017\210t\2201\220I\230W\240A\240Q\330\t\017\210y\230\001\230\031\240'\250\021\250!\330\004\013\2101";
+    #else /* compression: none (2660 bytes) */
+const char* const bytes = ".Note that Cython is deliberately stricter than PEP-484 and rejects subclasses of builtin types. If you need to pass subclasses then set the 'annotation_typing' directive to False.?add_noteworker/operator_state/aria/_aria_state.pyx__Pyx_PyDict_NextRefaborted_from_remoteasyncio.coroutinescheck_conflictscheck_conflicts_deterministic_reorderingcheck_conflicts_snapshot_isolation__class_getitem__cline_in_tracebackcommitdatadeal_with_readsdelta_mapfallback_commit_bufferfallback_read_sets_fast_deepcopyfast_deepcopy__func__getglobal_logic_abortsglobal_read_setsglobal_readsglobal_write_setshas_conflicts_is_coroutineitemskeykeys__main__minmin_rw_reservations__module____name__operator_nameoperator_partitionoperator_partitionspartitionpopput_write_sets__qualname__read_setsreadsremove_aborted_from_rw_setsreservations__set_name__setdefaultstate_getstate_get_immediatestate_putt_id__test__updatevaluevaluesworker.operator_state.aria._aria_stateworker.operator_state.aria._fast_copywrite_setswriteswrites_dict\200\001\360\022\000\005\033\230!\330\004\035\320\0350\260\001\260\021\330\004!\320!4\260A\260Q\360\026\000\005\t\210\013\2201\330\010\024\220F\320\032+\2501\250A\330\010\023\2206\320\031)\250\021\250!\330\010\020\220\003\2202\220V\230:\240Q\240i\250u\260A\330\010\r\210W\220B\220f\230I\240Q\240i\250u\260A\330\010\021\220\026\320\027'\240q\250\001\330\010\022\220&\230\014\240A\240Q\330\010\014\210H\220A\330\014\021\220\031\230$\230a\230y\250\001\330\014\017\210}\230A\230V\2404\240q\330\020\027\220t\2301\230A\330\020\021\330\014\022\220-\230q\240\006\240d\250!\330\014\021\220\030\230\024\230Q\230i\240q\330\014\022\220-\230q\240\006\240d\250!\330\014\017\210t\2204\220s\230$\230a\330\020\021\330\014\023\2204\220q\230\001\330\004\013\2101\200\001\340\004\032\230!\330\004!\320!4\260A\260Q\360\020\000\005\t\210\013\2201\330\010\022\220&\230\n\240!\2401\330\010\020\220\003\2201\220G\2305\240\001\330\010\021\220\026\320\027'\240q\250\001\330\010\014\210H\220A\330\014\021\220\027\230\004""\230A\230Y\240a\330\014\017\210}\230A\230V\2404\240q\330\020\027\220t\2301\230A\330\004\013\2101\200\001\340\004\032\230!\330\004!\320!4\260A\260Q\360\024\000\005\t\210\t\220\035\230j\250\006\250a\330\010\023\2206\230\031\240!\2401\330\010\020\220\003\2201\220H\230E\240\021\330\010\r\210W\220A\220Y\230e\2401\330\010\021\220\026\320\027'\240q\250\001\330\010\014\210H\220A\330\014\021\220\030\230\024\230Q\230i\240q\330\014\021\220\031\230$\230a\230v\240Q\330\014\017\210}\230A\230V\2404\240x\250s\260-\270q\300\006\300d\310!\330\020\027\220t\2301\230A\330\004\013\2101\200\001\360\016\000\035\036\360\016\000\005\026\220_\240A\360\006\000\005\010\320\007\032\230'\240\021\330\010\013\2105\220\003\2201\330\014\025\320\025'\240q\250\001\330\014\017\210s\220#\220Q\330\021\026\220f\230A\230T\240\024\240Q\240a\340\020\026\220a\220w\230a\340\014\036\230a\230y\250\005\250Q\340\004\007\200u\210C\210q\330\010\022\320\022(\250\001\250\021\330\010\013\2103\210c\220\021\330\014\025\220W\230A\230Q\330\014\017\210t\2203\220a\330\020\027\220~\240Q\240f\250A\250Q\340\004\013\210>\230\022\2306\240\024\240Q\240d\250$\250a\250q\200\001\360\024\000\005\026\220_\240A\330\004\026\220f\230J\240a\240q\330\004\032\230&\240\006\240a\240q\360\010\000\005\010\200u\210C\210q\330\010\021\220\026\220u\230A\230Q\330\010\016\210a\210w\220a\340\010\r\210Q\210i\220u\230A\340\004\007\200t\2103\210a\330\010\026\220f\230I\240Q\240a\330\010\023\2207\230!\2301\340\010\021\220\021\220'\230\021\230!\200\001\360 \000\005\026\220_\240A\330\004\031\230\026\230u\240A\240Q\330\004\035\230V\2409\250A\250Q\360\n\000\005\010\200t\2103\210a\330\010\026\220f\230H\240A\240Q\330\010\023\2207\230!\2301\340\010\020\220\001\220\027\230\001\230\021\340\004\007\200u\210C\210q\330\010\023\2205\230\014\240A\240Q\330\010\020\220\004\220A\220Q\340\010\024\220A\220Y\230a\360\006\000\005\027\220f\230J\240a\240q\330\004\007\200u\210C\210q\330\010\021\220\026\220u\230A\230Q\330\010\013\2104\210s\220!\330\014\023\220>\240\021\240&\250\001""\250\021\340\004\013\210>\230\022\2306\240\024\240Q\240d\250$\250a\250q\200\001\360\022\000\005\027\220f\230J\240a\240q\330\004\032\230&\240\006\240a\240q\360\010\000\005\010\200u\210C\210q\330\010\021\220\026\220u\230A\230Q\330\010\016\210a\210w\220a\340\010\r\210Q\210i\220u\230A\340\004\007\200t\2103\210a\330\010\026\220f\230I\240Q\240a\330\010\023\2207\230!\2301\340\010\021\220\021\220'\230\021\230!\320\000\030\230\001\360\010\000\005\t\210\007\210q\330\010\013\2104\210s\220!\330\014\026\220l\240!\2401\330\014\017\210u\220H\230B\230a\330\020\027\220q\330\004\013\2101\200\001\340\004\027\220q\360\014\000\005\t\210\t\220\037\240\014\250F\260!\330\010\022\220!\330\010\014\210E\220\031\230!\2306\240\034\250V\2601\330\014\017\210q\330\020\027\220q\230\007\230s\240!\2401\330\010\016\210a\210{\230!\330\004\013\2101\200\001\360\022\000\005\010\200t\2101\330\010\t\360\022\000\005\t\210\013\2201\330\010\022\220&\230\t\240\021\240!\330\010\014\210G\2204\220q\230\007\230u\240A\330\014\017\210t\2203\220a\330\020\024\220G\2301\230A\340\010\022\220&\230\n\240!\2401\330\010\014\210G\2204\220q\230\007\230u\240A\330\014\017\210t\2203\220a\330\020\024\220G\2301\230A\340\010\022\220&\230\005\230Q\230a\330\010\014\210G\2201\330\014\024\220F\230'\240\021\240!\330\014\027\220q\230\004\230D\240\007\240v\250S\260\004\260G\2701\330\014\023\2201\220G\2301\340\010\022\220&\230\013\2401\240A\330\010\014\210G\2201\330\014\024\220F\230'\240\021\240!\330\014\027\220q\230\004\230D\240\007\240v\250S\260\004\260G\2701\330\014\023\2201\220G\2301\200\001\360\020\000\005\032\230\026\230u\240A\240Q\330\004\035\230V\2409\250A\250Q\360\010\000\005\010\200t\2103\210a\330\010\026\220f\230H\240A\240Q\330\010\023\2207\230!\2301\340\010\020\220\001\220\027\230\001\230\021\340\004\007\200u\210C\210q\330\010\023\2205\230\014\240A\240Q\330\010\020\220\004\220A\220Q\340\010\024\220A\220Y\230a\200\001\360\016\000\005#\240!\360\014\000\005\t\210\t\220\026\220z\240\026\240q\330\010\034\230A\330\010\014\210F\220&""\230\002\230&\240\001\330\014\017\210u\220G\2301\330\021\027\320\027)\250\027\260\001\260\026\260q\330\020\037\230t\2401\240A\330\t\017\210t\2201\220I\230W\240A\240Q\330\t\017\210y\230\001\230\031\240'\250\021\250!\330\004\013\2101";
     PyObject *data = NULL;
     CYTHON_UNUSED_VAR(__Pyx_DecompressString);
     #endif
     PyObject **stringtab = __pyx_mstate->__pyx_string_tab;
     Py_ssize_t pos = 0;
-    for (int i = 0; i < 62; i++) {
+    for (int i = 0; i < 63; i++) {
       Py_ssize_t bytes_length = index[i].length;
       PyObject *string = PyUnicode_DecodeUTF8(bytes + pos, bytes_length, NULL);
       if (likely(string) && i >= 5) PyUnicode_InternInPlace(&string);
@@ -9086,7 +9333,7 @@ const char* const bytes = ".Note that Cython is deliberately stricter than PEP-4
       stringtab[i] = string;
       pos += bytes_length;
     }
-    for (int i = 62; i < 74; i++) {
+    for (int i = 63; i < 75; i++) {
       Py_ssize_t bytes_length = index[i].length;
       PyObject *string = PyBytes_FromStringAndSize(bytes + pos, bytes_length);
       stringtab[i] = string;
@@ -9097,14 +9344,14 @@ const char* const bytes = ".Note that Cython is deliberately stricter than PEP-4
       }
     }
     Py_XDECREF(data);
-    for (Py_ssize_t i = 0; i < 74; i++) {
+    for (Py_ssize_t i = 0; i < 75; i++) {
       if (unlikely(PyObject_Hash(stringtab[i]) == -1)) {
         __PYX_ERR(0, 1, __pyx_L1_error)
       }
     }
     #if CYTHON_IMMORTAL_CONSTANTS
     {
-      PyObject **table = stringtab + 62;
+      PyObject **table = stringtab + 63;
       for (Py_ssize_t i=0; i<12; ++i) {
         #if CYTHON_COMPILING_IN_CPYTHON_FREETHREADING
         #if PY_VERSION_HEX < 0x030E0000
@@ -9170,42 +9417,42 @@ static int __Pyx_CreateCodeObjects(__pyx_mstatetype *__pyx_mstate) {
     __pyx_mstate_global->__pyx_codeobj_tab[3] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_worker_operator_state_aria__aria_2, __pyx_mstate->__pyx_n_u_state_put, __pyx_mstate->__pyx_kp_b_iso88591_A_fJaq_aq_uCq_uAQ_awa_QiuA_t3a, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[3])) goto bad;
   }
   {
-    const __Pyx_PyCode_New_function_description descr = {6, 0, 0, 6, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 149};
-    PyObject* const varnames[] = {__pyx_mstate->__pyx_n_u_data, __pyx_mstate->__pyx_n_u_fallback_commit_buffer, __pyx_mstate->__pyx_n_u_key, __pyx_mstate->__pyx_n_u_t_id, __pyx_mstate->__pyx_n_u_operator_name, __pyx_mstate->__pyx_n_u_partition};
-    __pyx_mstate_global->__pyx_codeobj_tab[4] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_worker_operator_state_aria__aria_2, __pyx_mstate->__pyx_n_u_state_get_immediate, __pyx_mstate->__pyx_kp_b_iso88591_A_uCq_3c_WAQ_t3a_QfAQ_6_Qd_aq, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[4])) goto bad;
+    const __Pyx_PyCode_New_function_description descr = {7, 0, 0, 7, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 149};
+    PyObject* const varnames[] = {__pyx_mstate->__pyx_n_u_data, __pyx_mstate->__pyx_n_u_fallback_commit_buffer, __pyx_mstate->__pyx_n_u_key, __pyx_mstate->__pyx_n_u_t_id, __pyx_mstate->__pyx_n_u_operator_name, __pyx_mstate->__pyx_n_u_partition, __pyx_mstate->__pyx_n_u_fallback_read_sets};
+    __pyx_mstate_global->__pyx_codeobj_tab[4] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_worker_operator_state_aria__aria_2, __pyx_mstate->__pyx_n_u_state_get_immediate, __pyx_mstate->__pyx_kp_b_iso88591_A_5_1_q_s_Q_fAT_Qa_awa_ay_Q_uC, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[4])) goto bad;
   }
   {
-    const __Pyx_PyCode_New_function_description descr = {4, 0, 0, 4, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 170};
+    const __Pyx_PyCode_New_function_description descr = {4, 0, 0, 4, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 186};
     PyObject* const varnames[] = {__pyx_mstate->__pyx_n_u_write_sets, __pyx_mstate->__pyx_n_u_data, __pyx_mstate->__pyx_n_u_delta_map, __pyx_mstate->__pyx_n_u_aborted_from_remote};
     __pyx_mstate_global->__pyx_codeobj_tab[5] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_worker_operator_state_aria__aria_2, __pyx_mstate->__pyx_n_u_commit, __pyx_mstate->__pyx_kp_b_iso88591_z_q_A_F_uG1_q_t1A_t1IWAQ_y_1, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[5])) goto bad;
   }
   {
-    const __Pyx_PyCode_New_function_description descr = {3, 0, 0, 3, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 198};
+    const __Pyx_PyCode_New_function_description descr = {3, 0, 0, 3, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 214};
     PyObject* const varnames[] = {__pyx_mstate->__pyx_n_u_t_id, __pyx_mstate->__pyx_n_u_keys, __pyx_mstate->__pyx_n_u_reservations};
     __pyx_mstate_global->__pyx_codeobj_tab[6] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_worker_operator_state_aria__aria_2, __pyx_mstate->__pyx_n_u_has_conflicts, __pyx_mstate->__pyx_kp_b_iso88591_q_4s_l_1_uHBa_q_1, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[6])) goto bad;
   }
   {
-    const __Pyx_PyCode_New_function_description descr = {1, 0, 0, 1, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 210};
+    const __Pyx_PyCode_New_function_description descr = {1, 0, 0, 1, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 226};
     PyObject* const varnames[] = {__pyx_mstate->__pyx_n_u_reservations};
     __pyx_mstate_global->__pyx_codeobj_tab[7] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_worker_operator_state_aria__aria_2, __pyx_mstate->__pyx_n_u_min_rw_reservations, __pyx_mstate->__pyx_kp_b_iso88591_q_F_E_6_V1_q_q_s_1_a_1, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[7])) goto bad;
   }
   {
-    const __Pyx_PyCode_New_function_description descr = {3, 0, 0, 3, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 227};
+    const __Pyx_PyCode_New_function_description descr = {3, 0, 0, 3, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 243};
     PyObject* const varnames[] = {__pyx_mstate->__pyx_n_u_write_sets, __pyx_mstate->__pyx_n_u_read_sets, __pyx_mstate->__pyx_n_u_writes};
     __pyx_mstate_global->__pyx_codeobj_tab[8] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_worker_operator_state_aria__aria_2, __pyx_mstate->__pyx_n_u_check_conflicts, __pyx_mstate->__pyx_kp_b_iso88591_4AQ_j_a_6_1_1HE_WAYe1_q_HA_Qiq, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[8])) goto bad;
   }
   {
-    const __Pyx_PyCode_New_function_description descr = {2, 0, 0, 2, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 253};
+    const __Pyx_PyCode_New_function_description descr = {2, 0, 0, 2, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 269};
     PyObject* const varnames[] = {__pyx_mstate->__pyx_n_u_write_sets, __pyx_mstate->__pyx_n_u_writes};
     __pyx_mstate_global->__pyx_codeobj_tab[9] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_worker_operator_state_aria__aria_2, __pyx_mstate->__pyx_n_u_check_conflicts_snapshot_isolati, __pyx_mstate->__pyx_kp_b_iso88591_4AQ_1_1_1G5_q_HA_AYa_AV4q_t1A_1, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[9])) goto bad;
   }
   {
-    const __Pyx_PyCode_New_function_description descr = {6, 0, 0, 6, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 275};
+    const __Pyx_PyCode_New_function_description descr = {6, 0, 0, 6, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 291};
     PyObject* const varnames[] = {__pyx_mstate->__pyx_n_u_write_sets, __pyx_mstate->__pyx_n_u_read_sets, __pyx_mstate->__pyx_n_u_writes, __pyx_mstate->__pyx_n_u_global_reads, __pyx_mstate->__pyx_n_u_global_write_sets, __pyx_mstate->__pyx_n_u_global_read_sets};
     __pyx_mstate_global->__pyx_codeobj_tab[10] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_worker_operator_state_aria__aria_2, __pyx_mstate->__pyx_n_u_check_conflicts_deterministic_re, __pyx_mstate->__pyx_kp_b_iso88591_0_4AQ_1_F_1A_6_2V_QiuA_WBfIQiuA, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[10])) goto bad;
   }
   {
-    const __Pyx_PyCode_New_function_description descr = {6, 0, 0, 6, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 318};
+    const __Pyx_PyCode_New_function_description descr = {6, 0, 0, 6, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 334};
     PyObject* const varnames[] = {__pyx_mstate->__pyx_n_u_operator_partitions, __pyx_mstate->__pyx_n_u_read_sets, __pyx_mstate->__pyx_n_u_write_sets, __pyx_mstate->__pyx_n_u_reads, __pyx_mstate->__pyx_n_u_writes_dict, __pyx_mstate->__pyx_n_u_global_logic_aborts};
     __pyx_mstate_global->__pyx_codeobj_tab[11] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_worker_operator_state_aria__aria_2, __pyx_mstate->__pyx_n_u_remove_aborted_from_rw_sets, __pyx_mstate->__pyx_kp_b_iso88591_t1_1_G4q_uA_t3a_G1A_1_G4q_uA_t3, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[11])) goto bad;
   }

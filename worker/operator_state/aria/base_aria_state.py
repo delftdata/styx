@@ -37,6 +37,9 @@ class BaseAriaState(BaseOperatorState):
     # Calvin snapshot things
     # tid: | operator_name: |key, value|
     fallback_commit_buffer: dict[int, dict[OperatorPartition, dict[K, V]]]
+    # Fallback read tracking for rw-set change detection (Aria paper §4.2)
+    # tid: | operator_partition: set of keys read during fallback
+    fallback_read_sets: dict[int, dict[OperatorPartition, set[K]]]
 
     def __init__(self, operator_partitions: set[OperatorPartition]) -> None:
         super().__init__(operator_partitions)
@@ -48,6 +51,7 @@ class BaseAriaState(BaseOperatorState):
         self.global_reads = {operator_partition: {} for operator_partition in self.operator_partitions}
         self.global_read_sets = {operator_partition: {} for operator_partition in self.operator_partitions}
         self.fallback_commit_buffer = defaultdict(lambda: defaultdict(dict))
+        self.fallback_read_sets: dict[int, dict[OperatorPartition, set[K]]] = {}
 
     def put(
         self,
@@ -169,6 +173,39 @@ class BaseAriaState(BaseOperatorState):
         """
         return _cy_check_conflicts_si(self.write_sets, self.writes)
 
+    def has_fallback_rw_set_changed(self, t_id: int) -> bool:
+        """Check if a transaction's read/write set changed during fallback re-execution.
+
+        Per the Aria paper, if a transaction's rw-set differs from its original
+        optimistic execution, the fallback dependency graph is invalid and the
+        transaction must be rescheduled to the next epoch.
+        """
+        # Compare read sets: original vs fallback
+        fallback_reads = self.fallback_read_sets.get(t_id, {})
+        for op_part in self.operator_partitions:
+            original_read_keys = self.read_sets[op_part].get(t_id, set())
+            fallback_read_keys = fallback_reads.get(op_part, set())
+            if original_read_keys != fallback_read_keys:
+                return True
+
+        # Check for fallback reads on operator_partitions not in self.operator_partitions
+        for op_part in fallback_reads:
+            if op_part not in self.operator_partitions:
+                # Original had no reads here (since it's not a local partition),
+                # but fallback did — sets differ
+                return True
+
+        # Compare write sets: original vs fallback
+        fallback_writes = self.fallback_commit_buffer.get(t_id, {})
+        for op_part in self.operator_partitions:
+            original_write_keys = set(self.write_sets[op_part].get(t_id, {}).keys())
+            fallback_write_keys = set(fallback_writes.get(op_part, {}).keys())
+            if original_write_keys != fallback_write_keys:
+                return True
+
+        # Check for fallback writes on operator_partitions not in self.operator_partitions
+        return any(op_part not in self.operator_partitions for op_part in fallback_writes)
+
     def cleanup(self) -> None:
         for operator_partition in self.operator_partitions:
             self.write_sets[operator_partition].clear()
@@ -179,6 +216,7 @@ class BaseAriaState(BaseOperatorState):
             self.global_reads[operator_partition].clear()
             self.global_read_sets[operator_partition].clear()
         self.fallback_commit_buffer.clear()
+        self.fallback_read_sets.clear()
 
     def get_dep_transactions(
         self,
