@@ -51,7 +51,9 @@ class HashPartitioner(BasePartitioner):
 
     def get_partition_no_cache(self, key: K) -> int | None:
         return _cy_get_partition_no_cache(
-            key, self._partitions, self._composite_key_hash_parameters,
+            key,
+            self._partitions,
+            self._composite_key_hash_parameters,
         )
 
     @staticmethod

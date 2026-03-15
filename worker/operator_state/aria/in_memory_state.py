@@ -219,14 +219,24 @@ class InMemoryOperatorState(BaseAriaState):
 
     def get(self, key: K, t_id: int, operator_name: str, partition: int) -> V:
         return _cy_state_get(
-            self.data, self.write_sets, self.reads, self.read_sets,
-            key, t_id, operator_name, partition,
+            self.data,
+            self.write_sets,
+            self.reads,
+            self.read_sets,
+            key,
+            t_id,
+            operator_name,
+            partition,
         )
 
     def get_immediate(self, key: K, t_id: int, operator_name: str, partition: int) -> V:
         return _cy_state_get_immediate(
-            self.data, self.fallback_commit_buffer,
-            key, t_id, operator_name, partition,
+            self.data,
+            self.fallback_commit_buffer,
+            key,
+            t_id,
+            operator_name,
+            partition,
         )
 
     def delete(self, key: K, operator_name: str, partition: int) -> None:
