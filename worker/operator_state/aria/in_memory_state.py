@@ -2,10 +2,10 @@ from collections import defaultdict
 import traceback
 from typing import TYPE_CHECKING
 
-from msgspec import msgpack
 from styx.common.logging import logging
 
 from worker.operator_state.aria.base_aria_state import BaseAriaState
+from worker.operator_state.aria.fast_copy import fast_deepcopy
 
 if TYPE_CHECKING:
     from styx.common.types import K, KVPairs, OperatorPartition, V
@@ -205,7 +205,7 @@ class InMemoryOperatorState(BaseAriaState):
         operator_partition: OperatorPartition = (operator_name, partition)
         for key in self.data[operator_partition]:
             self.deal_with_reads(key, t_id, operator_partition)
-        return msgpack.decode(msgpack.encode(self.data[operator_partition]))
+        return fast_deepcopy(self.data[operator_partition])
 
     def batch_insert(self, kv_pairs: dict, operator_name: str, partition: int) -> None:
         operator_partition: OperatorPartition = (operator_name, partition)
@@ -217,10 +217,8 @@ class InMemoryOperatorState(BaseAriaState):
         self.deal_with_reads(key, t_id, operator_partition)
         # if transaction wrote to this key, read from the write set
         if t_id in self.write_sets[operator_partition] and key in self.write_sets[operator_partition][t_id]:
-            return msgpack.decode(
-                msgpack.encode(self.write_sets[operator_partition][t_id][key]),
-            )
-        return msgpack.decode(msgpack.encode(self.data[operator_partition].get(key)))
+            return fast_deepcopy(self.write_sets[operator_partition][t_id][key])
+        return fast_deepcopy(self.data[operator_partition].get(key))
 
     def get_immediate(self, key: K, t_id: int, operator_name: str, partition: int) -> V:
         operator_partition: OperatorPartition = (operator_name, partition)
@@ -229,12 +227,10 @@ class InMemoryOperatorState(BaseAriaState):
             and operator_partition in self.fallback_commit_buffer[t_id]
             and key in self.fallback_commit_buffer[t_id][operator_partition]
         ):
-            return msgpack.decode(
-                msgpack.encode(
-                    self.fallback_commit_buffer[t_id][operator_partition][key],
-                ),
+            return fast_deepcopy(
+                self.fallback_commit_buffer[t_id][operator_partition][key],
             )
-        return msgpack.decode(msgpack.encode(self.data[operator_partition].get(key)))
+        return fast_deepcopy(self.data[operator_partition].get(key))
 
     def delete(self, key: K, operator_name: str, partition: int) -> None:
         # Need to find a way to implement deletes

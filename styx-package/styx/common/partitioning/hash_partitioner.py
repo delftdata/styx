@@ -59,10 +59,12 @@ class HashPartitioner(BasePartitioner):
 
     @staticmethod
     def make_key_hashable(key: K) -> int:
-        if isinstance(key, int):
+        if type(key) is int:
             return key
-        if isinstance(key, str) and key.isdigit():
-            return int(key)
+        if type(key) is str:
+            if key.isdigit():
+                return int(key)
+            return cityhash.CityHash64(key)
         try:
             return cityhash.CityHash64(key)
         except Exception as e:

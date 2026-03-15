@@ -5,6 +5,17 @@ from typing import TYPE_CHECKING
 
 from styx.common.base_state import BaseOperatorState
 
+from worker.operator_state.aria._aria_state import (
+    check_conflicts as _cy_check_conflicts,
+    check_conflicts_deterministic_reordering as _cy_check_conflicts_dr,
+    check_conflicts_snapshot_isolation as _cy_check_conflicts_si,
+    deal_with_reads as _cy_deal_with_reads,
+    has_conflicts as _cy_has_conflicts,
+    min_rw_reservations as _cy_min_rw_reservations,
+    put_write_sets as _cy_put_write_sets,
+    remove_aborted_from_rw_sets as _cy_remove_aborted,
+)
+
 if TYPE_CHECKING:
     from styx.common.types import K, OperatorPartition, V
 
@@ -46,15 +57,7 @@ class BaseAriaState(BaseOperatorState):
         operator_name: str,
         partition: int,
     ) -> None:
-        operator_partition: OperatorPartition = (operator_name, partition)
-        if t_id in self.write_sets[operator_partition]:
-            self.write_sets[operator_partition][t_id][key] = value
-        else:
-            self.write_sets[operator_partition][t_id] = {key: value}
-        if key in self.writes[operator_partition]:
-            self.writes[operator_partition][key].append(t_id)
-        else:
-            self.writes[operator_partition][key] = [t_id]
+        _cy_put_write_sets(self.write_sets, self.writes, key, value, t_id, (operator_name, partition))
 
     def put_immediate(
         self,
@@ -117,27 +120,17 @@ class BaseAriaState(BaseOperatorState):
         t_id: int,
         operator_partition: OperatorPartition,
     ) -> None:
-        if key in self.reads[operator_partition]:
-            self.reads[operator_partition][key].append(t_id)
-        else:
-            self.reads[operator_partition][key] = [t_id]
-        if t_id in self.read_sets[operator_partition]:
-            self.read_sets[operator_partition][t_id].add(key)
-        else:
-            self.read_sets[operator_partition][t_id] = {key}
+        _cy_deal_with_reads(self.reads, self.read_sets, key, t_id, operator_partition)
 
     @staticmethod
     def has_conflicts(t_id: int, keys: set[K], reservations: dict[K, int]) -> bool:
-        return any(key in reservations and reservations[key] < t_id for key in keys)
+        return _cy_has_conflicts(t_id, keys, reservations)
 
     @staticmethod
     def min_rw_reservations(
         reservations: dict[OperatorPartition, dict[K, list[int]]],
     ) -> dict[OperatorPartition, dict[K, int]]:
-        new__reservations = {}
-        for operator_partition, reservation in reservations.items():
-            new__reservations[operator_partition] = {key: min(t_ids) for key, t_ids in reservation.items() if t_ids}
-        return new__reservations
+        return _cy_min_rw_reservations(reservations)
 
     def check_conflicts(self) -> set[int]:
         """Checks for conflicts based on Arias default method
@@ -147,22 +140,7 @@ class BaseAriaState(BaseOperatorState):
         set[int]
             the set of transaction ids to abort
         """
-        aborted_transactions = set()
-        minimized_writes = self.min_rw_reservations(self.writes)
-        for operator_partition, write_set in self.write_sets.items():
-            read_set = self.read_sets[operator_partition]
-            t_ids: set[int] = set(read_set.keys()).union(set(write_set.keys()))
-            for t_id in t_ids:
-                rs = read_set.get(t_id, set())
-                ws = write_set.get(t_id, {})
-                read_write_set = rs.union(ws)
-                if self.has_conflicts(
-                    t_id,
-                    read_write_set,
-                    minimized_writes[operator_partition],
-                ):
-                    aborted_transactions.add(t_id)
-        return aborted_transactions
+        return _cy_check_conflicts(self.write_sets, self.read_sets, self.writes)
 
     def check_conflicts_deterministic_reordering(self) -> set[int]:
         """Checks for conflicts based on Arias deterministic reordering method
@@ -172,28 +150,14 @@ class BaseAriaState(BaseOperatorState):
         set[int]
             the set of transaction ids to abort
         """
-        aborted_transactions = set()
-        merged_reads = self.min_rw_reservations(self.global_reads)
-        minimized_writes = self.min_rw_reservations(self.writes)
-        for operator_name in self.write_sets:
-            write_set = self.global_write_sets[operator_name]
-            read_set = self.global_read_sets[operator_name]
-            t_ids: set[int] = set(self.write_sets[operator_name].keys()) | set(
-                self.read_sets[operator_name].keys(),
-            )
-            for t_id in t_ids:
-                ws = write_set.get(t_id, set())
-                waw = self.has_conflicts(t_id, ws, minimized_writes[operator_name])
-                if waw:
-                    aborted_transactions.add(t_id)
-                    continue
-                war = self.has_conflicts(t_id, ws, merged_reads[operator_name])
-                rs = read_set.get(t_id, set())
-                raw = self.has_conflicts(t_id, rs, minimized_writes[operator_name])
-                if not war or not raw:
-                    continue
-                aborted_transactions.add(t_id)
-        return aborted_transactions
+        return _cy_check_conflicts_dr(
+            self.write_sets,
+            self.read_sets,
+            self.writes,
+            self.global_reads,
+            self.global_write_sets,
+            self.global_read_sets,
+        )
 
     def check_conflicts_snapshot_isolation(self) -> set[int]:
         """Checks for conflicts based only on write-after-write dependencies leading to snapshot isolation
@@ -203,16 +167,7 @@ class BaseAriaState(BaseOperatorState):
         set[int]
             the set of transaction ids to abort
         """
-        aborted_transactions = set()
-        minimized_writes = self.min_rw_reservations(self.writes)
-        for operator_partition in self.write_sets:
-            t_ids: set[int] = set(self.write_sets[operator_partition].keys())
-            for t_id in t_ids:
-                ws = self.write_sets[operator_partition].get(t_id, set())
-                waw = self.has_conflicts(t_id, ws, minimized_writes[operator_partition])
-                if waw:
-                    aborted_transactions.add(t_id)
-        return aborted_transactions
+        return _cy_check_conflicts_si(self.write_sets, self.writes)
 
     def cleanup(self) -> None:
         for operator_partition in self.operator_partitions:
@@ -259,39 +214,11 @@ class BaseAriaState(BaseOperatorState):
         """
         Here we delete the t_ids of the aborted transactions from the rw sets and reservations as if they never existed.
         """
-        if not global_logic_aborts:
-            return
-
-        # Remove aborted t_ids from read_sets and write_sets
-        self.read_sets = {
-            operator_partition: {
-                tid: value
-                for tid, value in self.read_sets[operator_partition].items()
-                if tid not in global_logic_aborts
-            }
-            for operator_partition in self.operator_partitions
-        }
-        self.write_sets = {
-            operator_partition: {
-                tid: value
-                for tid, value in self.write_sets[operator_partition].items()
-                if tid not in global_logic_aborts
-            }
-            for operator_partition in self.operator_partitions
-        }
-
-        # Update reads and writes dictionaries
-        self.reads = {
-            operator_partition: {
-                key: [tid for tid in t_ids if tid not in global_logic_aborts]
-                for key, t_ids in self.reads[operator_partition].items()
-            }
-            for operator_partition in self.operator_partitions
-        }
-        self.writes = {
-            operator_partition: {
-                key: [tid for tid in t_ids if tid not in global_logic_aborts]
-                for key, t_ids in self.writes[operator_partition].items()
-            }
-            for operator_partition in self.operator_partitions
-        }
+        _cy_remove_aborted(
+            self.operator_partitions,
+            self.read_sets,
+            self.write_sets,
+            self.reads,
+            self.writes,
+            global_logic_aborts,
+        )
