@@ -116,26 +116,33 @@ class LocalStyxRunner:
         function_name: str,
         params: tuple,
     ) -> object:
-        """Core execution: create context, run function, DFS-execute chains."""
+        """Core execution: create context, run function, DFS-execute chains.
+
+        Acquires a per-key lock so concurrent send_event calls on the
+        same key are serialized.  The lock is released *before* chained
+        remote calls execute, preventing deadlocks on cycles (e.g.
+        concurrent transfer A->B and B->A).
+        """
         operator = self._graph.nodes[operator_name]
         partition = operator.which_partition(key)
-
-        # Look up registered function
         func = operator.functions[function_name]
 
-        # Create local context
-        ctx = LocalStatefulFunction(
-            key=key,
-            operator_name=operator_name,
-            partition=partition,
-            state=self._state,
-        )
+        lock = self._state.key_lock(operator_name, key)
 
-        # Execute user function
-        result = await func(ctx, *params)
+        # Hold the lock while executing the function (get/put are protected).
+        # Release before chaining to avoid deadlocks.
+        async with lock:
+            ctx = LocalStatefulFunction(
+                key=key,
+                operator_name=operator_name,
+                partition=partition,
+                state=self._state,
+            )
+            result = await func(ctx, *params)
+            pending_chains = ctx.drain_remote_calls()
 
-        # DFS-execute any chained remote calls
-        for chain_op, chain_func, chain_key, chain_params in ctx.drain_remote_calls():
+        # DFS-execute chained calls outside the lock
+        for chain_op, chain_func, chain_key, chain_params in pending_chains:
             await self._execute_function(chain_op, chain_key, chain_func, chain_params)
 
         return result

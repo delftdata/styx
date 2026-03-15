@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 from styx.common.local_state_backends import LocalStateBackend
 from styx.common.operator import Operator
@@ -365,3 +367,107 @@ class TestLocalStyxRunnerSync:
 
         result = runner.send_event_sync("kv", key=42, function="read")
         assert result == (42, "hello")
+
+
+# ---------------------------------------------------------------------------
+# Concurrency tests
+# ---------------------------------------------------------------------------
+
+
+class TestLocalStyxRunnerConcurrency:
+    async def test_concurrent_writes_different_keys(self):
+        """Concurrent writes to different keys should all succeed."""
+        g = _make_kv_graph()
+        runner = LocalStyxRunner(graph=g)
+
+        await asyncio.gather(
+            *(runner.send_event("kv", key=i, function="write", params=(i * 10,)) for i in range(50))
+        )
+
+        state = runner.get_state("kv")
+        for i in range(50):
+            assert state[i] == i * 10
+
+    async def test_concurrent_writes_same_key(self):
+        """Concurrent writes to the same key should serialize correctly."""
+        g = StateflowGraph("counter", operator_state_backend=LocalStateBackend.DICT)
+        op = Operator("c", n_partitions=1)
+
+        @op.register
+        async def increment(ctx):
+            val = ctx.get() or 0
+            val += 1
+            ctx.put(val)
+            return val
+
+        g.add_operator(op)
+        runner = LocalStyxRunner(graph=g)
+
+        n = 100
+        await asyncio.gather(
+            *(runner.send_event("c", key=0, function="increment") for _ in range(n))
+        )
+
+        state = runner.get_state("c")
+        assert state[0] == n
+
+    async def test_concurrent_transfers_conserve_total(self):
+        """Concurrent transfers must conserve the total money supply."""
+        g = _make_transfer_graph()
+        runner = LocalStyxRunner(graph=g)
+        n_accounts = 20
+        initial = 1000
+        runner.init_data("accounts", {i: initial for i in range(n_accounts)})
+
+        # Generate diverse pairs: each source key appears at most a few times
+        n_transfers = 100
+        pairs = [(i % n_accounts, (i + 1 + i // n_accounts) % n_accounts) for i in range(n_transfers)]
+
+        await asyncio.gather(
+            *(
+                runner.send_event("accounts", key=a, function="transfer", params=(b, 1))
+                for a, b in pairs
+            )
+        )
+
+        state = runner.get_state("accounts")
+        total = sum(state.values())
+        assert total == n_accounts * initial
+
+    async def test_concurrent_cross_operator_chains(self):
+        """Concurrent cross-operator chains should not corrupt state."""
+        g = _make_multi_operator_graph()
+        runner = LocalStyxRunner(graph=g)
+        runner.init_data("inventory", {i: 1000 for i in range(10)})
+
+        # 50 concurrent orders, each deducting 1 from a different item
+        await asyncio.gather(
+            *(
+                runner.send_event(
+                    "orders", key=i, function="place_order", params=(i % 10, 1)
+                )
+                for i in range(50)
+            )
+        )
+
+        inv_state = runner.get_state("inventory")
+        # Each item 0-9 should have been deducted 5 times (50 orders / 10 items)
+        for item in range(10):
+            assert inv_state[item] == 1000 - 5
+
+    async def test_concurrent_bidirectional_transfers_no_deadlock(self):
+        """Concurrent A->B and B->A transfers must not deadlock."""
+        g = _make_transfer_graph()
+        runner = LocalStyxRunner(graph=g)
+        runner.init_data("accounts", {0: 1000, 1: 1000})
+
+        # Many concurrent transfers in both directions
+        tasks = []
+        for _ in range(50):
+            tasks.append(runner.send_event("accounts", key=0, function="transfer", params=(1, 1)))
+            tasks.append(runner.send_event("accounts", key=1, function="transfer", params=(0, 1)))
+
+        await asyncio.gather(*tasks)
+
+        state = runner.get_state("accounts")
+        assert state[0] + state[1] == 2000
