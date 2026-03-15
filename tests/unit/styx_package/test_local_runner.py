@@ -380,9 +380,7 @@ class TestLocalStyxRunnerConcurrency:
         g = _make_kv_graph()
         runner = LocalStyxRunner(graph=g)
 
-        await asyncio.gather(
-            *(runner.send_event("kv", key=i, function="write", params=(i * 10,)) for i in range(50))
-        )
+        await asyncio.gather(*(runner.send_event("kv", key=i, function="write", params=(i * 10,)) for i in range(50)))
 
         state = runner.get_state("kv")
         for i in range(50):
@@ -404,9 +402,7 @@ class TestLocalStyxRunnerConcurrency:
         runner = LocalStyxRunner(graph=g)
 
         n = 100
-        await asyncio.gather(
-            *(runner.send_event("c", key=0, function="increment") for _ in range(n))
-        )
+        await asyncio.gather(*(runner.send_event("c", key=0, function="increment") for _ in range(n)))
 
         state = runner.get_state("c")
         assert state[0] == n
@@ -417,17 +413,14 @@ class TestLocalStyxRunnerConcurrency:
         runner = LocalStyxRunner(graph=g)
         n_accounts = 20
         initial = 1000
-        runner.init_data("accounts", {i: initial for i in range(n_accounts)})
+        runner.init_data("accounts", dict.fromkeys(range(n_accounts), initial))
 
         # Generate diverse pairs: each source key appears at most a few times
         n_transfers = 100
         pairs = [(i % n_accounts, (i + 1 + i // n_accounts) % n_accounts) for i in range(n_transfers)]
 
         await asyncio.gather(
-            *(
-                runner.send_event("accounts", key=a, function="transfer", params=(b, 1))
-                for a, b in pairs
-            )
+            *(runner.send_event("accounts", key=a, function="transfer", params=(b, 1)) for a, b in pairs)
         )
 
         state = runner.get_state("accounts")
@@ -438,16 +431,11 @@ class TestLocalStyxRunnerConcurrency:
         """Concurrent cross-operator chains should not corrupt state."""
         g = _make_multi_operator_graph()
         runner = LocalStyxRunner(graph=g)
-        runner.init_data("inventory", {i: 1000 for i in range(10)})
+        runner.init_data("inventory", dict.fromkeys(range(10), 1000))
 
         # 50 concurrent orders, each deducting 1 from a different item
         await asyncio.gather(
-            *(
-                runner.send_event(
-                    "orders", key=i, function="place_order", params=(i % 10, 1)
-                )
-                for i in range(50)
-            )
+            *(runner.send_event("orders", key=i, function="place_order", params=(i % 10, 1)) for i in range(50))
         )
 
         inv_state = runner.get_state("inventory")
