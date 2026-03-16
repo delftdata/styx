@@ -83,7 +83,7 @@ sudo visudo -f /etc/sudoers.d/kubefwd
 Add the following line, replacing `youruser` with your Linux username:
 
 ```
-youruser ALL=(ALL) NOPASSWD: /usr/local/bin/kubefwd
+youruser ALL=(ALL) NOPASSWD:SETENV: /usr/local/bin/kubefwd
 ```
 
 Verify:
