@@ -20,9 +20,15 @@ RUN python -m pip install --upgrade pip && \
     python -m pip install -r /tmp/requirements.txt
 
 COPY styx-package /tmp/styx-package
-RUN python -m pip install /tmp/styx-package
+RUN cd /tmp/styx-package && python setup.py build_ext --inplace && \
+    python -m pip install /tmp/styx-package
 
 COPY worker /app/worker
+
+# Compile Cython extensions for hot-path acceleration
+RUN python worker/setup.py build_ext --inplace || \
+    echo "WARNING: Cython build failed — using pure-Python fallback"
+
 COPY worker/start-worker.sh /usr/local/bin/start-worker.sh
 
 RUN chmod 755 /usr/local/bin/start-worker.sh && \

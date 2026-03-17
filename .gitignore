@@ -6,6 +6,12 @@ __pycache__/
 # C extensions
 *.so
 
+# Cython-generated C files (built from .pyx at build time)
+worker/operator_state/aria/_aria_state.c
+worker/operator_state/aria/_fast_copy.c
+worker/sequencer/_sequencer.c
+styx-package/styx/common/partitioning/_hash_partitioner.c
+
 # Distribution / packaging
 .Python
 build/

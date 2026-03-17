@@ -66,9 +66,6 @@ PROTOCOL_WORKERS: int = int(os.getenv("PROTOCOL_WORKERS", "100"))
 
 PROTOCOL = Protocols.Aria
 
-# TODO Check dynamic r/w sets
-# TODO when compactions happen recovery should hold and vice versa
-
 
 def repair_stdio() -> None:
     with contextlib.suppress(Exception):

@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import os
 import time
 from timeit import default_timer as timer
@@ -90,6 +91,7 @@ class AriaProtocol(BaseTransactionalProtocol):
         # worker_id: set of aborted t_ids
         self.concurrency_aborts_everywhere: set[int] = set()
         self.t_ids_to_reschedule: set[int] = set()
+        self.fallback_rescheduled_t_ids: set[int] = set()
 
         # ready_to_commit_events -> worker_id: Event that appears if the peer is ready to commit
         self.ready_to_reorder_events: dict[int, asyncio.Event] = {peer_id: asyncio.Event() for peer_id in self.peers}
@@ -119,7 +121,7 @@ class AriaProtocol(BaseTransactionalProtocol):
             worker_id=self.id,
             kafka_url=KAFKA_URL,
             sequence_max_size=SEQUENCE_MAX_SIZE,
-            epoch_interval_ms=1,
+            epoch_interval_ms=100,
         )
 
         self.egress: StyxKafkaBatchEgress = StyxKafkaBatchEgress(
@@ -438,6 +440,7 @@ class AriaProtocol(BaseTransactionalProtocol):
     async def _handle_remote_wants_to_proceed(self, _: bytes) -> None:
         if not self.currently_processing:
             self.remote_wants_to_proceed = True
+            self.ingress.messages_available.set()
 
     async def _handle_async_migration(self, data: bytes) -> None:
         mt = MessageType.AsyncMigration
@@ -489,8 +492,14 @@ class AriaProtocol(BaseTransactionalProtocol):
         logging.warning("STARTED function scheduler")
 
         while self.running:
-            # need to sleep to allow the kafka consumer coroutine to read data
-            await asyncio.sleep(0)
+            # Wait until the ingress signals that messages are available,
+            # or a remote peer wants to proceed, instead of busy-spinning.
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(
+                    self.ingress.messages_available.wait(),
+                    timeout=0.1,
+                )
+            self.ingress.messages_available.clear()
 
             async with self.sequencer.lock:
                 sequence: list[SequencedItem] = self.sequencer.get_epoch()
@@ -702,7 +711,9 @@ class AriaProtocol(BaseTransactionalProtocol):
             await self.run_fallback_strategy()
             await self.send_delta_to_snapshotting_proc()
             self.concurrency_aborts_everywhere = set()
-            self.t_ids_to_reschedule = set()
+            # Keep rescheduled t_ids (rw-set changed during fallback) for the next epoch
+            self.t_ids_to_reschedule = self.fallback_rescheduled_t_ids.copy()
+            self.fallback_rescheduled_t_ids.clear()
         return abort_rate
 
     def _advance_offsets(self, sequence: list[SequencedItem]) -> None:
@@ -800,6 +811,7 @@ class AriaProtocol(BaseTransactionalProtocol):
     def cleanup_after_epoch(self) -> None:
         self.concurrency_aborts_everywhere.clear()
         self.t_ids_to_reschedule.clear()
+        self.fallback_rescheduled_t_ids.clear()
         self.wait_responses_to_be_sent.clear()
         self.networking.cleanup_after_epoch()
         self.local_state.cleanup()
@@ -841,8 +853,15 @@ class AriaProtocol(BaseTransactionalProtocol):
                 await self.networking.waited_ack_events[t_id].wait()
             transaction_failed: bool = t_id in self.networking.aborted_events or not success
 
-            if not transaction_failed:
+            # Per the Aria paper: if the rw-set changed during fallback
+            # re-execution, the dependency graph is invalid — reschedule
+            # the transaction to the next epoch instead of committing.
+            rw_changed = self.local_state.has_fallback_rw_set_changed(t_id)
+            if not transaction_failed and not rw_changed:
                 self.local_state.commit_fallback_transaction(t_id)
+            elif rw_changed:
+                self.fallback_rescheduled_t_ids.add(t_id)
+                transaction_failed = True
 
             await self.fallback_unlock(t_id, success=not transaction_failed)
 

@@ -117,7 +117,7 @@ class TestIterSnapshotFiles:
         """_iter_snapshot_files should only return files up to max_snapshot_id."""
         from worker.fault_tolerance.async_snapshots import (
             AsyncSnapshotsS3,
-            _mk_s3_client,
+            _get_s3_client,
         )
 
         prefix = "data/iter_op/0/"
@@ -126,7 +126,7 @@ class TestIterSnapshotFiles:
             minio_bucket.put_object(Bucket="styx-snapshots", Key=f"{prefix}{sid}.bin", Body=data)
 
         snap = AsyncSnapshotsS3(worker_id=0)
-        s3 = _mk_s3_client()
+        s3 = _get_s3_client()
         result = snap._iter_snapshot_files(s3, prefix, max_snapshot_id=3)
 
         assert len(result) == 3
@@ -137,7 +137,7 @@ class TestIterSnapshotFiles:
         """Results should be sorted by snapshot ID ascending."""
         from worker.fault_tolerance.async_snapshots import (
             AsyncSnapshotsS3,
-            _mk_s3_client,
+            _get_s3_client,
         )
 
         prefix = "data/sort_op/0/"
@@ -149,7 +149,7 @@ class TestIterSnapshotFiles:
             )
 
         snap = AsyncSnapshotsS3(worker_id=0)
-        s3 = _mk_s3_client()
+        s3 = _get_s3_client()
         result = snap._iter_snapshot_files(s3, prefix, max_snapshot_id=10)
         ids = [pair[0] for pair in result]
         assert ids == [1, 3, 5]
@@ -160,7 +160,7 @@ class TestListBinKeys:
         """_list_bin_keys should filter out non-.bin files."""
         from worker.fault_tolerance.async_snapshots import (
             AsyncSnapshotsS3,
-            _mk_s3_client,
+            _get_s3_client,
         )
 
         prefix = "data/binfilter_op/0/"
@@ -169,7 +169,7 @@ class TestListBinKeys:
         minio_bucket.put_object(Bucket="styx-snapshots", Key=f"{prefix}3.bin", Body=b"data")
 
         snap = AsyncSnapshotsS3(worker_id=0)
-        s3 = _mk_s3_client()
+        s3 = _get_s3_client()
         keys = snap._list_bin_keys(s3, prefix)
 
         assert len(keys) == 2
@@ -179,10 +179,10 @@ class TestListBinKeys:
         """Listing a non-existent prefix should return empty."""
         from worker.fault_tolerance.async_snapshots import (
             AsyncSnapshotsS3,
-            _mk_s3_client,
+            _get_s3_client,
         )
 
         snap = AsyncSnapshotsS3(worker_id=0)
-        s3 = _mk_s3_client()
+        s3 = _get_s3_client()
         keys = snap._list_bin_keys(s3, "data/nonexistent_op_xyz/0/")
         assert keys == []
