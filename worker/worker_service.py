@@ -13,7 +13,6 @@ import random
 import socket
 import struct
 import sys
-import threading
 import time
 from timeit import default_timer as timer
 from typing import TYPE_CHECKING, Any
@@ -142,7 +141,6 @@ class Worker:
 
         self.worker_operators: dict[OperatorPartition, Operator] | None = None
 
-        self.migration_repartitioning_done: asyncio.Event = asyncio.Event()
         self.migration_completed: asyncio.Event = asyncio.Event()
 
         self.m_input_offsets: dict[OperatorPartition, int] = {}
@@ -158,7 +156,9 @@ class Worker:
         self.deployed_graph: StateflowGraph | None = None
 
         self.final_keys_to_send = defaultdict(set)
-        self.results_lock = threading.Lock()
+        self._pending_hash_metadata: dict[OperatorPartition, dict[Any, tuple[int, int]]] = defaultdict(dict)
+        self._pending_migration_data: bytes | None = None
+        self.migration_error: BaseException | None = None
 
         self.networking_locks: dict[MessageType, asyncio.Lock] = {
             MessageType.ReceiveMigrationHashes: asyncio.Lock(),
@@ -193,28 +193,27 @@ class Worker:
         }
 
     @staticmethod
-    def rehash_and_store(
+    def rehash_only(
         operator_partition: OperatorPartition,
         partitioner: HashPartitioner,
         operator_partition_keys: list[Any],
-        dns: dict[str, dict[int, tuple[str, int, int]]],
         worker_id: int,
-    ) -> dict[OperatorPartition, set[tuple[Any, int]]]:
-        ser_time = 0.0
-        wire_time = 0.0
+    ) -> tuple[dict[OperatorPartition, set[tuple[Any, int]]], dict[OperatorPartition, dict[Any, tuple[int, int]]]]:
+        """Pure CPU rehashing — no network I/O.
+
+        Returns:
+            (keys_to_send, hash_metadata)
+            - keys_to_send: {(op_name, old_partition): {(key, new_partition), ...}}
+            - hash_metadata: {(op_name, new_partition): {key: (worker_id, old_partition), ...}}
+        """
         operator_name, previous_partition = operator_partition
-        # Start hashing
         start_hashing = timer()
-        keys_to_send = defaultdict(set)
-        new_partitions: dict[OperatorPartition, dict[Any, tuple[int, int]]] = {
-            (operator_name, partition): {} for partition in range(partitioner.partitions)
-        }
+        keys_to_send: dict[OperatorPartition, set[tuple[Any, int]]] = defaultdict(set)
+        hash_metadata: dict[OperatorPartition, dict[Any, tuple[int, int]]] = defaultdict(dict)
         for key in operator_partition_keys:
             new_partition: int = partitioner.get_partition_no_cache(key)
-            operator_partition = (operator_name, new_partition)
             if new_partition != previous_partition:
-                # If this key is already in the correct partition no need to transfer it
-                new_partitions[operator_partition][key] = (
+                hash_metadata[(operator_name, new_partition)][key] = (
                     worker_id,
                     previous_partition,
                 )
@@ -222,59 +221,31 @@ class Worker:
                     (key, new_partition),
                 )
         end_hashing = timer()
-
-        def upload_partition(msg: bytes, worker_info: tuple[str, int, int]) -> float:
-            s_wire = timer()
-            try:
-                s = socket.socket()
-                s.connect((worker_info[0], worker_info[1]))
-                s.send(msg)
-                s.close()
-            except Exception:
-                sync_logging.exception("MIGRATION | NETWORK THREAD ERROR")
-            e_wire = timer()
-            return e_wire - s_wire
-
-        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
-            futures = []
-            for n_op, data in new_partitions.items():
-                if not data:
-                    continue  # Skip empty partitions
-                n_o, n_p = n_op
-                s_ser = timer()
-                serialized_hashes: bytes = NetworkingManager.encode_message(
-                    msg=(n_op, data),
-                    msg_type=MessageType.ReceiveMigrationHashes,
-                    serializer=Serializer.MSGPACK,
-                )
-                e_ser = timer()
-                ser_time += e_ser - s_ser
-                futures.append(
-                    executor.submit(upload_partition, serialized_hashes, dns[n_o][n_p]),
-                )
-
-            for fut in futures:
-                wire_time += fut.result()
-
         sync_logging.warning(
-            "MIGRATION of %s:%s | hashing_time: %.3fs | ser_time: %.3fs | wire_time: %.3fs",
+            "MIGRATION of %s:%s | hashing_time: %.3fs",
             operator_name,
             previous_partition,
             end_hashing - start_hashing,
-            ser_time,
-            wire_time,
         )
-        return keys_to_send
+        return keys_to_send, hash_metadata
 
     def repartitioning_callback(self, future: Future) -> None:
-        with self.results_lock:
-            self.completed_repartitioning += 1
-            keys_to_send = future.result()
-            for op_partition, keys in keys_to_send.items():
-                self.final_keys_to_send[op_partition].update(keys)
-            if self.completed_repartitioning == self.total_repartitioning:
-                self.completed_repartitioning_event.set()
-                self.completed_repartitioning = 0
+        # This callback runs on the event loop thread (scheduled via call_soon
+        # by asyncio.Future.add_done_callback), so no threading lock is needed.
+        self.completed_repartitioning += 1
+        try:
+            keys_to_send, hash_metadata = future.result()
+        except Exception:
+            logging.exception("MIGRATION | Repartitioning subprocess failed")
+            self.migration_error = future.exception()
+            self.completed_repartitioning_event.set()
+            return
+        for op_partition, keys in keys_to_send.items():
+            self.final_keys_to_send[op_partition].update(keys)
+        for dest_partition, key_map in hash_metadata.items():
+            self._pending_hash_metadata[dest_partition].update(key_map)
+        if self.completed_repartitioning == self.total_repartitioning:
+            self.completed_repartitioning_event.set()
 
     async def worker_controller(self, data: bytes) -> None:
         msg_type = self.networking.get_msg_type(data)
@@ -385,49 +356,29 @@ class Worker:
         logging.warning("Graph code updates not implemented yet! %s", data)
 
     async def _handle_init_migration(self, data: bytes, _: MessageType) -> None:
+        """Phase A: rehash in background while protocol keeps running."""
         try:
-            logging.warning(f"MIGRATION | START at {time.time_ns() // 1_000_000}")
-            start_time = timer()
-
-            t_stop_start = timer()
-            await self._migration_stop_protocol()
-            t_stop_end = timer()
-            logging.warning(
-                "MIGRATION | Function Execution Protocol Stopped! |"
-                f" @Epoch {self.function_execution_protocol.sequencer.epoch_counter} |"
-                f" took: {t_stop_end - t_stop_start}",
-            )
-
-            await self._migration_decode_and_apply_plan(data)
+            logging.warning(f"MIGRATION | PHASE A START at {time.time_ns() // 1_000_000}")
+            self._pending_migration_data = data
 
             t_repart_start = timer()
-            await self._migration_local_repartition()
-            await self._migration_coordinate_repartition_done()
+            await self._migration_background_repartition()
             t_repart_end = timer()
             logging.warning(
-                f"MIGRATION | REPARTITIONING DONE | took: {t_repart_end - t_repart_start}",
+                f"MIGRATION | PHASE A REHASHING DONE | took: {t_repart_end - t_repart_start}",
             )
 
-            t_deploy_start = timer()
-            await self._migration_rebuild_runtime()
-            t_deploy_end = timer()
-            logging.warning(
-                f"MIGRATION | LOADING DATA DONE | took: {t_deploy_end - t_deploy_start}",
+            # Signal coordinator that rehashing is done (no counters — those come in Phase B)
+            await self.networking.send_message(
+                DISCOVERY_HOST,
+                DISCOVERY_PORT,
+                msg=b"",
+                msg_type=MessageType.MigrationRepartitioningDone,
+                serializer=Serializer.NONE,
             )
-
-            t_sync_start = timer()
-            await self._migration_sync_and_resume()
-            t_sync_end = timer()
-            logging.warning(
-                f"MIGRATION | PROCESSING CONTINUES | took: {t_sync_end - t_sync_start}",
-            )
-
-            end_time = timer()
-            logging.warning(
-                f"Worker: {self.id} | Migration took: {round((end_time - start_time) * 1000, 4)}ms",
-            )
+            logging.warning("MIGRATION | PHASE A COMPLETE — waiting for coordinator to stop protocol")
         except Exception as e:
-            logging.error(f"Uncaught exception while migrating: {e}")
+            logging.error(f"Uncaught exception during migration Phase A: {e}")
 
     async def _migration_stop_protocol(self) -> None:
         await self.function_execution_protocol.wait_stopped()
@@ -446,54 +397,119 @@ class Worker:
         self.worker_operators = new_worker_operators
         await asyncio.sleep(0)
 
-    async def _migration_local_repartition(self) -> None:
+    async def _migration_background_repartition(self) -> None:
+        """Phase A repartitioning: rehash keys in subprocesses (no network I/O).
+
+        Decodes the pending plan to get the new graph, but does NOT apply
+        the plan (dns, peers, worker_operators) — that happens in Phase B.
+        """
+        # Reset state from any previous migration
+        self.final_keys_to_send.clear()
+        self._pending_hash_metadata.clear()
+        self.completed_repartitioning = 0
+        self.completed_repartitioning_event.clear()
+        self.migration_error = None
+
+        # Decode the plan to get the new graph (for partitioners) without applying it
+        (
+            pending_graph,
+            _new_worker_operators,
+            _dns,
+            _peers,
+            _operator_state_backend,
+        ) = self.networking.decode_message(self._pending_migration_data)
+
         operator_partitions_to_repartition = self.local_state.get_operator_partitions_to_repartition()
         self.total_repartitioning = sum(len(parts) for parts in operator_partitions_to_repartition.values())
+
+        if self.total_repartitioning == 0:
+            self.completed_repartitioning_event.set()
+            return
 
         loop = asyncio.get_running_loop()
         for (
             operator_name,
             operator_partitions,
         ) in operator_partitions_to_repartition.items():
-            new_partitioner: HashPartitioner = self.deployed_graph.get_operator_by_name(
+            new_partitioner: HashPartitioner = pending_graph.get_operator_by_name(
                 operator_name,
             ).get_partitioner()
             for operator_partition in operator_partitions:
                 logging.warning(f"Sending: {operator_partition} for repartitioning")
+                # Offload key list copy to a thread (Step 8)
+                key_list = await loop.run_in_executor(
+                    None,
+                    lambda op=operator_partition: list(
+                        self.local_state.get_operator_data_for_repartitioning(op).keys(),
+                    ),
+                )
                 loop.run_in_executor(
                     self.pool,
-                    self.rehash_and_store,
+                    self.rehash_only,
                     operator_partition,
                     new_partitioner,
-                    list(
-                        self.local_state.get_operator_data_for_repartitioning(
-                            operator_partition,
-                        ).keys(),
-                    ),
-                    self.dns,
+                    key_list,
                     self.id,
                 ).add_done_callback(self.repartitioning_callback)
 
-        self.completed_repartitioning_event.clear()
         await self.completed_repartitioning_event.wait()
-        logging.warning("Local Repartitioning completed")
 
-        self.local_state.add_keys_to_send(self.final_keys_to_send)
+        if self.migration_error is not None:
+            raise self.migration_error
 
-    async def _migration_coordinate_repartition_done(self) -> None:
-        await self.networking.send_message(
-            DISCOVERY_HOST,
-            DISCOVERY_PORT,
-            msg=(
-                self.function_execution_protocol.sequencer.epoch_counter,
-                self.function_execution_protocol.sequencer.t_counter,
-                self.function_execution_protocol.topic_partition_offsets,
-                self.function_execution_protocol.egress.topic_partition_output_offsets,
-            ),
-            msg_type=MessageType.MigrationRepartitioningDone,
-            serializer=Serializer.MSGPACK,
-        )
-        await self.migration_repartitioning_done.wait()
+        logging.warning("Background repartitioning completed")
+
+    async def _migration_catchup_rehash(self) -> None:
+        """Catch-up pass: rehash keys created during Phase A that weren't in the original snapshot."""
+        operator_partitions_to_repartition = self.local_state.get_operator_partitions_to_repartition()
+        for operator_name, operator_partitions in operator_partitions_to_repartition.items():
+            new_partitioner: HashPartitioner = self.deployed_graph.get_operator_by_name(
+                operator_name,
+            ).get_partitioner()
+            for operator_partition in operator_partitions:
+                current_keys = set(
+                    self.local_state.get_operator_data_for_repartitioning(operator_partition).keys(),
+                )
+                # Keys already in final_keys_to_send for this partition
+                already_rehashed = {k for k, _ in self.final_keys_to_send.get(operator_partition, set())}
+                new_keys = current_keys - already_rehashed
+                if not new_keys:
+                    continue
+                _, previous_partition = operator_partition
+                for key in new_keys:
+                    new_partition: int = new_partitioner.get_partition_no_cache(key)
+                    if new_partition != previous_partition:
+                        self._pending_hash_metadata[(operator_name, new_partition)][key] = (
+                            self.id,
+                            previous_partition,
+                        )
+                        self.final_keys_to_send[operator_partition].add(
+                            (key, new_partition),
+                        )
+                logging.warning(
+                    f"MIGRATION | Catch-up rehashed {len(new_keys)} keys for {operator_partition}",
+                )
+
+    async def _migration_send_hash_metadata(self) -> None:
+        """Send hash metadata to destination workers via NetworkingManager in parallel."""
+        send_tasks = []
+        for dest_partition, key_map in self._pending_hash_metadata.items():
+            if not key_map:
+                continue
+            operator_name, partition = dest_partition
+            worker_info = self.dns[operator_name][partition]
+            send_tasks.append(
+                self.networking.send_message(
+                    worker_info[0],
+                    worker_info[1],
+                    msg=(dest_partition, key_map),
+                    msg_type=MessageType.ReceiveMigrationHashes,
+                    serializer=Serializer.MSGPACK,
+                ),
+            )
+        if send_tasks:
+            await asyncio.gather(*send_tasks)
+        self._pending_hash_metadata.clear()
 
     async def _migration_rebuild_runtime(self) -> None:
         await self._reset_protocol_networking()
@@ -555,7 +571,6 @@ class Worker:
 
         # Reset sync events for next time
         self.migration_completed.clear()
-        self.migration_repartitioning_done.clear()
 
     async def _handle_receive_migration_hashes(
         self,
@@ -594,24 +609,105 @@ class Worker:
         operator_partition, key, value = self.networking.decode_message(data)
         async with self.networking_locks[msg_type]:
             self.local_state.set_data_from_migration(operator_partition, key, value)
-            self.protocol_networking.key_received(operator_partition, key)
+            # Guard: the event may have been already signaled by the async
+            # migration handler, or may not exist if no transaction requested it.
+            op = tuple(operator_partition)
+            if (
+                op in self.protocol_networking.wait_remote_key_event
+                and key in self.protocol_networking.wait_remote_key_event[op]
+            ):
+                self.protocol_networking.key_received(op, key)
 
     async def _handle_migration_repartitioning_done(
         self,
-        data: bytes,
+        _data: bytes,
         _: MessageType,
     ) -> None:
-        logging.warning("MIGRATION | REPARTITIONING DONE FROM COORDINATOR")
+        """Phase B: protocol stops, catch-up, send hashes, rebuild, resume."""
+        try:
+            logging.warning(f"MIGRATION | PHASE B START at {time.time_ns() // 1_000_000}")
+            phase_b_start = timer()
+
+            # 1. Stop the protocol (coordinator already set stop_in_next_epoch)
+            t_stop_start = timer()
+            await self._migration_stop_protocol()
+            t_stop_end = timer()
+            logging.warning(
+                "MIGRATION | PHASE B Protocol Stopped |"
+                f" @Epoch {self.function_execution_protocol.sequencer.epoch_counter} |"
+                f" took: {t_stop_end - t_stop_start}",
+            )
+
+            # 2. Decode and apply the plan (dns, peers, worker_operators)
+            await self._migration_decode_and_apply_plan(self._pending_migration_data)
+            self._pending_migration_data = None
+
+            # 3. Catch-up pass: find keys created during Phase A that weren't rehashed
+            t_catchup_start = timer()
+            await self._migration_catchup_rehash()
+            t_catchup_end = timer()
+            logging.warning(
+                f"MIGRATION | PHASE B Catch-up rehash | took: {t_catchup_end - t_catchup_start}",
+            )
+
+            # 4. Register keys_to_send in local_state
+            self.local_state.add_keys_to_send(self.final_keys_to_send)
+
+            # 5. Send hash metadata to destination workers via NetworkingManager (parallel)
+            t_hash_send_start = timer()
+            await self._migration_send_hash_metadata()
+            t_hash_send_end = timer()
+            logging.warning(
+                f"MIGRATION | PHASE B Hash metadata sent | took: {t_hash_send_end - t_hash_send_start}",
+            )
+
+            # 6. Send MigrationInitDone with actual stop-time counters
+            await self.networking.send_message(
+                DISCOVERY_HOST,
+                DISCOVERY_PORT,
+                msg=(
+                    self.function_execution_protocol.sequencer.epoch_counter,
+                    self.function_execution_protocol.sequencer.t_counter,
+                    self.function_execution_protocol.topic_partition_offsets,
+                    self.function_execution_protocol.egress.topic_partition_output_offsets,
+                ),
+                msg_type=MessageType.MigrationInitDone,
+                serializer=Serializer.MSGPACK,
+            )
+
+            # 7. Wait for MigrationDone (carries merged counters from coordinator)
+            logging.warning("MIGRATION | PHASE B WAITING FOR MigrationDone")
+            await self.migration_completed.wait()
+
+            # 8. Rebuild runtime (now has correct merged counters from MigrationDone)
+            t_deploy_start = timer()
+            await self._migration_rebuild_runtime()
+            t_deploy_end = timer()
+            logging.warning(
+                f"MIGRATION | PHASE B Runtime rebuilt | took: {t_deploy_end - t_deploy_start}",
+            )
+
+            # 9. Start protocol with background migration
+            self.function_execution_protocol.start()
+            self.function_execution_protocol.started.set()
+
+            # Reset sync events for next time
+            self.migration_completed.clear()
+
+            phase_b_end = timer()
+            logging.warning(
+                f"Worker: {self.id} | PHASE B took: {round((phase_b_end - phase_b_start) * 1000, 4)}ms",
+            )
+        except Exception as e:
+            logging.error(f"Uncaught exception during migration Phase B: {e}")
+
+    async def _handle_migration_done(self, data: bytes, _: MessageType) -> None:
         (
             self.m_epoch_counter,
             self.m_t_counter,
             self.m_input_offsets,
             self.m_output_offsets,
         ) = self.networking.decode_message(data)
-        self.migration_repartitioning_done.set()
-        await asyncio.sleep(0)
-
-    async def _handle_migration_done(self, _data: bytes, _: MessageType) -> None:
         self.migration_completed.set()
         await asyncio.sleep(0)
 

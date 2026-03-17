@@ -368,19 +368,19 @@ class TestExists:
         s.keys_to_send[OP_PART] = set()  # partition tracked but "k" not queued
         assert s.exists("k", OP, PART) is True
 
-    def test_true_when_key_queued_but_still_in_data(self):
-        # keys_to_send stores (key, new_partition) tuples; bare key comparison is always
-        # unequal to tuples, so a queued key is still "existing" until physically popped
+    def test_false_when_key_queued_for_migration(self):
+        # A key in keys_to_send is being migrated to another partition,
+        # so it should not be considered as existing locally.
         s = _state()
         s.data[OP_PART]["k"] = "v"
         s.keys_to_send[OP_PART] = {("k", 1)}
-        assert s.exists("k", OP, PART) is True
+        assert s.exists("k", OP, PART) is False
 
-    def test_false_outside_migration_context(self):
-        # exists is migration-specific: without keys_to_send it returns False
+    def test_true_outside_migration_context(self):
+        # Key exists in data without any migration context — should return True
         s = _state()
         s.data[OP_PART]["k"] = "v"
-        assert s.exists("k", OP, PART) is False
+        assert s.exists("k", OP, PART) is True
 
     def test_false_for_unknown_operator_partition(self):
         s = _state()

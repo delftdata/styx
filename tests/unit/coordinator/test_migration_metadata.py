@@ -40,61 +40,85 @@ class TestCheckSum:
 
 
 # ---------------------------------------------------------------------------
-# repartitioning_done
+# repartitioning_done (barrier-only, no counters)
 # ---------------------------------------------------------------------------
 
 
 class TestRepartitioningDone:
     def test_returns_false_before_all_workers(self):
         meta = MigrationMetadata(n_workers=3)
-        result = run(meta.repartitioning_done(1, 100, {("op", 0): 5}, {("op", 0): 3}))
+        result = run(meta.repartitioning_done())
         assert result is False
 
     def test_returns_true_when_all_workers_reported(self):
         meta = MigrationMetadata(n_workers=2)
-        run(meta.repartitioning_done(1, 10, {}, {}))
-        result = run(meta.repartitioning_done(5, 20, {}, {}))
+        run(meta.repartitioning_done())
+        result = run(meta.repartitioning_done())
+        assert result is True
+
+    def test_increments_sync_sum(self):
+        meta = MigrationMetadata(n_workers=3)
+        run(meta.repartitioning_done())
+        run(meta.repartitioning_done())
+        assert meta.sync_sum[MessageType.MigrationRepartitioningDone] == 2
+
+
+# ---------------------------------------------------------------------------
+# init_done (collects counters)
+# ---------------------------------------------------------------------------
+
+
+class TestInitDone:
+    def test_returns_false_before_all_workers(self):
+        meta = MigrationMetadata(n_workers=3)
+        result = run(meta.init_done(1, 100, {("op", 0): 5}, {("op", 0): 3}))
+        assert result is False
+
+    def test_returns_true_when_all_workers_reported(self):
+        meta = MigrationMetadata(n_workers=2)
+        run(meta.init_done(1, 10, {}, {}))
+        result = run(meta.init_done(5, 20, {}, {}))
         assert result is True
 
     def test_input_offsets_takes_max(self):
         meta = MigrationMetadata(n_workers=2)
-        run(meta.repartitioning_done(1, 0, {("op", 0): 10}, {}))
-        run(meta.repartitioning_done(5, 0, {("op", 0): 5}, {}))
+        run(meta.init_done(1, 0, {("op", 0): 10}, {}))
+        run(meta.init_done(5, 0, {("op", 0): 5}, {}))
         assert meta.input_offsets[("op", 0)] == 10
 
     def test_output_offsets_takes_max(self):
         meta = MigrationMetadata(n_workers=2)
-        run(meta.repartitioning_done(1, 0, {}, {("op", 0): 3}))
-        run(meta.repartitioning_done(5, 0, {}, {("op", 0): 7}))
+        run(meta.init_done(1, 0, {}, {("op", 0): 3}))
+        run(meta.init_done(5, 0, {}, {("op", 0): 7}))
         assert meta.output_offsets[("op", 0)] == 7
 
     def test_epoch_counter_takes_max(self):
         meta = MigrationMetadata(n_workers=2)
-        run(meta.repartitioning_done(100, 0, {}, {}))
-        run(meta.repartitioning_done(50, 0, {}, {}))
+        run(meta.init_done(100, 0, {}, {}))
+        run(meta.init_done(50, 0, {}, {}))
         assert meta.epoch_counter == 100
 
     def test_t_counter_takes_max(self):
         meta = MigrationMetadata(n_workers=2)
-        run(meta.repartitioning_done(1, 0, {}, {}))
-        run(meta.repartitioning_done(5, 0, {}, {}))
+        run(meta.init_done(1, 0, {}, {}))
+        run(meta.init_done(5, 0, {}, {}))
         # t_counter passed as second arg; both calls pass 0 → max stays 0
         # (t_counter starts at -1, max(0, -1) = 0)
         assert meta.t_counter == 0
 
     def test_multiple_partitions_merged(self):
         meta = MigrationMetadata(n_workers=2)
-        run(meta.repartitioning_done(1, 0, {("op", 0): 10, ("op", 1): 20}, {}))
-        run(meta.repartitioning_done(5, 0, {("op", 2): 30}, {}))
+        run(meta.init_done(1, 0, {("op", 0): 10, ("op", 1): 20}, {}))
+        run(meta.init_done(5, 0, {("op", 2): 30}, {}))
         assert ("op", 0) in meta.input_offsets
         assert ("op", 1) in meta.input_offsets
         assert ("op", 2) in meta.input_offsets
 
     def test_increments_sync_sum(self):
         meta = MigrationMetadata(n_workers=3)
-        run(meta.repartitioning_done(1, 0, {}, {}))
-        run(meta.repartitioning_done(2, 0, {}, {}))
-        assert meta.sync_sum[MessageType.MigrationRepartitioningDone] == 2
+        run(meta.init_done(1, 0, {}, {}))
+        run(meta.init_done(2, 0, {}, {}))
+        assert meta.sync_sum[MessageType.MigrationInitDone] == 2
 
 
 # ---------------------------------------------------------------------------
@@ -146,13 +170,13 @@ class TestCleanup:
         run(meta.cleanup(MessageType.MigrationDone))
         assert meta.sync_sum[MessageType.MigrationRepartitioningDone] == 1
 
-    def test_cleanup_repartitioning_clears_offsets(self):
+    def test_cleanup_init_done_clears_offsets(self):
         meta = MigrationMetadata(n_workers=2)
         meta.input_offsets[("op", 0)] = 10
         meta.output_offsets[("op", 0)] = 5
         meta.epoch_counter = 99
         meta.t_counter = 42
-        run(meta.cleanup(MessageType.MigrationRepartitioningDone))
+        run(meta.cleanup(MessageType.MigrationInitDone))
         assert len(meta.input_offsets) == 0
         assert len(meta.output_offsets) == 0
         assert meta.epoch_counter == -1

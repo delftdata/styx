@@ -45,11 +45,15 @@ class InMemoryOperatorState(BaseAriaState):
         new_operator_partition: OperatorPartition,
         key: K,
         old_partition: int,
-    ) -> K:
+    ) -> K | None:
         operator_name, new_partition = new_operator_partition
         operator_partition: OperatorPartition = (operator_name, old_partition)
-        data_to_send: K = self.data[operator_partition].pop(key)
-        self.keys_to_send[operator_partition].remove((key, new_partition))
+        data_to_send = self.data[operator_partition].pop(key, None)
+        if data_to_send is None:
+            # Key was already transferred via async migration batch
+            return None
+        if operator_partition in self.keys_to_send:
+            self.keys_to_send[operator_partition].discard((key, new_partition))
         return data_to_send
 
     def set_data_from_migration(
@@ -59,10 +63,14 @@ class InMemoryOperatorState(BaseAriaState):
         data: KVPairs,
     ) -> None:
         operator_partition = tuple(operator_partition)
-        self.data[operator_partition][key] = data
-        del self.remote_keys[operator_partition][key]
-        if not self.remote_keys[operator_partition]:
-            del self.remote_keys[operator_partition]
+        if data is not None:
+            self.data[operator_partition][key] = data
+        # Guard: remote_keys may not have the entry if async batch arrived
+        # before hash metadata, or if the key was already removed.
+        if operator_partition in self.remote_keys:
+            self.remote_keys[operator_partition].pop(key, None)
+            if not self.remote_keys[operator_partition]:
+                del self.remote_keys[operator_partition]
 
     def migrate_within_the_same_worker(
         self,
@@ -101,7 +109,10 @@ class InMemoryOperatorState(BaseAriaState):
             operator_name, _ = operator_partition
             while keys and c < batch_size:
                 key, new_partition = keys.pop()
-                value = self.data[operator_partition].pop(key)
+                value = self.data[operator_partition].pop(key, None)
+                if value is None:
+                    # Key was deleted between rehash and transfer — skip it
+                    continue
                 batch_to_send[(operator_name, new_partition)][key] = value
                 c += 1
             if not keys:
@@ -120,10 +131,13 @@ class InMemoryOperatorState(BaseAriaState):
     ) -> None:
         operator_partition = tuple(operator_partition)  # new partitioning
         self.data[operator_partition].update(kv_pairs)
-        for key in kv_pairs:
-            del self.remote_keys[operator_partition][key]
-        if not self.remote_keys[operator_partition]:
-            del self.remote_keys[operator_partition]
+        # Guard: remote_keys may not have entries if async batch arrived
+        # before hash metadata, or entries were already removed.
+        if operator_partition in self.remote_keys:
+            for key in kv_pairs:
+                self.remote_keys[operator_partition].pop(key, None)
+            if not self.remote_keys[operator_partition]:
+                del self.remote_keys[operator_partition]
 
     def get_worker_id_old_partition(
         self,
@@ -252,11 +266,14 @@ class InMemoryOperatorState(BaseAriaState):
         operator_partition: OperatorPartition = (operator_name, partition)
         if operator_partition not in self.data:
             return False
-        return (
-            operator_partition in self.keys_to_send
-            and key not in self.keys_to_send[operator_partition]
-            and key in self.data[operator_partition]
-        ) or self.in_remote_keys(key, operator_name, partition)
+        if key in self.data[operator_partition]:
+            # During migration: a key still in data but pending send to another
+            # partition should not be considered as belonging here.
+            if operator_partition in self.keys_to_send:
+                return not any(k == key for k, _ in self.keys_to_send[operator_partition])
+            return True
+        # During migration: key is expected to arrive from a remote worker
+        return self.in_remote_keys(key, operator_name, partition)
 
     def commit(self, aborted_from_remote: set[int]) -> set[int]:
         try:
