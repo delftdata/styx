@@ -101,8 +101,9 @@ class StyxKafkaIngress(BaseIngress):
                         operator_name=operator_name,
                         partition=true_partition,
                         function_name=fun_name,
+                        kafka_offset=msg.offset,
                         params=params,
-                        kafka_ingress_partition=partition,
+                        kafka_ingress_partition=msg.partition,
                     )
                     self.sequencer.sequence(run_func_payload)
                 else:
