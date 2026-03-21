@@ -279,12 +279,9 @@ class CoordinatorService:
             logging.info("Submitted Stateflow Graph Update to Workers")
 
     async def _start_migration(self, graph: StateflowGraph) -> None:
-        # Gracefully stop the transactional protocol in the next epoch
+        # Phase A: do NOT stop the protocol yet — workers will rehash in the background
         self.migration_in_progress = True
         await self.stop_snapshotting()
-
-        if self.aria_metadata is not None:
-            self.aria_metadata.stop_in_next_epoch()
 
         logging.warning(f"MIGRATION | START {graph}")
         await self.coordinator.update_stateflow_graph(graph)
@@ -304,21 +301,14 @@ class CoordinatorService:
     async def _handle_migration_repartitioning_done(
         self,
         _: StreamWriter,
-        data: bytes,
-        __: concurrent.futures.ProcessPoolExecutor,
+        __: bytes,
+        ___: concurrent.futures.ProcessPoolExecutor,
     ) -> None:
         mt = MessageType.MigrationRepartitioningDone
         logging.warning("Migration repartitioning done received!")
 
         async with self.networking_locks[mt]:
-            epoch_counter, t_counter, input_offsets, output_offsets = self.networking.decode_message(data)
-
-            sync_complete: bool = await self.migration_metadata.repartitioning_done(
-                epoch_counter,
-                t_counter,
-                input_offsets,
-                output_offsets,
-            )
+            sync_complete: bool = await self.migration_metadata.repartitioning_done()
 
             logging.warning(f"Migration repartitioning is complete: {sync_complete}")
 
@@ -331,12 +321,19 @@ class CoordinatorService:
     async def _handle_migration_init_done(
         self,
         _: StreamWriter,
-        __: bytes,
-        ___: concurrent.futures.ProcessPoolExecutor,
+        data: bytes,
+        __: concurrent.futures.ProcessPoolExecutor,
     ) -> None:
         mt = MessageType.MigrationInitDone
         async with self.networking_locks[mt]:
-            sync_complete: bool = await self.migration_metadata.set_empty_sync_done(mt)
+            epoch_counter, t_counter, input_offsets, output_offsets = self.networking.decode_message(data)
+
+            sync_complete: bool = await self.migration_metadata.init_done(
+                epoch_counter,
+                t_counter,
+                input_offsets,
+                output_offsets,
+            )
             logging.warning(f"MIGRATION | MigrationInitDone | {self.migration_metadata.sync_sum}")
 
             if not sync_complete:
@@ -735,21 +732,24 @@ class CoordinatorService:
                 await server.serve_forever()
 
     async def finalize_migration_repartition(self) -> None:
-        logging.warning("Sending MigrationRepartitioningDone to all workers")
+        # Acquire the SyncCleanup lock to prevent a race where
+        # _handle_sync_cleanup reads stop_next_epoch=False (before we set it),
+        # sends stop_gracefully=False, then cleanup() resets the flag — which
+        # would silently consume the stop request we are about to issue.
+        async with self.networking_locks[MessageType.SyncCleanup]:
+            if self.aria_metadata is not None:
+                self.aria_metadata.stop_in_next_epoch()
+
+        logging.warning("Sending MigrationRepartitioningDone to all workers (protocol will stop)")
         async with asyncio.TaskGroup() as tg:
             for worker in self.coordinator.worker_pool.get_participating_workers():
                 tg.create_task(
                     self.protocol_networking.send_message(
                         worker.worker_ip,
                         worker.worker_port,
-                        msg=(
-                            self.migration_metadata.epoch_counter,
-                            self.migration_metadata.t_counter,
-                            self.migration_metadata.input_offsets,
-                            self.migration_metadata.output_offsets,
-                        ),
+                        msg=b"",
                         msg_type=MessageType.MigrationRepartitioningDone,
-                        serializer=Serializer.MSGPACK,
+                        serializer=Serializer.NONE,
                     ),
                 )
 
@@ -761,9 +761,14 @@ class CoordinatorService:
                     self.protocol_networking.send_message(
                         worker.worker_ip,
                         worker.worker_port,
-                        msg=b"",
+                        msg=(
+                            self.migration_metadata.epoch_counter,
+                            self.migration_metadata.t_counter,
+                            self.migration_metadata.input_offsets,
+                            self.migration_metadata.output_offsets,
+                        ),
                         msg_type=MessageType.MigrationDone,
-                        serializer=Serializer.NONE,
+                        serializer=Serializer.MSGPACK,
                     ),
                 )
 

@@ -21,15 +21,22 @@ class MigrationMetadata:
     def check_sum(self, msg_type: MessageType) -> bool:
         return self.sync_sum[msg_type] == self.n_workers
 
-    async def repartitioning_done(
+    async def repartitioning_done(self) -> bool:
+        """Barrier-only: no counters collected here (moved to init_done)."""
+        async with self.lock:
+            self.sync_sum[MessageType.MigrationRepartitioningDone] += 1
+            return self.check_sum(MessageType.MigrationRepartitioningDone)
+
+    async def init_done(
         self,
         epoch_counter: int,
         t_counter: int,
         input_offsets: dict[OperatorPartition, int],
         output_offsets: dict[OperatorPartition, int],
     ) -> bool:
+        """Collect epoch/offset counters from each worker during Phase B."""
         async with self.lock:
-            self.sync_sum[MessageType.MigrationRepartitioningDone] += 1
+            self.sync_sum[MessageType.MigrationInitDone] += 1
             for operator_partition, pio in input_offsets.items():
                 self.input_offsets[operator_partition] = max(
                     pio,
@@ -42,7 +49,7 @@ class MigrationMetadata:
                 )
             self.epoch_counter = max(epoch_counter, self.epoch_counter)
             self.t_counter = max(t_counter, self.t_counter)
-            return self.check_sum(MessageType.MigrationRepartitioningDone)
+            return self.check_sum(MessageType.MigrationInitDone)
 
     async def set_empty_sync_done(self, msg_type: MessageType) -> bool:
         async with self.lock:
@@ -52,7 +59,7 @@ class MigrationMetadata:
     async def cleanup(self, msg_type: MessageType) -> None:
         async with self.lock:
             self.sync_sum[msg_type] = 0
-            if msg_type == MessageType.MigrationRepartitioningDone:
+            if msg_type == MessageType.MigrationInitDone:
                 self.epoch_counter = -1
                 self.t_counter = -1
                 self.input_offsets.clear()
