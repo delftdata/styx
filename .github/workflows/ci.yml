@@ -63,7 +63,7 @@ jobs:
           python -m pip install --upgrade pip setuptools Cython
           cd styx-package && python setup.py build_ext --inplace && cd ..
           python -m pip install styx-package/
-          python -m pip install msgspec pytest==9.0.2 pytest-cov pytest-asyncio psutil
+          python -m pip install msgspec pytest==9.0.2 pytest-cov pytest-asyncio psutil uvloop
 
       - name: Build Cython extensions
         run: python worker/setup.py build_ext --inplace
