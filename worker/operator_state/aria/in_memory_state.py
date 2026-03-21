@@ -65,12 +65,13 @@ class InMemoryOperatorState(BaseAriaState):
         operator_partition = tuple(operator_partition)
         if data is not None:
             self.data[operator_partition][key] = data
-        # Guard: remote_keys may not have the entry if async batch arrived
-        # before hash metadata, or if the key was already removed.
-        if operator_partition in self.remote_keys:
-            self.remote_keys[operator_partition].pop(key, None)
-            if not self.remote_keys[operator_partition]:
-                del self.remote_keys[operator_partition]
+            # Only remove from remote_keys when we actually received the data.
+            # A None response means the async migration batch already transferred
+            # this key — the batch will arrive and set it via set_batch_data_from_migration.
+            if operator_partition in self.remote_keys:
+                self.remote_keys[operator_partition].pop(key, None)
+                if not self.remote_keys[operator_partition]:
+                    del self.remote_keys[operator_partition]
 
     def migrate_within_the_same_worker(
         self,
