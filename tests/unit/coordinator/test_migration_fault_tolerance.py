@@ -114,7 +114,9 @@ class TestRevertWorkerPoolToSubmittedGraph:
         c = _mock_coordinator()
         c.max_operator_parallelism = max_parallelism
 
-        g = StateflowGraph("test-app", operator_state_backend=LocalStateBackend.DICT, max_operator_parallelism=max_parallelism)
+        g = StateflowGraph(
+            "test-app", operator_state_backend=LocalStateBackend.DICT, max_operator_parallelism=max_parallelism
+        )
         op = Operator("ycsb", n_partitions=n_partitions)
         g.add_operators(op)
         c.submitted_graph = g
