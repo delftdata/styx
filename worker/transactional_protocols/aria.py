@@ -126,7 +126,7 @@ class AriaProtocol(BaseTransactionalProtocol):
 
         self.egress: StyxKafkaBatchEgress = StyxKafkaBatchEgress(
             output_offsets,
-            restart_after_recovery,
+            restart_after_recovery or restart_after_migration,
         )
         # Primary task used for processing
         self.function_scheduler_task: asyncio.Task | None = None
@@ -478,11 +478,6 @@ class AriaProtocol(BaseTransactionalProtocol):
             f"Write to WAL successful at epoch: {self.sequencer.epoch_counter}",
         )
         return start_wal, end_wal
-
-    async def send_async_migrate_batch(self) -> None:
-        if USE_ASYNC_MIGRATION and self.local_state.has_keys_to_send():
-            batch = self.local_state.get_async_migrate_batch(ASYNC_MIGRATION_BATCH_SIZE)
-            await self._send_migration_batch(batch)
 
     async def _send_migration_batch(
         self,

@@ -552,26 +552,6 @@ class Worker:
             restart_after_migration=True,
         )
 
-    async def _migration_sync_and_resume(self) -> None:
-        logging.warning("MIGRATION | SENDING MigrationInitDone TO COORDINATOR")
-        await self.networking.send_message(
-            DISCOVERY_HOST,
-            DISCOVERY_PORT,
-            msg=b"",
-            msg_type=MessageType.MigrationInitDone,
-            serializer=Serializer.NONE,
-        )
-
-        logging.warning("MIGRATION | WAITING SYNC")
-        await self.migration_completed.wait()
-
-        # Start protocol after sync
-        self.function_execution_protocol.start()
-        self.function_execution_protocol.started.set()
-
-        # Reset sync events for next time
-        self.migration_completed.clear()
-
     async def _handle_receive_migration_hashes(
         self,
         data: bytes,

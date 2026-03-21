@@ -732,9 +732,13 @@ class CoordinatorService:
                 await server.serve_forever()
 
     async def finalize_migration_repartition(self) -> None:
-        # Now that all workers have finished rehashing, stop the protocol
-        if self.aria_metadata is not None:
-            self.aria_metadata.stop_in_next_epoch()
+        # Acquire the SyncCleanup lock to prevent a race where
+        # _handle_sync_cleanup reads stop_next_epoch=False (before we set it),
+        # sends stop_gracefully=False, then cleanup() resets the flag — which
+        # would silently consume the stop request we are about to issue.
+        async with self.networking_locks[MessageType.SyncCleanup]:
+            if self.aria_metadata is not None:
+                self.aria_metadata.stop_in_next_epoch()
 
         logging.warning("Sending MigrationRepartitioningDone to all workers (protocol will stop)")
         async with asyncio.TaskGroup() as tg:
