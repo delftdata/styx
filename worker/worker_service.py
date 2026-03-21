@@ -289,6 +289,15 @@ class Worker:
             serializer=Serializer.MSGPACK,
         )
 
+    async def _send_snap_migration_reassign(self) -> None:
+        await self.networking.send_message(
+            self.networking.host_name,
+            self.snapshotting_port,
+            msg=(list(self.registered_operators.keys()),),
+            msg_type=MessageType.SnapMigrationReassign,
+            serializer=Serializer.MSGPACK,
+        )
+
     def _attach_operator_networking(self) -> None:
         for operator in self.registered_operators.values():
             operator.attach_state_networking(
@@ -522,8 +531,8 @@ class Worker:
             n_assigned_partitions=len(self.registered_operators),
         )
 
-        # Snapshot id -1 indicates "migration"
-        await self._send_snap_assigned(snapshot_id=-1)
+        # Reassign partitions in snapshotting subprocess, preserving accumulated deltas
+        await self._send_snap_migration_reassign()
 
         # Ensure local state has all newly assigned partitions
         self._ensure_local_state_partitions()

@@ -165,7 +165,14 @@ class AsyncSnapshotsS3(BaseSnapshotter):
             for _, key in self._iter_snapshot_files(s3, prefix, snapshot_id):
                 partition_data = self._get_zstd_msgpack(s3, key)
                 if operator_partition in data and partition_data:
-                    data[operator_partition].update(partition_data)
+                    for k, v in partition_data.items():
+                        if v is None:
+                            data[operator_partition].pop(k, None)
+                        else:
+                            data[operator_partition][k] = v
+                elif partition_data:
+                    # First delta for this partition — filter out any tombstones
+                    data[operator_partition] = {k: v for k, v in partition_data.items() if v is not None}
                 else:
                     data[operator_partition] = partition_data
         return data

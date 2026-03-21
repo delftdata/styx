@@ -281,7 +281,11 @@ class CoordinatorService:
     async def _start_migration(self, graph: StateflowGraph) -> None:
         # Phase A: do NOT stop the protocol yet — workers will rehash in the background
         self.migration_in_progress = True
-        await self.stop_snapshotting()
+
+        # Force a pre-migration snapshot at the next epoch boundary
+        if self.aria_metadata is not None:
+            self.aria_metadata.take_snapshot_at_next_epoch()
+        self.coordinator.pre_migration_snapshot_pending = True
 
         logging.warning(f"MIGRATION | START {graph}")
         await self.coordinator.update_stateflow_graph(graph)
@@ -668,8 +672,8 @@ class CoordinatorService:
             await self.migration_metadata.cleanup(mt)
             self.migration_in_progress = False
 
-            logging.warning("Restarting the snapshotting mechanism")
-            self.snapshotting_task = asyncio.create_task(self.send_snapshot_marker())
+            # Finalize graph metadata now that migration completed successfully
+            self.coordinator.finalize_graph_update()
 
     async def start_puller(self) -> None:
         async def request_handler(reader: StreamReader, writer: StreamWriter) -> None:
@@ -822,6 +826,9 @@ class CoordinatorService:
         # 2) Reset migration metadata
         self.migration_metadata = MigrationMetadata(n_workers)
         self.migration_in_progress = False
+        self.coordinator.pre_migration_snapshot_id = -1
+        self.coordinator.pre_migration_snapshot_pending = False
+        self.coordinator._pending_graph = None  # noqa: SLF001
 
         # 3) Reset snapshot completion metadata
         self.coordinator.completed_input_offsets.clear()

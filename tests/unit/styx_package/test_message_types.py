@@ -10,7 +10,7 @@ class TestMessageType:
         assert issubclass(MessageType, IntEnum)
 
     def test_total_count(self):
-        assert len(MessageType) == 42
+        assert len(MessageType) == 43
 
     def test_all_values_unique(self):
         values = [m.value for m in MessageType]
@@ -18,7 +18,7 @@ class TestMessageType:
 
     def test_values_are_contiguous_from_zero(self):
         values = sorted(m.value for m in MessageType)
-        assert values == list(range(42))
+        assert values == list(range(43))
 
     def test_known_values(self):
         assert MessageType.RunFunRemote == 0
@@ -26,6 +26,7 @@ class TestMessageType:
         assert MessageType.ClientMsg == 16
         assert MessageType.InitDataComplete == 40
         assert MessageType.UpdateExecutionGraph == 41
+        assert MessageType.SnapMigrationReassign == 42
 
     def test_int_comparison(self):
         assert MessageType.ClientMsg == 16

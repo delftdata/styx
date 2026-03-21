@@ -54,6 +54,12 @@ class Coordinator:
         self.kafka_metadata_producer: AIOKafkaProducer | None = None
         self.max_operator_parallelism: int | None = None
 
+        # Migration fault tolerance: track pre-migration snapshot
+        self.pre_migration_snapshot_id: int = -1
+        self.pre_migration_snapshot_pending: bool = False
+        # Deferred graph update: held until migration completes
+        self._pending_graph: StateflowGraph | None = None
+
     async def start_kafka_metadata_producer(self) -> None:
         self.kafka_metadata_producer = AIOKafkaProducer(
             bootstrap_servers=[KAFKA_URL],
@@ -190,6 +196,11 @@ class Coordinator:
         self.completed_epoch_counter = epoch_counter
         self.completed_t_counter = t_counter
         current_completed_snapshot: int = self.get_current_completed_snapshot_id()
+        # Track pre-migration snapshot for recovery
+        if self.pre_migration_snapshot_pending and current_completed_snapshot != self.prev_completed_snapshot_id:
+            self.pre_migration_snapshot_id = current_completed_snapshot
+            self.pre_migration_snapshot_pending = False
+            logging.warning(f"Pre-migration snapshot recorded: {self.pre_migration_snapshot_id}")
         if current_completed_snapshot != self.prev_completed_snapshot_id:
             logging.warning(f"Cluster completed snapshot: {current_completed_snapshot}")
             # if we reached a complete snapshot, we could compact its deltas with the previous one
@@ -252,13 +263,26 @@ class Coordinator:
             for worker in self.worker_pool.get_participating_workers()
         ]
         await asyncio.gather(*tasks)
-        self.submitted_graph = new_stateflow_graph
+        # Defer the graph metadata write until migration completes (finalize_graph_update).
+        # This ensures that if a crash occurs mid-migration, recovery uses the OLD layout.
+        self._pending_graph = new_stateflow_graph
+
+    def finalize_graph_update(self) -> None:
+        """Commit the deferred graph update after migration completes successfully."""
+        if self._pending_graph is None:
+            return
+        self.submitted_graph = self._pending_graph
+        self._pending_graph = None
+        # Write to Kafka via a background task; the producer is already running
+        # and the next snapshot will capture the new layout.
         metadata_key = msgpack_serialization(self.submitted_graph.name)
-        serialized_graph = cloudpickle_serialization(new_stateflow_graph)
-        await self.kafka_metadata_producer.send_and_wait(
-            "styx-metadata",
-            key=metadata_key,
-            value=serialized_graph,
+        serialized_graph = cloudpickle_serialization(self.submitted_graph)
+        self._pending_kafka_write = asyncio.ensure_future(
+            self.kafka_metadata_producer.send_and_wait(
+                "styx-metadata",
+                key=metadata_key,
+                value=serialized_graph,
+            ),
         )
 
     async def submit_stateflow_graph(

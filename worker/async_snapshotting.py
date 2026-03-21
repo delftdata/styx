@@ -70,6 +70,17 @@ class AsyncSnapshottingProcess:
     def init_delta_maps(self, assigned_partitions: list) -> None:
         self.delta_maps = {(op_part[0], op_part[1]): {} for op_part in assigned_partitions}
 
+    def migration_reassign_delta_maps(self, new_assigned_partitions: list) -> None:
+        new_keys = {(op_part[0], op_part[1]) for op_part in new_assigned_partitions}
+        # Add empty entries for newly assigned partitions
+        for key in new_keys:
+            if key not in self.delta_maps:
+                self.delta_maps[key] = {}
+        # Remove entries for partitions no longer assigned
+        for key in list(self.delta_maps.keys()):
+            if key not in new_keys:
+                del self.delta_maps[key]
+
     def take_snapshot(self, metadata: tuple) -> None:
         loop = asyncio.get_running_loop()
         (
@@ -117,6 +128,13 @@ class AsyncSnapshottingProcess:
                 )
                 if snapshot_id != -1:
                     self.async_snapshots.set_snapshot_id(snapshot_id)
+            case MessageType.SnapMigrationReassign:
+                (new_assigned_partitions,) = NetworkingManager.decode_message(data)
+                logging.warning("[SN_PROC] Migration reassign: preserving deltas across partition change")
+                self.migration_reassign_delta_maps(new_assigned_partitions)
+                self.async_snapshots.update_n_assigned_partitions(
+                    len(new_assigned_partitions),
+                )
             case _:
                 logging.error(
                     f"Worker Service: Non supported command message type: {message_type}",
