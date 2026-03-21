@@ -308,6 +308,9 @@ class CoordinatorService:
         __: bytes,
         ___: concurrent.futures.ProcessPoolExecutor,
     ) -> None:
+        if not self.migration_in_progress:
+            logging.warning("Dropping stale MigrationRepartitioningDone (no migration in progress)")
+            return
         mt = MessageType.MigrationRepartitioningDone
         logging.warning("Migration repartitioning done received!")
 
@@ -328,6 +331,9 @@ class CoordinatorService:
         data: bytes,
         __: concurrent.futures.ProcessPoolExecutor,
     ) -> None:
+        if not self.migration_in_progress:
+            logging.warning("Dropping stale MigrationInitDone (no migration in progress)")
+            return
         mt = MessageType.MigrationInitDone
         async with self.networking_locks[mt]:
             epoch_counter, t_counter, input_offsets, output_offsets = self.networking.decode_message(data)
@@ -657,6 +663,9 @@ class CoordinatorService:
             self.aria_metadata.cleanup()
 
     async def _handle_migration_done(self, _: bytes) -> None:
+        if not self.migration_in_progress:
+            logging.warning("Dropping stale MigrationDone (no migration in progress)")
+            return
         mt = MessageType.MigrationDone
         async with self.networking_locks[mt]:
             sync_complete: bool = await self.migration_metadata.set_empty_sync_done(mt)
@@ -825,10 +834,9 @@ class CoordinatorService:
 
         # 2) Reset migration metadata
         self.migration_metadata = MigrationMetadata(n_workers)
-        self.migration_in_progress = False
+        # migration_in_progress, pre_migration_snapshot_pending, and _pending_graph
+        # are already cleared in _perform_recovery() step 1c (before recovery starts)
         self.coordinator.pre_migration_snapshot_id = -1
-        self.coordinator.pre_migration_snapshot_pending = False
-        self.coordinator._pending_graph = None  # noqa: SLF001
 
         # 3) Reset snapshot completion metadata
         self.coordinator.completed_input_offsets.clear()
@@ -884,6 +892,18 @@ class CoordinatorService:
             )
         await self.aio_task_scheduler.close()
         self.aio_task_scheduler = AIOTaskScheduler()
+
+        # 1b) If migration was in progress, revert worker pool to pre-migration layout
+        #     so that recovery sends the correct (OLD) operator assignments.
+        if self.migration_in_progress and self.coordinator._pending_graph is not None:  # noqa: SLF001
+            self.coordinator.revert_worker_pool_to_submitted_graph()
+
+        # 1c) Clear migration state BEFORE recovery starts, so any stale
+        #     MigrationRepartitioningDone / MigrationInitDone / MigrationDone
+        #     messages from surviving workers are dropped by the guards below.
+        self.migration_in_progress = False
+        self.coordinator.pre_migration_snapshot_pending = False
+        self.coordinator._pending_graph = None  # noqa: SLF001
 
         # 2) Start recovery
         logging.warning(

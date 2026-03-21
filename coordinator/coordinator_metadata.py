@@ -267,6 +267,26 @@ class Coordinator:
         # This ensures that if a crash occurs mid-migration, recovery uses the OLD layout.
         self._pending_graph = new_stateflow_graph
 
+    def revert_worker_pool_to_submitted_graph(self) -> None:
+        """Revert worker pool operators to match the current submitted_graph.
+
+        Called before recovery when migration was in progress — undoes the
+        operator promotions (shadow → active) that update_stateflow_graph()
+        applied so that recovery sends the correct (OLD) layout to workers.
+        """
+        if self.submitted_graph is None or self.max_operator_parallelism is None:
+            return
+        for _, operator in iter(self.submitted_graph):
+            for partition in range(self.max_operator_parallelism):
+                operator_copy = deepcopy(operator)
+                if partition >= operator.n_partitions:
+                    operator_copy.make_shadow()
+                self.worker_pool.update_operator(
+                    (operator_copy.name, partition),
+                    operator_copy,
+                )
+        logging.warning("Reverted worker pool operators to match submitted_graph (pre-migration layout)")
+
     def finalize_graph_update(self) -> None:
         """Commit the deferred graph update after migration completes successfully."""
         if self._pending_graph is None:

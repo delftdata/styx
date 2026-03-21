@@ -745,6 +745,13 @@ class Worker:
 
         tp_offsets = {k: v for k, v in tp_offsets.items() if k in self.registered_operators}
         tp_out_offsets = {k: v for k, v in tp_out_offsets.items() if k in self.registered_operators}
+        # Ensure ALL output partitions are scanned for dedup during recovery.
+        # Partitions that had no output in the snapshot (e.g., shadow partitions
+        # that briefly became active during a migration window) get scanned from
+        # offset 0 to catch any responses sent during that window.
+        for op_part in self.registered_operators:
+            if op_part not in tp_out_offsets:
+                tp_out_offsets[op_part] = -1
 
         self.attach_state_to_operators_after_snapshot(snap_data)
 
