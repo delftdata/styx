@@ -68,7 +68,7 @@ class AriaProtocol(BaseTransactionalProtocol):
         request_id_to_t_id_map: dict[bytes, int] | None = None,
         restart_after_recovery: bool = False,
         restart_after_migration: bool = False,
-        extra_dedup_partitions: list[OperatorPartition] | None = None,
+        dedup_output_offsets: dict[OperatorPartition, int] | None = None,
     ) -> None:
         if topic_partition_offsets is None:
             topic_partition_offsets = {(tp.topic, tp.partition): -1 for tp in topic_partitions}
@@ -128,7 +128,7 @@ class AriaProtocol(BaseTransactionalProtocol):
         self.egress: StyxKafkaBatchEgress = StyxKafkaBatchEgress(
             output_offsets,
             restart_after_recovery or restart_after_migration,
-            extra_dedup_partitions=extra_dedup_partitions or [],
+            dedup_output_offsets=dedup_output_offsets,
         )
         # Primary task used for processing
         self.function_scheduler_task: asyncio.Task | None = None

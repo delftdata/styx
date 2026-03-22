@@ -559,6 +559,7 @@ class Worker:
             epoch_counter=self.m_epoch_counter,
             t_counter=self.m_t_counter,
             restart_after_migration=True,
+            dedup_output_offsets=dict(self.m_output_offsets),
         )
 
     async def _handle_receive_migration_hashes(
@@ -678,6 +679,9 @@ class Worker:
 
             # 9. Start protocol with background migration
             self.function_execution_protocol.start()
+            # Run dedup scan after the MigrationDone barrier ensures all workers
+            # have flushed their old egress batches, then mark egress started.
+            await self.function_execution_protocol.egress.run_dedup_scan_and_mark_started()
             self.function_execution_protocol.started.set()
 
             # Reset sync events for next time
@@ -743,12 +747,36 @@ class Worker:
             self.registered_operators.keys(),
         )
 
+        logging.warning(
+            f"[RECOVERY] W{self.id} snapshot_id={snapshot_id} epoch={epoch} t_counter={t_counter}",
+        )
+        logging.warning(
+            f"[RECOVERY] W{self.id} registered_operators={list(self.registered_operators.keys())}",
+        )
+        logging.warning(
+            f"[RECOVERY] W{self.id} raw tp_offsets from snapshot: {tp_offsets}",
+        )
+        logging.warning(
+            f"[RECOVERY] W{self.id} raw tp_out_offsets from snapshot: {tp_out_offsets}",
+        )
+
+        # Keep the FULL output offsets for dedup scanning (all partitions from
+        # the global snapshot).  Each worker must scan ALL output partitions so
+        # that cross-worker dedup works: a request originally processed on
+        # worker A may be replayed on worker B after recovery.
+        all_dedup_out_offsets = dict(tp_out_offsets)
         tp_offsets = {k: v for k, v in tp_offsets.items() if k in self.registered_operators}
         tp_out_offsets = {k: v for k, v in tp_out_offsets.items() if k in self.registered_operators}
-        # Shadow partitions not in the snapshot may have received responses
-        # during a migration window.  Scan them from offset 0 for dedup only
-        # (they are NOT added to topic_partition_output_offsets).
-        extra_dedup_partitions = [op_part for op_part in self.registered_operators if op_part not in tp_out_offsets]
+
+        logging.warning(
+            f"[RECOVERY] W{self.id} filtered tp_offsets: {tp_offsets}",
+        )
+        logging.warning(
+            f"[RECOVERY] W{self.id} filtered tp_out_offsets: {tp_out_offsets}",
+        )
+        logging.warning(
+            f"[RECOVERY] W{self.id} dedup_output_offsets (all partitions): {all_dedup_out_offsets}",
+        )
 
         self.attach_state_to_operators_after_snapshot(snap_data)
 
@@ -771,7 +799,7 @@ class Worker:
             t_counter=t_counter,
             request_id_to_t_id_map=request_id_to_t_id_map,
             restart_after_recovery=True,
-            extra_dedup_partitions=extra_dedup_partitions,
+            dedup_output_offsets=all_dedup_out_offsets,
         )
         self.function_execution_protocol.start()
 
@@ -790,6 +818,11 @@ class Worker:
         )
 
     async def _handle_ready_after_recovery(self, _data: bytes, _: MessageType) -> None:
+        # All workers have stopped their old protocols by this point (the
+        # coordinator only sends ReadyAfterRecovery after all workers reported).
+        # Run the dedup scan NOW so it captures every message flushed by every
+        # surviving worker's old egress.
+        await self.function_execution_protocol.egress.run_dedup_scan_and_mark_started()
         self.function_execution_protocol.started.set()
         logging.warning(
             f"Worker: {self.id} recovered and ready at : {time.time() * 1000}",

@@ -895,7 +895,14 @@ class CoordinatorService:
 
         # 1b) If migration was in progress, revert worker pool to pre-migration layout
         #     so that recovery sends the correct (OLD) operator assignments.
-        if self.migration_in_progress and self.coordinator._pending_graph is not None:  # noqa: SLF001
+        was_migrating = self.migration_in_progress and self.coordinator._pending_graph is not None  # noqa: SLF001
+        if was_migrating:
+            logging.warning(
+                f"[RECOVERY] Migration was in progress. "
+                f"pre_migration_snapshot_id={self.coordinator.pre_migration_snapshot_id}, "
+                f"current_completed_snapshot_id={self.coordinator.get_current_completed_snapshot_id()}, "
+                f"worker_snapshot_ids={self.coordinator.worker_snapshot_ids}",
+            )
             self.coordinator.revert_worker_pool_to_submitted_graph()
 
         # 1c) Clear migration state BEFORE recovery starts, so any stale
@@ -906,8 +913,15 @@ class CoordinatorService:
         self.coordinator._pending_graph = None  # noqa: SLF001
 
         # 2) Start recovery
+        snap_id = self.coordinator.get_current_completed_snapshot_id()
+        graph_parts = (
+            {n: op.n_partitions for n, op in self.coordinator.submitted_graph.nodes.items()}
+            if self.coordinator.submitted_graph
+            else None
+        )
         logging.warning(
-            "Starting recovery process (reassign operators, send InitRecovery)",
+            f"[RECOVERY] Starting recovery (send InitRecovery). "
+            f"snap_id={snap_id}, graph_partitions={graph_parts}",
         )
         await self.coordinator.start_recovery_process(workers_to_remove)
 
