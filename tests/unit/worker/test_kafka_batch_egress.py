@@ -50,8 +50,7 @@ class TestEgressInit:
 class TestClearMessagesSentBeforeRecovery:
     def test_clears(self):
         e = _egress()
-        tp = TopicPartition("users--OUT", 0)
-        e.messages_sent_before_recovery[tp].add(b"key1")
+        e.messages_sent_before_recovery.add(b"key1")
         e.clear_messages_sent_before_recovery()
         assert len(e.messages_sent_before_recovery) == 0
 
@@ -88,13 +87,30 @@ class TestEgressSend:
         mock_producer = MagicMock()
         e.kafka_egress_producer = mock_producer
 
-        tp = TopicPartition("users--OUT", 0)
-        e.messages_sent_before_recovery[tp].add(b"key1")
+        # Flat dedup set — partition-agnostic
+        e.messages_sent_before_recovery.add(b"key1")
 
         await e.send(b"key1", b"value1", "users", 0)
         assert len(e.batch) == 0  # skipped
         mock_producer.send.assert_not_called()
-        assert b"key1" not in e.messages_sent_before_recovery[tp]
+        assert b"key1" not in e.messages_sent_before_recovery
+
+    @pytest.mark.asyncio
+    async def test_send_dedup_is_cross_partition(self):
+        """A key sent to partition 6 pre-crash should be deduped when
+        replayed to partition 2 after recovery."""
+        e = _egress()
+        e.started.set()
+        mock_producer = MagicMock()
+        e.kafka_egress_producer = mock_producer
+
+        # Key was originally sent on partition 6 (post-migration)
+        e.messages_sent_before_recovery.add(b"req42")
+
+        # Replay sends to partition 2 (pre-migration layout)
+        await e.send(b"req42", b"val", "users", 2)
+        assert len(e.batch) == 0  # deduped cross-partition
+        mock_producer.send.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -152,6 +168,7 @@ class TestProcessMessagesSentBeforeRecovery:
         msg2.key = b"key2"
 
         e.process_messages_sent_before_recovery([msg1, msg2], current_offsets, all_done)
-        assert b"key1" in e.messages_sent_before_recovery[tp]
-        assert b"key2" in e.messages_sent_before_recovery[tp]
+        # Flat set now — keys from any partition are in the same set
+        assert b"key1" in e.messages_sent_before_recovery
+        assert b"key2" in e.messages_sent_before_recovery
         assert all_done[tp] is True  # msg2 offset >= 10 - 1

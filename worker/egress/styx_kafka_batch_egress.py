@@ -1,5 +1,4 @@
 import asyncio
-from collections import defaultdict
 import os
 from typing import TYPE_CHECKING
 import uuid
@@ -25,18 +24,25 @@ class StyxKafkaBatchEgress(BaseEgress):
         self,
         topic_partition_output_offsets: dict[OperatorPartition, int],
         restart_after_failure: bool = False,
+        extra_dedup_partitions: list[OperatorPartition] | None = None,
     ) -> None:
         self.kafka_egress_producer: AIOKafkaProducer | None = None
         # operator: partition: output offset
         self.topic_partition_output_offsets: dict[OperatorPartition, int] = topic_partition_output_offsets
-        # (operator, partition): replied request_ids
-        self.messages_sent_before_recovery: dict[TopicPartition, set] = defaultdict(set)
+        # Flat set of request_ids sent before recovery (partition-agnostic).
+        # Cross-partition dedup is needed because migration can change which
+        # output partition a response is written to.
+        self.messages_sent_before_recovery: set = set()
         self.restart_after_failure = restart_after_failure
+        # Extra partitions to scan from offset 0 for dedup only (not tracked
+        # in topic_partition_output_offsets).  These are shadow partitions that
+        # may have briefly received responses during a migration window.
+        self.extra_dedup_partitions: list[OperatorPartition] = extra_dedup_partitions or []
         self.batch: list = []
         self.started: asyncio.Event = asyncio.Event()
 
     def clear_messages_sent_before_recovery(self) -> None:
-        self.messages_sent_before_recovery: dict[TopicPartition, set] = defaultdict(set)
+        self.messages_sent_before_recovery: set = set()
 
     async def start(self, worker_id: int) -> None:
         if self.restart_after_failure:
@@ -74,8 +80,7 @@ class StyxKafkaBatchEgress(BaseEgress):
     ) -> None:
         if not self.started.is_set():
             await self.started.wait()
-        tp = TopicPartition(operator_name + "--OUT", partition)
-        if key not in self.messages_sent_before_recovery[tp]:
+        if key not in self.messages_sent_before_recovery:
             self.batch.append(
                 await self.kafka_egress_producer.send(
                     operator_name + "--OUT",
@@ -85,7 +90,7 @@ class StyxKafkaBatchEgress(BaseEgress):
                 ),
             )
         else:
-            self.messages_sent_before_recovery[tp].remove(key)
+            self.messages_sent_before_recovery.discard(key)
 
     async def send_message_to_topic(
         self,
@@ -109,8 +114,7 @@ class StyxKafkaBatchEgress(BaseEgress):
         operator_name: str,
         partition: int,
     ) -> None:
-        tp = TopicPartition(operator_name + "--OUT", partition)
-        if key not in self.messages_sent_before_recovery[tp]:
+        if key not in self.messages_sent_before_recovery:
             res: RecordMetadata = await self.kafka_egress_producer.send_and_wait(
                 operator_name + "--OUT",
                 key=key,
@@ -122,7 +126,7 @@ class StyxKafkaBatchEgress(BaseEgress):
                 res.offset,
             )
         else:
-            self.messages_sent_before_recovery[tp].remove(key)
+            self.messages_sent_before_recovery.discard(key)
 
     async def send_batch(self) -> None:
         if self.batch:
@@ -136,26 +140,34 @@ class StyxKafkaBatchEgress(BaseEgress):
                 )
             self.batch = []
 
+    def _build_scan_partitions(
+        self,
+    ) -> tuple[list[TopicPartition], set[TopicPartition]]:
+        """Build the list of output TopicPartitions to scan and the subset that are extra (shadow) partitions."""
+        normal = [TopicPartition(op_name + "--OUT", part) for op_name, part in self.topic_partition_output_offsets]
+        extra = {TopicPartition(op_name + "--OUT", part) for op_name, part in self.extra_dedup_partitions}
+        return normal + list(extra), extra
+
+    def _partition_scan_offset(self, tp: TopicPartition, extra_set: set[TopicPartition]) -> int:
+        """Return the offset from which to start scanning a partition."""
+        if tp in extra_set:
+            return 0
+        return self.topic_partition_output_offsets[(tp.topic[:-5], tp.partition)] + 1
+
     async def get_messages_sent_before_recovery(self) -> None:
+        all_topic_partitions, extra_set = self._build_scan_partitions()
+        if not all_topic_partitions:
+            return
         kafka_output_consumer = AIOKafkaConsumer(
             bootstrap_servers=[KAFKA_URL],
             enable_auto_commit=False,
         )
-        output_topic_partitions = [
-            TopicPartition(operator_name + "--OUT", partition)
-            for operator_name, partition in self.topic_partition_output_offsets
-        ]
-        kafka_output_consumer.assign(output_topic_partitions)
+        kafka_output_consumer.assign(all_topic_partitions)
         while True:
-            # start the kafka consumer
             try:
                 await kafka_output_consumer.start()
-                for topic_partition in output_topic_partitions:
-                    kafka_output_consumer.seek(
-                        topic_partition,
-                        self.topic_partition_output_offsets[(topic_partition.topic[:-5], topic_partition.partition)]
-                        + 1,
-                    )
+                for tp in all_topic_partitions:
+                    kafka_output_consumer.seek(tp, self._partition_scan_offset(tp, extra_set))
             except UnknownTopicOrPartitionError, KafkaConnectionError:
                 await asyncio.sleep(1)
                 logging.warning(
@@ -164,37 +176,19 @@ class StyxKafkaBatchEgress(BaseEgress):
                 continue
             break
         try:
-            # step 1 get current offset
-            current_offsets: dict[
-                TopicPartition,
-                int,
-            ] = await kafka_output_consumer.end_offsets(
-                output_topic_partitions,
-            )
+            current_offsets = await kafka_output_consumer.end_offsets(all_topic_partitions)
             logging.warning(
-                f"Reading from output from: {self.topic_partition_output_offsets} + 1 to {current_offsets}",
+                f"Reading from output from: {self.topic_partition_output_offsets} + 1 to {current_offsets}"
+                f" (extra dedup partitions: {self.extra_dedup_partitions})",
             )
-            all_partitions_done: dict[TopicPartition, bool] = dict.fromkeys(
-                output_topic_partitions,
-                False,
-            )
-            for topic_partition, current_offset in current_offsets.items():
-                if (
-                    current_offset
-                    == self.topic_partition_output_offsets[(topic_partition.topic[:-5], topic_partition.partition)] + 1
-                ):
-                    all_partitions_done[topic_partition] = True
-            while not all(partition_is_done for partition_is_done in all_partitions_done.values()):
-                result = await kafka_output_consumer.getmany(
-                    timeout_ms=EPOCH_INTERVAL_MS,
-                )
+            all_partitions_done: dict[TopicPartition, bool] = {
+                tp: current_offsets[tp] == self._partition_scan_offset(tp, extra_set) for tp in all_topic_partitions
+            }
+            while not all(all_partitions_done.values()):
+                result = await kafka_output_consumer.getmany(timeout_ms=EPOCH_INTERVAL_MS)
                 for messages in result.values():
-                    self.process_messages_sent_before_recovery(
-                        messages,
-                        current_offsets,
-                        all_partitions_done,
-                    )
-                    if all(partition_is_done for partition_is_done in all_partitions_done.values()):
+                    self.process_messages_sent_before_recovery(messages, current_offsets, all_partitions_done)
+                    if all(all_partitions_done.values()):
                         break
         finally:
             await kafka_output_consumer.stop()
@@ -207,8 +201,6 @@ class StyxKafkaBatchEgress(BaseEgress):
     ) -> None:
         for message in messages:
             tp = TopicPartition(message.topic, message.partition)
+            self.messages_sent_before_recovery.add(message.key)
             if message.offset >= current_offsets[tp] - 1:
-                self.messages_sent_before_recovery[tp].add(message.key)
                 all_partitions_done[tp] = True
-            else:
-                self.messages_sent_before_recovery[tp].add(message.key)

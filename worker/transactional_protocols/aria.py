@@ -51,7 +51,7 @@ ASYNC_MIGRATION_BATCH_SIZE: int = int(os.getenv("ASYNC_MIGRATION_BATCH_SIZE", "2
 
 
 class AriaProtocol(BaseTransactionalProtocol):
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         worker_id: int,
         peers: dict[int, tuple[str, int, int]],
@@ -68,6 +68,7 @@ class AriaProtocol(BaseTransactionalProtocol):
         request_id_to_t_id_map: dict[bytes, int] | None = None,
         restart_after_recovery: bool = False,
         restart_after_migration: bool = False,
+        extra_dedup_partitions: list[OperatorPartition] | None = None,
     ) -> None:
         if topic_partition_offsets is None:
             topic_partition_offsets = {(tp.topic, tp.partition): -1 for tp in topic_partitions}
@@ -127,6 +128,7 @@ class AriaProtocol(BaseTransactionalProtocol):
         self.egress: StyxKafkaBatchEgress = StyxKafkaBatchEgress(
             output_offsets,
             restart_after_recovery or restart_after_migration,
+            extra_dedup_partitions=extra_dedup_partitions or [],
         )
         # Primary task used for processing
         self.function_scheduler_task: asyncio.Task | None = None

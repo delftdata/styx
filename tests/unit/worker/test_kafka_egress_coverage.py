@@ -7,7 +7,6 @@ send_message_to_topic, stop.
 import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
-from aiokafka import TopicPartition
 import pytest
 
 from worker.egress.styx_kafka_batch_egress import StyxKafkaBatchEgress
@@ -75,12 +74,12 @@ class TestSendImmediate:
         mock_producer = MagicMock()
         e.kafka_egress_producer = mock_producer
 
-        tp = TopicPartition("users--OUT", 0)
-        e.messages_sent_before_recovery[tp].add(b"key1")
+        # Flat dedup set — partition-agnostic
+        e.messages_sent_before_recovery.add(b"key1")
 
         await e.send_immediate(b"key1", b"value1", "users", 0)
         mock_producer.send_and_wait.assert_not_called()
-        assert b"key1" not in e.messages_sent_before_recovery[tp]
+        assert b"key1" not in e.messages_sent_before_recovery
 
 
 # ---------------------------------------------------------------------------
