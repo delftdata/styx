@@ -57,6 +57,8 @@ class Coordinator:
         # Migration fault tolerance: track pre-migration snapshot
         self.pre_migration_snapshot_id: int = -1
         self.pre_migration_snapshot_pending: bool = False
+        # Deferred graph finalization: wait for post-migration snapshot before committing
+        self.post_migration_snapshot_pending: bool = False
         # Deferred graph update: held until migration completes
         self._pending_graph: StateflowGraph | None = None
 
@@ -204,6 +206,13 @@ class Coordinator:
             self.pre_migration_snapshot_id = current_completed_snapshot
             self.pre_migration_snapshot_pending = False
             logging.warning(f"Pre-migration snapshot recorded: {self.pre_migration_snapshot_id}")
+        # Finalize graph update after first post-migration snapshot completes
+        if self.post_migration_snapshot_pending and current_completed_snapshot != self.prev_completed_snapshot_id:
+            self.post_migration_snapshot_pending = False
+            self.finalize_graph_update()
+            logging.warning(
+                f"Post-migration snapshot {current_completed_snapshot} completed — graph finalized",
+            )
         if current_completed_snapshot != self.prev_completed_snapshot_id:
             logging.warning(f"Cluster completed snapshot: {current_completed_snapshot}")
             # if we reached a complete snapshot, we could compact its deltas with the previous one

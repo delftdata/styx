@@ -681,8 +681,10 @@ class CoordinatorService:
             await self.migration_metadata.cleanup(mt)
             self.migration_in_progress = False
 
-            # Finalize graph metadata now that migration completed successfully
-            self.coordinator.finalize_graph_update()
+            # Defer graph finalization until a post-migration snapshot completes.
+            # This ensures that if a crash happens before the snapshot, recovery
+            # uses the OLD layout (submitted_graph is still the old graph).
+            self.coordinator.post_migration_snapshot_pending = True
 
     async def start_puller(self) -> None:
         async def request_handler(reader: StreamReader, writer: StreamWriter) -> None:
@@ -893,9 +895,13 @@ class CoordinatorService:
         await self.aio_task_scheduler.close()
         self.aio_task_scheduler = AIOTaskScheduler()
 
-        # 1b) If migration was in progress, revert worker pool to pre-migration layout
-        #     so that recovery sends the correct (OLD) operator assignments.
-        was_migrating = self.migration_in_progress and self.coordinator._pending_graph is not None  # noqa: SLF001
+        # 1b) If migration was in progress (or completed but no post-migration
+        #     snapshot yet), revert worker pool to pre-migration layout so that
+        #     recovery sends the correct (OLD) operator assignments.
+        was_migrating = (
+            (self.migration_in_progress and self.coordinator._pending_graph is not None)  # noqa: SLF001
+            or self.coordinator.post_migration_snapshot_pending
+        )
         saved_pending_graph = self.coordinator._pending_graph if was_migrating else None  # noqa: SLF001
         if was_migrating:
             logging.warning(
@@ -911,6 +917,7 @@ class CoordinatorService:
         #     messages from surviving workers are dropped by the guards below.
         self.migration_in_progress = False
         self.coordinator.pre_migration_snapshot_pending = False
+        self.coordinator.post_migration_snapshot_pending = False
         self.coordinator._pending_graph = None  # noqa: SLF001
 
         # 2) Start recovery
