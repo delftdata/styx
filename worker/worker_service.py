@@ -142,6 +142,7 @@ class Worker:
         self.worker_operators: dict[OperatorPartition, Operator] | None = None
 
         self.migration_completed: asyncio.Event = asyncio.Event()
+        self._migration_generation: int = 0  # bumped on recovery to invalidate zombie Phase B tasks
 
         self.m_input_offsets: dict[OperatorPartition, int] = {}
         self.m_output_offsets: dict[OperatorPartition, int] = {}
@@ -614,6 +615,7 @@ class Worker:
         _: MessageType,
     ) -> None:
         """Phase B: protocol stops, catch-up, send hashes, rebuild, resume."""
+        my_generation = self._migration_generation
         try:
             logging.warning(f"MIGRATION | PHASE B START at {time.time_ns() // 1_000_000}")
             phase_b_start = timer()
@@ -622,6 +624,14 @@ class Worker:
             t_stop_start = timer()
             await self._migration_stop_protocol()
             t_stop_end = timer()
+
+            # Bail out if recovery invalidated this Phase B task
+            if self._migration_generation != my_generation:
+                logging.warning(
+                    "MIGRATION | PHASE B ZOMBIE detected after protocol stop — bailing out",
+                )
+                return
+
             logging.warning(
                 "MIGRATION | PHASE B Protocol Stopped |"
                 f" @Epoch {self.function_execution_protocol.sequencer.epoch_counter} |"
@@ -669,6 +679,13 @@ class Worker:
             logging.warning("MIGRATION | PHASE B WAITING FOR MigrationDone")
             await self.migration_completed.wait()
 
+            # Bail out if recovery invalidated this Phase B task
+            if self._migration_generation != my_generation:
+                logging.warning(
+                    "MIGRATION | PHASE B ZOMBIE detected (generation mismatch) — bailing out",
+                )
+                return
+
             # 8. Rebuild runtime (now has correct merged counters from MigrationDone)
             t_deploy_start = timer()
             await self._migration_rebuild_runtime()
@@ -706,6 +723,14 @@ class Worker:
 
     async def _handle_init_recovery(self, data: bytes, _: MessageType) -> None:
         start_time = timer()
+
+        # Invalidate any zombie Phase B tasks from an interrupted migration.
+        # Bump the generation so that any Phase B task waiting on
+        # migration_completed will detect the generation mismatch and bail out.
+        self._migration_generation += 1
+        self.migration_completed.set()  # unblock the zombie so it can exit
+        await asyncio.sleep(0)  # yield to let the zombie run its bail-out check
+        self.migration_completed.clear()
 
         (
             self.id,
