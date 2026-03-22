@@ -920,8 +920,7 @@ class CoordinatorService:
             else None
         )
         logging.warning(
-            f"[RECOVERY] Starting recovery (send InitRecovery). "
-            f"snap_id={snap_id}, graph_partitions={graph_parts}",
+            f"[RECOVERY] Starting recovery (send InitRecovery). snap_id={snap_id}, graph_partitions={graph_parts}",
         )
         await self.coordinator.start_recovery_process(workers_to_remove)
 

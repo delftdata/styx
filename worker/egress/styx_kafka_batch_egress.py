@@ -182,9 +182,7 @@ class StyxKafkaBatchEgress(BaseEgress):
         # Scan ALL output partitions from the global snapshot (not just this
         # worker's).  This ensures cross-worker dedup: a request originally
         # processed on worker A may be replayed on worker B after recovery.
-        all_topic_partitions = [
-            TopicPartition(op_name + "--OUT", part) for op_name, part in self.dedup_output_offsets
-        ]
+        all_topic_partitions = [TopicPartition(op_name + "--OUT", part) for op_name, part in self.dedup_output_offsets]
         if not all_topic_partitions:
             return
         kafka_output_consumer = AIOKafkaConsumer(
@@ -199,7 +197,7 @@ class StyxKafkaBatchEgress(BaseEgress):
                     offset = self.dedup_output_offsets[(tp.topic[:-5], tp.partition)] + 1
                     kafka_output_consumer.seek(tp, offset)
                     logging.warning(f"[DEDUP] Seeking {tp} to offset {offset}")
-            except (UnknownTopicOrPartitionError, KafkaConnectionError):
+            except UnknownTopicOrPartitionError, KafkaConnectionError:
                 await asyncio.sleep(1)
                 logging.warning(
                     f"Kafka at {KAFKA_URL} not ready yet, sleeping for 1 second",

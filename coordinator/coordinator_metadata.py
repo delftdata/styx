@@ -116,8 +116,7 @@ class Coordinator:
         participating_workers: list[Worker] = self.worker_pool.get_participating_workers()
         self.worker_is_healthy = {worker.worker_id: asyncio.Event() for worker in participating_workers}
         logging.warning(
-            f"[RECOVERY] Sending InitRecovery to {len(participating_workers)} workers "
-            f"with snap_id={snap_id}",
+            f"[RECOVERY] Sending InitRecovery to {len(participating_workers)} workers with snap_id={snap_id}",
         )
         async with asyncio.TaskGroup() as tg:
             for worker in participating_workers:
