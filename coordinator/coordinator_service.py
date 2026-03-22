@@ -896,6 +896,7 @@ class CoordinatorService:
         # 1b) If migration was in progress, revert worker pool to pre-migration layout
         #     so that recovery sends the correct (OLD) operator assignments.
         was_migrating = self.migration_in_progress and self.coordinator._pending_graph is not None  # noqa: SLF001
+        saved_pending_graph = self.coordinator._pending_graph if was_migrating else None  # noqa: SLF001
         if was_migrating:
             logging.warning(
                 f"[RECOVERY] Migration was in progress. "
@@ -940,6 +941,15 @@ class CoordinatorService:
         await self.coordinator.notify_cluster_healthy()
 
         logging.warning("Recovery process completed")
+
+        # 7) If migration was interrupted, re-trigger it now that the cluster is healthy.
+        #    The client's partitioner may already be using the new layout, so messages
+        #    to shadow partitions would be missed without completing the migration.
+        if saved_pending_graph is not None:
+            logging.warning(
+                "[RECOVERY] Re-triggering interrupted migration with saved pending graph",
+            )
+            await self._start_migration(saved_pending_graph)
 
     async def heartbeat_monitor_coroutine(self) -> None:
         interval_time = HEARTBEAT_CHECK_INTERVAL / 1000
