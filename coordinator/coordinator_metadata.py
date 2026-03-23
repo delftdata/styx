@@ -302,6 +302,8 @@ class Coordinator:
         Called before recovery when migration was in progress — undoes the
         operator promotions (shadow → active) that update_stateflow_graph()
         applied so that recovery sends the correct (OLD) layout to workers.
+        Also updates orphaned_operator_assignments so that dead-worker
+        partitions are rescheduled with the OLD layout operator definitions.
         """
         if self.submitted_graph is None or self.max_operator_parallelism is None:
             return
@@ -310,10 +312,11 @@ class Coordinator:
                 operator_copy = deepcopy(operator)
                 if partition >= operator.n_partitions:
                     operator_copy.make_shadow()
-                self.worker_pool.update_operator(
-                    (operator_copy.name, partition),
-                    operator_copy,
-                )
+                op_part = (operator_copy.name, partition)
+                self.worker_pool.update_operator(op_part, operator_copy)
+                # Also revert orphaned (dead-worker) partitions
+                if op_part in self.worker_pool.orphaned_operator_assignments:
+                    self.worker_pool.orphaned_operator_assignments[op_part] = operator_copy
         logging.warning("Reverted worker pool operators to match submitted_graph (pre-migration layout)")
 
     def finalize_graph_update(self) -> None:
