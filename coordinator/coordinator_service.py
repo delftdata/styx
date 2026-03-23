@@ -400,10 +400,7 @@ class CoordinatorService:
             # (before workers took their snapshot).  By now the checkpoint snapshot
             # may already be complete.  Handle the race, then launch the finalizer.
             baseline = self.coordinator._migration_checkpoint_baseline_snap_id  # noqa: SLF001
-            if (
-                baseline >= 0
-                and self.coordinator.get_current_completed_snapshot_id() > baseline
-            ):
+            if baseline >= 0 and self.coordinator.get_current_completed_snapshot_id() > baseline:
                 self.coordinator._migration_checkpoint_snapshot_complete.set()  # noqa: SLF001
                 self.coordinator._migration_checkpoint_baseline_snap_id = -1  # noqa: SLF001
                 logging.warning("MIGRATION | Checkpoint snapshot already completed (race handled)")
