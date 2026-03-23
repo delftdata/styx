@@ -319,12 +319,39 @@ class CoordinatorService:
         logging.warning("Migration repartitioning done received!")
 
         async with self.networking_locks[mt]:
+            # Re-check inside the lock to close the TOCTOU window:
+            # recovery may have cleared migration_in_progress between the
+            # outer guard and lock acquisition.
+            if not self.migration_in_progress:
+                logging.warning("Dropping stale MigrationRepartitioningDone (recovery intervened)")
+                return
+
             sync_complete: bool = await self.migration_metadata.repartitioning_done()
 
             logging.warning(f"Migration repartitioning is complete: {sync_complete}")
 
             if not sync_complete:
                 return
+
+            # Re-check after await — recovery could have fired during the sync.
+            if not self.migration_in_progress:
+                logging.warning("Dropping MigrationRepartitioningDone (recovery intervened after sync)")
+                return
+
+            # Set migration checkpoint blob BEFORE telling workers to proceed.
+            # Workers will take a checkpoint snapshot after receiving
+            # MigrationRepartitioningDone; when the SnapID arrives the coordinator
+            # writes the sequencer file which will include this blob.
+            baseline = self.coordinator.get_current_completed_snapshot_id()
+            self.coordinator._migration_checkpoint_baseline_snap_id = baseline  # noqa: SLF001
+            operator_partition_locations = self.coordinator.worker_pool.get_operator_partition_locations()
+            self.coordinator.set_migration_checkpoint(
+                self.coordinator._pending_graph,  # noqa: SLF001
+                operator_partition_locations,
+            )
+            logging.warning(
+                f"MIGRATION | Checkpoint blob set, baseline snap_id={baseline}",
+            )
 
             await self.finalize_migration_repartition()
             await self.migration_metadata.cleanup(mt)
@@ -340,6 +367,11 @@ class CoordinatorService:
             return
         mt = MessageType.MigrationInitDone
         async with self.networking_locks[mt]:
+            # Re-check inside the lock (TOCTOU protection).
+            if not self.migration_in_progress:
+                logging.warning("Dropping stale MigrationInitDone (recovery intervened)")
+                return
+
             epoch_counter, t_counter, input_offsets, output_offsets = self.networking.decode_message(data)
 
             sync_complete: bool = await self.migration_metadata.init_done(
@@ -353,28 +385,25 @@ class CoordinatorService:
             if not sync_complete:
                 return
 
+            # Re-check after await — recovery could have fired during the sync.
+            if not self.migration_in_progress:
+                logging.warning("Dropping MigrationInitDone (recovery intervened after sync)")
+                return
+
             logging.warning("MIGRATION | MigrationInitDone | sync_complete")
             n_workers = len(self.coordinator.worker_pool.get_participating_workers())
 
             self.aria_metadata = AriaSyncMetadata(n_workers)
             await self.protocol_networking.close_all_connections()
 
-            # Set up migration checkpoint: serialize the pending graph + partition locations
-            # into the next sequencer file so recovery can resume instead of reverting.
-            # Record the baseline snapshot ID BEFORE setting the blob so we can detect
-            # when a new snapshot (containing the blob) completes.
-            baseline = self.coordinator.get_current_completed_snapshot_id()
-            self.coordinator._migration_checkpoint_baseline_snap_id = baseline  # noqa: SLF001
-            operator_partition_locations = self.coordinator.worker_pool.get_operator_partition_locations()
-            self.coordinator.set_migration_checkpoint(
-                self.coordinator._pending_graph,  # noqa: SLF001
-                operator_partition_locations,
-            )
-
-            # Handle race: if the checkpoint snapshot already completed before we
-            # set the baseline (workers' SnapID arrived before MigrationInitDone sync),
-            # signal the event immediately.
-            if self.coordinator.get_current_completed_snapshot_id() > baseline:
+            # The checkpoint blob was set in _handle_migration_repartitioning_done
+            # (before workers took their snapshot).  By now the checkpoint snapshot
+            # may already be complete.  Handle the race, then launch the finalizer.
+            baseline = self.coordinator._migration_checkpoint_baseline_snap_id  # noqa: SLF001
+            if (
+                baseline >= 0
+                and self.coordinator.get_current_completed_snapshot_id() > baseline
+            ):
                 self.coordinator._migration_checkpoint_snapshot_complete.set()  # noqa: SLF001
                 self.coordinator._migration_checkpoint_baseline_snap_id = -1  # noqa: SLF001
                 logging.warning("MIGRATION | Checkpoint snapshot already completed (race handled)")
@@ -695,6 +724,10 @@ class CoordinatorService:
             return
         mt = MessageType.MigrationDone
         async with self.networking_locks[mt]:
+            # Re-check inside the lock (TOCTOU protection).
+            if not self.migration_in_progress:
+                logging.warning("Dropping stale MigrationDone (recovery intervened)")
+                return
             sync_complete: bool = await self.migration_metadata.set_empty_sync_done(mt)
             logging.warning(
                 f"MIGRATION | MigrationDone | {self.migration_metadata.sync_sum}",
@@ -823,6 +856,14 @@ class CoordinatorService:
         """Wait for the migration checkpoint snapshot to complete, then finalize migration."""
         await self.coordinator._migration_checkpoint_snapshot_complete.wait()  # noqa: SLF001
         self.coordinator._migration_checkpoint_snapshot_complete.clear()  # noqa: SLF001
+
+        # Guard: recovery may have cleared migration state while we were waiting.
+        if not self.migration_in_progress:
+            logging.warning(
+                "MIGRATION | Checkpoint snapshot completed but migration_in_progress "
+                "is False (recovery intervened) — aborting finalization",
+            )
+            return
 
         logging.warning(
             f"MIGRATION | Checkpoint snapshot complete (snap_id="
@@ -953,6 +994,21 @@ class CoordinatorService:
 
         logging.warning(f"Starting recovery process for workers: {workers_to_remove}")
 
+        # 0) Immediately cancel the migration checkpoint background task.
+        #    This MUST happen before reading any migration state (_pending_graph,
+        #    submitted_graph) to prevent finalize_graph_update() from committing
+        #    the new graph layout while recovery is reverting to the old one.
+        if hasattr(self, "_migration_checkpoint_task") and self._migration_checkpoint_task is not None:
+            self._migration_checkpoint_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._migration_checkpoint_task
+            self._migration_checkpoint_task = None
+
+        # 0b) Clear migration_in_progress immediately so any migration handler
+        #     that passed its guard check before recovery will see it is False
+        #     when it re-checks inside the lock (TOCTOU protection).
+        self.migration_in_progress = False
+
         # 1) Clean up dead worker channels and buffered tasks
         logging.warning(f"Closing connections to dead workers: {workers_to_remove}")
         for worker in workers_to_remove:
@@ -973,7 +1029,7 @@ class CoordinatorService:
         #     If no (pre-checkpoint recovery): revert to old layout and optionally
         #     re-trigger migration from scratch.
         was_migrating = (
-            (self.migration_in_progress and self.coordinator._pending_graph is not None)  # noqa: SLF001
+            self.coordinator._pending_graph is not None  # noqa: SLF001
             or self.coordinator.post_migration_snapshot_pending
             or self.coordinator._migration_checkpoint_baseline_snap_id >= 0  # noqa: SLF001
         )
@@ -1003,17 +1059,7 @@ class CoordinatorService:
                 saved_pending_graph = self.coordinator._pending_graph  # noqa: SLF001
                 self.coordinator.revert_worker_pool_to_submitted_graph()
 
-        # 1c) Cancel the migration checkpoint background task if running
-        if hasattr(self, "_migration_checkpoint_task") and self._migration_checkpoint_task is not None:
-            self._migration_checkpoint_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await self._migration_checkpoint_task
-            self._migration_checkpoint_task = None
-
-        # Clear migration state BEFORE recovery starts, so any stale
-        #     MigrationRepartitioningDone / MigrationInitDone / MigrationDone
-        #     messages from surviving workers are dropped by the guards below.
-        self.migration_in_progress = False
+        # Clear remaining migration state so stale messages are dropped.
         self.coordinator.pre_migration_snapshot_pending = False
         self.coordinator.post_migration_snapshot_pending = False
         self.coordinator._migration_checkpoint_baseline_snap_id = -1  # noqa: SLF001

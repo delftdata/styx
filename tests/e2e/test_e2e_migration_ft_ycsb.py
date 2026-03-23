@@ -223,7 +223,7 @@ def _stop_cluster(paths: _Paths, env: dict, cluster: _ClusterParams, *, timeout_
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.e2e
+@pytest.mark.e2e_migration
 def test_migration_ft_baseline(tmp_path: Path):
     """Normal migration completes without crash.
 
@@ -260,7 +260,7 @@ def test_migration_ft_baseline(tmp_path: Path):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.e2e
+@pytest.mark.e2e_migration
 def test_migration_ft_kill_during_phase_a(tmp_path: Path):
     """Kill a worker during Phase A — crash while protocol is running.
 
@@ -303,7 +303,7 @@ def test_migration_ft_kill_during_phase_a(tmp_path: Path):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.e2e
+@pytest.mark.e2e_migration
 def test_migration_ft_kill_during_phase_c(tmp_path: Path):
     """Kill a worker during Phase C — async data transfer in progress.
 
@@ -346,7 +346,7 @@ def test_migration_ft_kill_during_phase_c(tmp_path: Path):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.e2e
+@pytest.mark.e2e_migration
 def test_migration_ft_kill_after_migration_done(tmp_path: Path):
     """Kill a worker after migration completes.
 
@@ -388,7 +388,7 @@ def test_migration_ft_kill_after_migration_done(tmp_path: Path):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.e2e
+@pytest.mark.e2e_migration
 def test_migration_ft_external_kill_during_migration(tmp_path: Path):
     """Kill a worker externally via docker kill during migration.
 
