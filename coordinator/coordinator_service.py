@@ -21,7 +21,11 @@ from prometheus_client import Gauge, start_http_server
 from styx.common.logging import logging
 from styx.common.message_types import MessageType
 from styx.common.protocols import Protocols
-from styx.common.serialization import Serializer
+from styx.common.serialization import (
+    Serializer,
+    cloudpickle_deserialization,
+    zstd_msgpack_deserialization,
+)
 from styx.common.tcp_networking import MessagingMode, NetworkingManager
 from styx.common.util.aio_task_scheduler import AIOTaskScheduler
 import uvloop
@@ -354,8 +358,20 @@ class CoordinatorService:
 
             self.aria_metadata = AriaSyncMetadata(n_workers)
             await self.protocol_networking.close_all_connections()
-            await self.finalize_migration()
-            await self.migration_metadata.cleanup(mt)
+
+            # Set up migration checkpoint: serialize the pending graph + partition locations
+            # into the next sequencer file so recovery can resume instead of reverting.
+            operator_partition_locations = self.coordinator.worker_pool.get_operator_partition_locations()
+            self.coordinator.set_migration_checkpoint(
+                self.coordinator._pending_graph,  # noqa: SLF001
+                operator_partition_locations,
+            )
+            self.coordinator.migration_checkpoint_snapshot_pending = True
+
+            # Launch background task to wait for the checkpoint snapshot, then finalize
+            self._migration_checkpoint_task = asyncio.ensure_future(
+                self._wait_for_migration_checkpoint_and_finalize(mt),
+            )
 
     async def _handle_register_worker(
         self,
@@ -681,9 +697,14 @@ class CoordinatorService:
             await self.migration_metadata.cleanup(mt)
             self.migration_in_progress = False
 
-            # Defer graph finalization until a post-migration snapshot completes.
-            # This ensures that if a crash happens before the snapshot, recovery
-            # uses the OLD layout (submitted_graph is still the old graph).
+            # Clear migration checkpoint blob so subsequent snapshots are normal.
+            # The graph was already finalized in _wait_for_migration_checkpoint_and_finalize().
+            self.coordinator.clear_migration_checkpoint()
+
+            # Defer final graph write until a post-migration snapshot captures
+            # the state without migration metadata. This is a safety net — the
+            # graph was already updated via finalize_graph_update() in the
+            # checkpoint flow, but we want a clean snapshot without migration_blob.
             self.coordinator.post_migration_snapshot_pending = True
 
     async def start_puller(self) -> None:
@@ -787,6 +808,20 @@ class CoordinatorService:
                     ),
                 )
 
+    async def _wait_for_migration_checkpoint_and_finalize(self, mt: MessageType) -> None:
+        """Wait for the migration checkpoint snapshot to complete, then finalize migration."""
+        await self.coordinator._migration_checkpoint_snapshot_complete.wait()  # noqa: SLF001
+        self.coordinator._migration_checkpoint_snapshot_complete.clear()  # noqa: SLF001
+
+        logging.warning("MIGRATION | Checkpoint snapshot complete — publishing new graph and sending MigrationDone")
+
+        # Publish new graph to styx-metadata so ALL clients update partitioners
+        self.coordinator.finalize_graph_update()
+
+        # Send MigrationDone to workers
+        await self.finalize_migration()
+        await self.migration_metadata.cleanup(mt)
+
     async def finalize_worker_sync(
         self,
         msg_type: MessageType,
@@ -836,8 +871,9 @@ class CoordinatorService:
 
         # 2) Reset migration metadata
         self.migration_metadata = MigrationMetadata(n_workers)
-        # migration_in_progress, pre_migration_snapshot_pending, and _pending_graph
-        # are already cleared in _perform_recovery() step 1c (before recovery starts)
+        # migration_in_progress, pre_migration_snapshot_pending, _pending_graph,
+        # and migration checkpoint state are already cleared in _perform_recovery()
+        # step 1c (before recovery starts)
         self.coordinator.pre_migration_snapshot_id = -1
 
         # 3) Reset snapshot completion metadata
@@ -865,6 +901,27 @@ class CoordinatorService:
         self.latency_breakdown_gauge._metrics.clear()  # noqa: SLF001
 
         logging.warning("Protocol metadata reset complete")
+
+    def _read_migration_blob_from_s3(self, snap_id: int) -> bytes | None:
+        """Read the migration checkpoint blob from the sequencer file in S3."""
+        if snap_id <= 0:
+            return None
+        try:
+            resp = self.s3_client.get_object(
+                Bucket=SNAPSHOT_BUCKET_NAME,
+                Key=f"sequencer/{snap_id}.bin",
+            )
+            loaded = zstd_msgpack_deserialization(resp["Body"].read())
+            _sequencer_tuple_len_with_migration = 5
+            if (
+                isinstance(loaded, tuple)
+                and len(loaded) == _sequencer_tuple_len_with_migration
+                and loaded[4] is not None
+            ):
+                return loaded[4]
+        except Exception as e:
+            logging.warning(f"[RECOVERY] Failed to read migration blob from S3: {e}")
+        return None
 
     async def _perform_recovery(self, workers_to_remove: set[Worker]) -> None:
         """
@@ -895,22 +952,41 @@ class CoordinatorService:
         await self.aio_task_scheduler.close()
         self.aio_task_scheduler = AIOTaskScheduler()
 
-        # 1b) If migration was in progress (or completed but no post-migration
-        #     snapshot yet), revert worker pool to pre-migration layout so that
-        #     recovery sends the correct (OLD) operator assignments.
+        # 1b) Check if the latest snapshot contains a migration checkpoint.
+        #     If yes (post-checkpoint recovery): use the NEW layout — workers will
+        #     re-derive keys_to_send from the snapshot and resume async transfer.
+        #     If no (pre-checkpoint recovery): revert to old layout and optionally
+        #     re-trigger migration from scratch.
         was_migrating = (
             (self.migration_in_progress and self.coordinator._pending_graph is not None)  # noqa: SLF001
             or self.coordinator.post_migration_snapshot_pending
+            or self.coordinator.migration_checkpoint_snapshot_pending
         )
-        saved_pending_graph = self.coordinator._pending_graph if was_migrating else None  # noqa: SLF001
+        saved_pending_graph = None
+        snap_id = self.coordinator.get_current_completed_snapshot_id()
+
         if was_migrating:
             logging.warning(
                 f"[RECOVERY] Migration was in progress. "
                 f"pre_migration_snapshot_id={self.coordinator.pre_migration_snapshot_id}, "
-                f"current_completed_snapshot_id={self.coordinator.get_current_completed_snapshot_id()}, "
+                f"current_completed_snapshot_id={snap_id}, "
                 f"worker_snapshot_ids={self.coordinator.worker_snapshot_ids}",
             )
-            self.coordinator.revert_worker_pool_to_submitted_graph()
+            migration_blob = self._read_migration_blob_from_s3(snap_id)
+            if migration_blob is not None:
+                # POST-CHECKPOINT: use NEW layout — workers will resume transfer
+                logging.warning("[RECOVERY] Migration checkpoint found — using NEW layout for recovery")
+                migration_meta = cloudpickle_deserialization(migration_blob)
+                new_graph = migration_meta["new_graph"]
+                self.coordinator.submitted_graph = new_graph
+                self.coordinator._pending_graph = None  # noqa: SLF001
+                # The worker pool already has the new operator assignments from
+                # update_stateflow_graph() — no need to revert.
+            else:
+                # PRE-CHECKPOINT: revert to old layout and retry migration
+                logging.warning("[RECOVERY] No migration checkpoint — reverting to OLD layout")
+                saved_pending_graph = self.coordinator._pending_graph  # noqa: SLF001
+                self.coordinator.revert_worker_pool_to_submitted_graph()
 
         # 1c) Clear migration state BEFORE recovery starts, so any stale
         #     MigrationRepartitioningDone / MigrationInitDone / MigrationDone
@@ -918,10 +994,12 @@ class CoordinatorService:
         self.migration_in_progress = False
         self.coordinator.pre_migration_snapshot_pending = False
         self.coordinator.post_migration_snapshot_pending = False
+        self.coordinator.migration_checkpoint_snapshot_pending = False
+        self.coordinator._migration_checkpoint_snapshot_complete.clear()  # noqa: SLF001
         self.coordinator._pending_graph = None  # noqa: SLF001
+        self.coordinator.clear_migration_checkpoint()
 
         # 2) Start recovery
-        snap_id = self.coordinator.get_current_completed_snapshot_id()
         graph_parts = (
             {n: op.n_partitions for n, op in self.coordinator.submitted_graph.nodes.items()}
             if self.coordinator.submitted_graph

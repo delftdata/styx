@@ -34,7 +34,7 @@ from styx.common.local_state_backends import LocalStateBackend
 from styx.common.logging import logging
 from styx.common.message_types import MessageType
 from styx.common.protocols import Protocols
-from styx.common.serialization import Serializer, msgpack_deserialization
+from styx.common.serialization import Serializer, cloudpickle_deserialization, msgpack_deserialization
 from styx.common.tcp_networking import MessagingMode, NetworkingManager
 from styx.common.util.aio_task_scheduler import AIOTaskScheduler
 import uvloop
@@ -339,7 +339,7 @@ class Worker:
         await self._send_snap_assigned(snapshot_id=snapshot_id)
 
         logging.warning("Retrieving Snapshot from S3")
-        (snap_data, _in_off, _out_off, epoch, t_counter) = self.async_snapshots.retrieve_snapshot(
+        (snap_data, _in_off, _out_off, epoch, t_counter, _migration_blob) = self.async_snapshots.retrieve_snapshot(
             snapshot_id,
             self.registered_operators.keys(),
         )
@@ -661,6 +661,24 @@ class Worker:
                 f"MIGRATION | PHASE B Hash metadata sent | took: {t_hash_send_end - t_hash_send_start}",
             )
 
+            # 5.5 Trigger a migration checkpoint snapshot.
+            # This captures the state at the exact moment before data transfer begins,
+            # enabling checkpoint-and-resume recovery instead of revert-and-retry.
+            await self.function_execution_protocol.send_delta_to_snapshotting_proc()
+            await self.function_execution_protocol.snapshotting_networking_manager.send_message(
+                self.function_execution_protocol.networking.host_name,
+                self.function_execution_protocol.snapshotting_port,
+                msg=(
+                    self.function_execution_protocol.topic_partition_offsets,
+                    self.function_execution_protocol.egress.topic_partition_output_offsets,
+                    self.function_execution_protocol.sequencer.epoch_counter,
+                    self.function_execution_protocol.sequencer.t_counter,
+                ),
+                msg_type=MessageType.SnapTakeSnapshot,
+                serializer=Serializer.MSGPACK,
+            )
+            logging.warning("MIGRATION | PHASE B Migration checkpoint snapshot triggered")
+
             # 6. Send MigrationInitDone with actual stop-time counters
             await self.networking.send_message(
                 DISCOVERY_HOST,
@@ -767,13 +785,16 @@ class Worker:
         )
         await self._send_snap_assigned(snapshot_id=snapshot_id)
 
-        (snap_data, tp_offsets, tp_out_offsets, epoch, t_counter) = self.async_snapshots.retrieve_snapshot(
-            snapshot_id,
-            self.registered_operators.keys(),
+        (snap_data, tp_offsets, tp_out_offsets, epoch, t_counter, migration_blob) = (
+            self.async_snapshots.retrieve_snapshot(
+                snapshot_id,
+                self.registered_operators.keys(),
+            )
         )
 
         logging.warning(
-            f"[RECOVERY] W{self.id} snapshot_id={snapshot_id} epoch={epoch} t_counter={t_counter}",
+            f"[RECOVERY] W{self.id} snapshot_id={snapshot_id} epoch={epoch} t_counter={t_counter}"
+            f" migration_blob={'present' if migration_blob else 'none'}",
         )
         logging.warning(
             f"[RECOVERY] W{self.id} registered_operators={list(self.registered_operators.keys())}",
@@ -805,6 +826,31 @@ class Worker:
 
         self.attach_state_to_operators_after_snapshot(snap_data)
 
+        # Detect migration checkpoint: if present, re-derive keys_to_send and resume transfer
+        restart_after_migration = False
+        if migration_blob is not None:
+            logging.warning(f"[RECOVERY] W{self.id} Migration checkpoint detected — resuming migration transfer")
+            migration_meta = cloudpickle_deserialization(migration_blob)
+            new_graph = migration_meta["new_graph"]
+
+            # Re-derive keys_to_send from local state + new partitioner
+            keys_to_send: dict[tuple, set] = defaultdict(set)
+            for op_part in self.registered_operators:
+                op_name, partition = op_part
+                partitioner = new_graph.get_operator_by_name(op_name).get_partitioner()
+                op_data = self.local_state.get_operator_data_for_repartitioning(op_part)
+                for key in op_data:
+                    new_part = partitioner.get_partition_no_cache(key)
+                    if new_part != partition:
+                        keys_to_send[op_part].add((key, new_part))
+
+            if keys_to_send:
+                self.local_state.add_keys_to_send(keys_to_send)
+                logging.warning(
+                    f"[RECOVERY] W{self.id} Re-derived {sum(len(v) for v in keys_to_send.values())} keys to send",
+                )
+            restart_after_migration = True
+
         request_id_to_t_id_map = await self.get_sequencer_assignments_before_failure(
             epoch,
         )
@@ -823,7 +869,8 @@ class Worker:
             epoch_counter=epoch,
             t_counter=t_counter,
             request_id_to_t_id_map=request_id_to_t_id_map,
-            restart_after_recovery=True,
+            restart_after_recovery=not restart_after_migration,
+            restart_after_migration=restart_after_migration,
             dedup_output_offsets=all_dedup_out_offsets,
         )
         self.function_execution_protocol.start()

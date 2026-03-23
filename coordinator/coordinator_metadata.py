@@ -62,6 +62,11 @@ class Coordinator:
         # Deferred graph update: held until migration completes
         self._pending_graph: StateflowGraph | None = None
 
+        # Checkpoint-and-resume migration FT
+        self._migration_checkpoint_blob: bytes | None = None
+        self.migration_checkpoint_snapshot_pending: bool = False
+        self._migration_checkpoint_snapshot_complete: asyncio.Event = asyncio.Event()
+
     async def start_kafka_metadata_producer(self) -> None:
         self.kafka_metadata_producer = AIOKafkaProducer(
             bootstrap_servers=[KAFKA_URL],
@@ -213,6 +218,13 @@ class Coordinator:
             logging.warning(
                 f"Post-migration snapshot {current_completed_snapshot} completed — graph finalized",
             )
+        # Detect migration checkpoint snapshot completion
+        if self.migration_checkpoint_snapshot_pending and current_completed_snapshot != self.prev_completed_snapshot_id:
+            self.migration_checkpoint_snapshot_pending = False
+            self._migration_checkpoint_snapshot_complete.set()
+            logging.warning(
+                f"Migration checkpoint snapshot {current_completed_snapshot} completed",
+            )
         if current_completed_snapshot != self.prev_completed_snapshot_id:
             logging.warning(f"Cluster completed snapshot: {current_completed_snapshot}")
             # if we reached a complete snapshot, we could compact its deltas with the previous one
@@ -222,6 +234,7 @@ class Coordinator:
                     self.completed_out_offsets,
                     self.completed_epoch_counter,
                     self.completed_t_counter,
+                    self._migration_checkpoint_blob,
                 ),
             )
             self.s3_client.put_object(
@@ -316,6 +329,23 @@ class Coordinator:
                 value=serialized_graph,
             ),
         )
+
+    def set_migration_checkpoint(
+        self,
+        new_graph: StateflowGraph,
+        operator_partition_locations: dict,
+    ) -> None:
+        """Serialize migration metadata for inclusion in the next sequencer file."""
+        self._migration_checkpoint_blob = cloudpickle_serialization(
+            {
+                "new_graph": new_graph,
+                "operator_partition_locations": operator_partition_locations,
+            },
+        )
+
+    def clear_migration_checkpoint(self) -> None:
+        """Clear migration metadata so subsequent snapshots are normal."""
+        self._migration_checkpoint_blob = None
 
     async def submit_stateflow_graph(
         self,

@@ -158,12 +158,13 @@ class TestStoreSnapshot:
 class TestRetrieveSnapshot:
     def test_snapshot_id_negative_one_returns_empty(self):
         s = _snap()
-        data, tp_off, tp_out_off, epoch, t_counter = s.retrieve_snapshot(-1, [])
+        data, tp_off, tp_out_off, epoch, t_counter, migration_blob = s.retrieve_snapshot(-1, [])
         assert data == {}
         assert tp_off == {}
         assert tp_out_off == {}
         assert epoch == 0
         assert t_counter == 0
+        assert migration_blob is None
         assert s.snapshot_id == 0  # -1 + 1
 
     @patch("worker.fault_tolerance.async_snapshots._get_s3_client")
@@ -176,7 +177,7 @@ class TestRetrieveSnapshot:
         mock_s3.get_paginator.return_value = paginator
 
         s = _snap()
-        data, _tp_off, _tp_out_off, _epoch, _t_counter = s.retrieve_snapshot(
+        data, _tp_off, _tp_out_off, _epoch, _t_counter, _migration_blob = s.retrieve_snapshot(
             0,
             [("users", 0)],
         )
