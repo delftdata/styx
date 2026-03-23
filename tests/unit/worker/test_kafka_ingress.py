@@ -184,7 +184,7 @@ def _make_ingress_with_shadow_partitions():
     for part in range(8):
         op = MagicMock()
         # 4-partition partitioner: always maps to 0-3
-        op.which_partition = MagicMock(side_effect=lambda key, p=part: hash(key) % 4)
+        op.which_partition = MagicMock(side_effect=lambda key, _p=part: hash(key) % 4)
         op.dns = dns
         registered_operators[("ycsb", part)] = op
 
@@ -214,7 +214,7 @@ class TestShadowPartitionRedirect:
     def test_message_on_shadow_partition_redirected_locally(self):
         """Message sent to shadow partition 4 should be redirected to the
         correct active partition and sequenced locally."""
-        ingress, networking, sequencer, state = _make_ingress_with_shadow_partitions()
+        ingress, networking, sequencer, _state = _make_ingress_with_shadow_partitions()
         # Client sends to partition 4 (shadow) with key "test_key"
         networking.decode_message.return_value = ("ycsb", "test_key", "read", (), 4)
         # which_partition returns an active partition (0-3)
@@ -230,7 +230,7 @@ class TestShadowPartitionRedirect:
     def test_message_on_shadow_partition_redirected_remotely(self):
         """Message on shadow partition redirected to remote worker via
         WrongPartitionRequest."""
-        ingress, networking, sequencer, state = _make_ingress_with_shadow_partitions()
+        ingress, networking, sequencer, _state = _make_ingress_with_shadow_partitions()
         networking.decode_message.return_value = ("ycsb", "test_key", "read", (), 5)
         ingress.registered_operators[("ycsb", 5)].which_partition = MagicMock(return_value=1)
         networking.in_the_same_network.return_value = False
@@ -261,7 +261,7 @@ class TestShadowPartitionRedirect:
         Bug: if these aren't preserved, _advance_offsets can't track
         progress and messages are re-consumed after migration.
         """
-        ingress, networking, sequencer, state = _make_ingress_with_shadow_partitions()
+        ingress, networking, sequencer, _state = _make_ingress_with_shadow_partitions()
         networking.decode_message.return_value = ("ycsb", "test_key", "read", (), 6)
         ingress.registered_operators[("ycsb", 6)].which_partition = MagicMock(return_value=2)
 
@@ -274,7 +274,7 @@ class TestShadowPartitionRedirect:
 
     def test_all_shadow_partitions_redirect(self):
         """Verify all shadow partitions (4-7) redirect correctly."""
-        ingress, networking, sequencer, state = _make_ingress_with_shadow_partitions()
+        ingress, networking, sequencer, _state = _make_ingress_with_shadow_partitions()
 
         for shadow_part in range(4, 8):
             sequencer.reset_mock()
@@ -325,10 +325,12 @@ class TestKafkaConsumerStartupExceptionHandling:
         mock_consumer.getmany = AsyncMock(side_effect=asyncio.CancelledError())
         mock_consumer.stop = AsyncMock()
 
-        with patch("worker.ingress.styx_kafka_ingress.AIOKafkaConsumer", return_value=mock_consumer):
-            with patch("worker.ingress.styx_kafka_ingress.asyncio.sleep", new_callable=AsyncMock):
-                with pytest.raises(asyncio.CancelledError):
-                    await ingress.start_kafka_consumer([], {})
+        with (
+            patch("worker.ingress.styx_kafka_ingress.AIOKafkaConsumer", return_value=mock_consumer),
+            patch("worker.ingress.styx_kafka_ingress.asyncio.sleep", new_callable=AsyncMock),
+            pytest.raises(asyncio.CancelledError),
+        ):
+            await ingress.start_kafka_consumer([], {})
 
         # Consumer should have been started twice (retry after error)
         assert mock_consumer.start.call_count == 2
@@ -345,10 +347,12 @@ class TestKafkaConsumerStartupExceptionHandling:
         mock_consumer.getmany = AsyncMock(side_effect=asyncio.CancelledError())
         mock_consumer.stop = AsyncMock()
 
-        with patch("worker.ingress.styx_kafka_ingress.AIOKafkaConsumer", return_value=mock_consumer):
-            with patch("worker.ingress.styx_kafka_ingress.asyncio.sleep", new_callable=AsyncMock):
-                with pytest.raises(asyncio.CancelledError):
-                    await ingress.start_kafka_consumer([], {})
+        with (
+            patch("worker.ingress.styx_kafka_ingress.AIOKafkaConsumer", return_value=mock_consumer),
+            patch("worker.ingress.styx_kafka_ingress.asyncio.sleep", new_callable=AsyncMock),
+            pytest.raises(asyncio.CancelledError),
+        ):
+            await ingress.start_kafka_consumer([], {})
 
         assert mock_consumer.start.call_count == 2
 
@@ -359,9 +363,11 @@ class TestKafkaConsumerStartupExceptionHandling:
         mock_consumer = AsyncMock()
         mock_consumer.start = AsyncMock(side_effect=ValueError("unexpected"))
 
-        with patch("worker.ingress.styx_kafka_ingress.AIOKafkaConsumer", return_value=mock_consumer):
-            with pytest.raises(ValueError, match="unexpected"):
-                await ingress.start_kafka_consumer([], {})
+        with (
+            patch("worker.ingress.styx_kafka_ingress.AIOKafkaConsumer", return_value=mock_consumer),
+            pytest.raises(ValueError, match="unexpected"),
+        ):
+            await ingress.start_kafka_consumer([], {})
 
     def test_except_clause_catches_both_exception_types(self):
         """Verify the except clause syntax is correct (not Python 2 style).
@@ -382,18 +388,18 @@ class TestKafkaConsumerStartupExceptionHandling:
 
         # Find all except handlers in the function
         for node in ast.walk(tree):
-            if isinstance(node, ast.ExceptHandler) and node.type is not None:
-                # If the handler catches a tuple of exceptions, node.type
-                # is an ast.Tuple. If it's Python 2 style `except A, B:`,
-                # node.type is just a Name (only catches A) and node.name
-                # is set to the string "B".
-                if isinstance(node.type, ast.Name) and node.type.id == "UnknownTopicOrPartitionError":
-                    # This means: except UnknownTopicOrPartitionError as <something>
-                    # i.e., KafkaConnectionError is NOT caught — this is the bug
-                    pytest.fail(
-                        "except clause uses Python 2 syntax "
-                        "'except UnknownTopicOrPartitionError, KafkaConnectionError:' "
-                        "which only catches UnknownTopicOrPartitionError. "
-                        "Use 'except (UnknownTopicOrPartitionError, KafkaConnectionError):' "
-                        "to catch both.",
-                    )
+            if (
+                isinstance(node, ast.ExceptHandler)
+                and node.type is not None
+                and isinstance(node.type, ast.Name)
+                and node.type.id == "UnknownTopicOrPartitionError"
+            ):
+                # This means: except UnknownTopicOrPartitionError as <something>
+                # i.e., KafkaConnectionError is NOT caught — this is the bug
+                pytest.fail(
+                    "except clause uses Python 2 syntax "
+                    "'except UnknownTopicOrPartitionError, KafkaConnectionError:' "
+                    "which only catches UnknownTopicOrPartitionError. "
+                    "Use 'except (UnknownTopicOrPartitionError, KafkaConnectionError):' "
+                    "to catch both.",
+                )

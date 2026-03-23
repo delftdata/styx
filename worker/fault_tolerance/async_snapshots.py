@@ -194,7 +194,7 @@ class AsyncSnapshotsS3(BaseSnapshotter):
 
         for _, key in self._iter_snapshot_files(s3, SEQUENCER_PREFIX, snapshot_id):
             loaded = self._get_zstd_msgpack(s3, key)
-            if isinstance(loaded, tuple) and len(loaded) == _SEQUENCER_TUPLE_LEN_WITH_MIGRATION:
+            if isinstance(loaded, (tuple, list)) and len(loaded) == _SEQUENCER_TUPLE_LEN_WITH_MIGRATION:
                 (
                     topic_partition_offsets,
                     topic_partition_output_offsets,
@@ -202,7 +202,7 @@ class AsyncSnapshotsS3(BaseSnapshotter):
                     t_counter,
                     migration_blob,
                 ) = loaded
-            elif isinstance(loaded, tuple) and len(loaded) == _SEQUENCER_TUPLE_LEN_LEGACY:
+            elif isinstance(loaded, (tuple, list)) and len(loaded) == _SEQUENCER_TUPLE_LEN_LEGACY:
                 (
                     topic_partition_offsets,
                     topic_partition_output_offsets,

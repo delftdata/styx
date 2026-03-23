@@ -64,7 +64,7 @@ class Coordinator:
 
         # Checkpoint-and-resume migration FT
         self._migration_checkpoint_blob: bytes | None = None
-        self.migration_checkpoint_snapshot_pending: bool = False
+        self._migration_checkpoint_baseline_snap_id: int = -1
         self._migration_checkpoint_snapshot_complete: asyncio.Event = asyncio.Event()
 
     async def start_kafka_metadata_producer(self) -> None:
@@ -218,13 +218,17 @@ class Coordinator:
             logging.warning(
                 f"Post-migration snapshot {current_completed_snapshot} completed — graph finalized",
             )
-        # Detect migration checkpoint snapshot completion
-        if self.migration_checkpoint_snapshot_pending and current_completed_snapshot != self.prev_completed_snapshot_id:
-            self.migration_checkpoint_snapshot_pending = False
+        # Detect migration checkpoint snapshot completion via baseline ID comparison
+        if (
+            self._migration_checkpoint_baseline_snap_id >= 0
+            and current_completed_snapshot > self._migration_checkpoint_baseline_snap_id
+        ):
             self._migration_checkpoint_snapshot_complete.set()
             logging.warning(
-                f"Migration checkpoint snapshot {current_completed_snapshot} completed",
+                f"Migration checkpoint snapshot {current_completed_snapshot} completed "
+                f"(baseline was {self._migration_checkpoint_baseline_snap_id})",
             )
+            self._migration_checkpoint_baseline_snap_id = -1
         if current_completed_snapshot != self.prev_completed_snapshot_id:
             logging.warning(f"Cluster completed snapshot: {current_completed_snapshot}")
             # if we reached a complete snapshot, we could compact its deltas with the previous one
