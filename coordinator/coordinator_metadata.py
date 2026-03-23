@@ -206,6 +206,12 @@ class Coordinator:
         self.completed_epoch_counter = epoch_counter
         self.completed_t_counter = t_counter
         current_completed_snapshot: int = self.get_current_completed_snapshot_id()
+        logging.warning(
+            f"register_snapshot | worker={worker_id} snap={snapshot_id} "
+            f"cluster_min={current_completed_snapshot} prev={self.prev_completed_snapshot_id} "
+            f"baseline={self._migration_checkpoint_baseline_snap_id} "
+            f"blob_set={self._migration_checkpoint_blob is not None}",
+        )
         # Track pre-migration snapshot for recovery
         if self.pre_migration_snapshot_pending and current_completed_snapshot != self.prev_completed_snapshot_id:
             self.pre_migration_snapshot_id = current_completed_snapshot
@@ -265,6 +271,10 @@ class Coordinator:
             raise NotAStateflowGraphError
         # TODO the cluster was balanced by the previous deployment, if the graph is complex it might be
         #  unbalanced after the update
+        logging.warning(
+            f"update_stateflow_graph | updating worker pool operators "
+            f"(new partitions: { {n: op.n_partitions for n, op in new_stateflow_graph.nodes.items()} })",
+        )
         for _, operator in iter(new_stateflow_graph):
             for partition in range(self.max_operator_parallelism):
                 operator_copy = deepcopy(operator)
@@ -295,6 +305,7 @@ class Coordinator:
         # Defer the graph metadata write until migration completes (finalize_graph_update).
         # This ensures that if a crash occurs mid-migration, recovery uses the OLD layout.
         self._pending_graph = new_stateflow_graph
+        logging.warning("update_stateflow_graph | _pending_graph set successfully")
 
     def revert_worker_pool_to_submitted_graph(self) -> None:
         """Revert worker pool operators to match the current submitted_graph.
@@ -322,7 +333,9 @@ class Coordinator:
     def finalize_graph_update(self) -> None:
         """Commit the deferred graph update after migration completes successfully."""
         if self._pending_graph is None:
+            logging.warning("finalize_graph_update | no-op (_pending_graph is None)")
             return
+        logging.warning("finalize_graph_update | committing pending graph to submitted_graph")
         self.submitted_graph = self._pending_graph
         self._pending_graph = None
         # Write to Kafka via a background task; the producer is already running

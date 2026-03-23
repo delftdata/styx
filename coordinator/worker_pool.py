@@ -157,6 +157,9 @@ class WorkerPool:
         if worker_id is None or worker_id not in self._worker_queue_idx:
             # Worker was already removed (e.g. dead before recovery revert).
             # The partition will be rescheduled during initiate_recovery.
+            logging.debug(
+                f"update_operator | skipping {operator_partition} — worker {worker_id} removed",
+            )
             return
         worker = self.peek(worker_id)
         worker.assigned_operators[operator_partition] = operator

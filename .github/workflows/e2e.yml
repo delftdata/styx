@@ -48,7 +48,7 @@ jobs:
         env:
           PYTHONUNBUFFERED: "1"
         run: |
-          pytest tests/e2e/ -m "e2e" -q
+          pytest tests/e2e/ -m "e2e" -q --log-level=DEBUG
 
       - name: Collect logs
         if: always()
@@ -102,7 +102,7 @@ jobs:
         env:
           PYTHONUNBUFFERED: "1"
         run: |
-          pytest tests/e2e/ -m "e2e_migration" -q
+          pytest tests/e2e/ -m "e2e_migration" -q --log-level=DEBUG
 
       - name: Collect logs
         if: always()
