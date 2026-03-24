@@ -285,6 +285,15 @@ class Coordinator:
                     (operator_copy.name, partition),
                     operator_copy,
                 )
+        # Set _pending_graph BEFORE sending InitMigration to workers.
+        # This ensures recovery can detect an in-flight migration even if the
+        # gather is stuck retrying a dead worker connection for tens of seconds.
+        # Recovery clears _pending_graph, so if the gather completes after
+        # recovery, it harmlessly re-sets the field (which _perform_recovery
+        # already handles via saved_migration_in_progress).
+        self._pending_graph = new_stateflow_graph
+        logging.warning("update_stateflow_graph | _pending_graph set (before send)")
+
         worker_assignments = self.worker_pool.get_worker_assignments()
         tasks = [
             self.networking.send_message(
@@ -302,10 +311,7 @@ class Coordinator:
             for worker in self.worker_pool.get_participating_workers()
         ]
         await asyncio.gather(*tasks)
-        # Defer the graph metadata write until migration completes (finalize_graph_update).
-        # This ensures that if a crash occurs mid-migration, recovery uses the OLD layout.
-        self._pending_graph = new_stateflow_graph
-        logging.warning("update_stateflow_graph | _pending_graph set successfully")
+        logging.warning("update_stateflow_graph | InitMigration sent to all workers")
 
     def revert_worker_pool_to_submitted_graph(self) -> None:
         """Revert worker pool operators to match the current submitted_graph.

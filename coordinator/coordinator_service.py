@@ -195,6 +195,10 @@ class CoordinatorService:
         }
 
         self.snapshotting_task: asyncio.Task | None = None
+        self._migration_checkpoint_task: asyncio.Task | None = None
+        # Deferred migration re-trigger: set during recovery, picked up after
+        # the first post-recovery snapshot completes (to avoid dedup races).
+        self._deferred_migration_graph: StateflowGraph | None = None
 
         self._protocol_controller_handlers_map: dict[MessageType, Callable[[bytes], Awaitable[None]]] = {
             MessageType.AriaProcessingDone: self._handle_aria_processing_done,
@@ -296,13 +300,22 @@ class CoordinatorService:
             await self.coordinator.update_stateflow_graph(graph)
         except Exception:
             # update_stateflow_graph failed (e.g. dead worker connection).
-            # The worker pool operators were already updated but _pending_graph
-            # was not set.  Revert the pool and clear migration state so that
-            # heartbeat-driven recovery sees a clean state.
+            # Revert the pool and clear migration state.
             logging.exception("MIGRATION | update_stateflow_graph FAILED — reverting")
             self.coordinator.revert_worker_pool_to_submitted_graph()
+            self.coordinator._pending_graph = None  # noqa: SLF001
             self.coordinator.pre_migration_snapshot_pending = False
             self.migration_in_progress = False
+            return
+
+        # Guard: if recovery ran while the gather was blocked (zombie coroutine),
+        # migration_in_progress is now False and _pending_graph was cleared.
+        # Don't proceed — the recovery handler already dealt with it.
+        if not self.migration_in_progress:
+            logging.warning(
+                "MIGRATION | update_stateflow_graph completed but migration_in_progress=False "
+                "(recovery intervened while gather was blocked) — aborting",
+            )
             return
 
         n_workers = len(self.coordinator.worker_pool.get_participating_workers())
@@ -514,6 +527,24 @@ class CoordinatorService:
                 t_counter,
                 pool,
             )
+
+            # Check for deferred migration re-trigger: fire once the first
+            # post-recovery snapshot completes (prev changes from -1 to a
+            # real value, meaning a full cluster snapshot has been written).
+            if (
+                self._deferred_migration_graph is not None
+                and not self.migration_in_progress
+                and self.coordinator.prev_completed_snapshot_id >= 0
+            ):
+                graph = self._deferred_migration_graph
+                self._deferred_migration_graph = None
+                logging.warning(
+                    "[RECOVERY] First post-recovery snapshot complete — re-triggering deferred migration",
+                )
+                # Use ensure_future so we don't block the SnapID handler.
+                self._deferred_migration_task = asyncio.ensure_future(
+                    self._start_migration(graph),
+                )
 
     async def _handle_heartbeat(
         self,
@@ -1113,6 +1144,7 @@ class CoordinatorService:
         self.coordinator._migration_checkpoint_snapshot_complete.clear()  # noqa: SLF001
         self.coordinator._pending_graph = None  # noqa: SLF001
         self.coordinator.clear_migration_checkpoint()
+        self._deferred_migration_graph = None  # Clear any pending deferred re-trigger
 
         # 2) Start recovery
         graph_parts = (
@@ -1142,14 +1174,20 @@ class CoordinatorService:
 
         logging.warning("Recovery process completed")
 
-        # 7) If migration was interrupted, re-trigger it now that the cluster is healthy.
-        #    The client's partitioner may already be using the new layout, so messages
-        #    to shadow partitions would be missed without completing the migration.
+        # 7) If migration was interrupted, DEFER re-trigger until the first
+        #    post-recovery snapshot completes.  Re-triggering immediately causes
+        #    duplicate output: the protocol starts replaying from the snapshot,
+        #    the dedup mechanism suppresses most duplicates, but the immediate
+        #    migration Phase B stops the protocol before all replayed messages
+        #    are fully dedup'd, and the migration restart's dedup scan starts
+        #    from Phase B offsets (missing the earlier duplicates).
+        #    By deferring, we let the recovery epoch fully complete and a clean
+        #    snapshot capture the post-dedup state, eliminating duplicates.
         if saved_pending_graph is not None:
             logging.warning(
-                "[RECOVERY] Re-triggering interrupted migration with saved pending graph",
+                "[RECOVERY] Deferring migration re-trigger until first post-recovery snapshot",
             )
-            await self._start_migration(saved_pending_graph)
+            self._deferred_migration_graph = saved_pending_graph
 
     async def heartbeat_monitor_coroutine(self) -> None:
         interval_time = HEARTBEAT_CHECK_INTERVAL / 1000
