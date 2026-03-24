@@ -12,6 +12,7 @@ concurrency:
 jobs:
   e2e-base:
     name: "E2E — base (non-migration)"
+    # Provides the legacy "e2e-tests" status check via the summary job below.
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
@@ -117,3 +118,18 @@ jobs:
           name: e2e-migration-artifacts
           path: artifacts
           if-no-files-found: ignore
+
+  # Legacy summary job — provides the "e2e-tests" status check that branch
+  # protection rules may reference from before the split into two jobs.
+  e2e-tests:
+    name: "e2e-tests"
+    if: always()
+    needs: [e2e-base, e2e-migration]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check results
+        run: |
+          if [[ "${{ needs.e2e-base.result }}" == "failure" || "${{ needs.e2e-migration.result }}" == "failure" ]]; then
+            echo "One or more E2E jobs failed"
+            exit 1
+          fi
