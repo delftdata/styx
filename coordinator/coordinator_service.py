@@ -597,6 +597,8 @@ class CoordinatorService:
                 f"COORDINATOR PROTOCOL SERVER: Non supported message type: {mt}",
             )
             return
+        if self.migration_in_progress:
+            logging.warning(f"PROTOCOL_MSG during migration: {mt.name}")
         await handler(data)
 
     # ------------------------
@@ -705,11 +707,18 @@ class CoordinatorService:
             if not sync_complete:
                 return
 
+            stop_flag = self.aria_metadata.stop_next_epoch
+            if stop_flag:
+                logging.warning(
+                    "SyncCleanup | sync_complete, sending stop_gracefully=True to all workers",
+                )
             await self.finalize_worker_sync(
                 mt,
-                (self.aria_metadata.stop_next_epoch,),
+                (stop_flag,),
                 Serializer.MSGPACK,
             )
+            if stop_flag:
+                logging.warning("SyncCleanup | stop_gracefully sent successfully")
             self.aria_metadata.cleanup(epoch_end=True)
 
     def _record_epoch_metrics(
@@ -815,11 +824,13 @@ class CoordinatorService:
                         self.protocol_controller(await reader.readexactly(size)),
                     )
             except asyncio.IncompleteReadError as e:
-                logging.info(f"Client disconnected unexpectedly: {e}")
+                logging.warning(f"Protocol client disconnected unexpectedly: {e}")
             except asyncio.CancelledError:
                 pass
+            except Exception as e:
+                logging.warning(f"Protocol request_handler unexpected error: {e}")
             finally:
-                logging.info("Closing the connection")
+                logging.warning("Protocol connection closing")
                 writer.close()
                 await writer.wait_closed()
 

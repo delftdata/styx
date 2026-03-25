@@ -385,6 +385,7 @@ class AriaProtocol(BaseTransactionalProtocol):
         async with self.networking_locks[mt]:
             (stop_gracefully,) = self.networking.decode_message(data)
             if stop_gracefully:
+                logging.warning(f"Worker {self.id} | SyncCleanup received stop_gracefully=True")
                 self.running = False
             self.sync_workers_event[mt].set()
 
@@ -571,6 +572,7 @@ class AriaProtocol(BaseTransactionalProtocol):
                 self.currently_processing = True
                 await self._process_epoch(sequence)
 
+        logging.warning(f"Worker {self.id} | function_scheduler exiting (running=False)")
         await self.stop()
 
     async def _process_epoch(self, sequence: list[SequencedItem]) -> None:
@@ -1049,5 +1051,13 @@ class AriaProtocol(BaseTransactionalProtocol):
             msg_type=msg_type,
             serializer=serializer,
         )
-        await self.sync_workers_event[msg_type].wait()
+        # Detect stuck barriers during migration debugging
+        try:
+            await asyncio.wait_for(self.sync_workers_event[msg_type].wait(), timeout=10.0)
+        except TimeoutError:
+            logging.warning(
+                f"Worker {self.id} | BARRIER STUCK for 10s on {msg_type.name} @epoch {self.sequencer.epoch_counter}",
+            )
+            # Continue waiting (no timeout)
+            await self.sync_workers_event[msg_type].wait()
         self.sync_workers_event[msg_type].clear()
