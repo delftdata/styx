@@ -1,12 +1,15 @@
 import logging as _stdlib_logging
 from logging.handlers import QueueHandler, QueueListener
+import os
 from queue import SimpleQueue
 
 _log_queue: SimpleQueue = SimpleQueue()
 
 # Root "styx" logger — uses QueueHandler so callers never block.
+# Log level is configurable via LOG_LEVEL env var (default: WARNING).
 logging = _stdlib_logging.getLogger("styx")
-logging.setLevel(_stdlib_logging.WARNING)
+_log_level = getattr(_stdlib_logging, os.getenv("LOG_LEVEL", "WARNING").upper(), _stdlib_logging.WARNING)
+logging.setLevel(_log_level)
 
 if not logging.handlers:
     logging.addHandler(QueueHandler(_log_queue))

@@ -54,6 +54,19 @@ class Coordinator:
         self.kafka_metadata_producer: AIOKafkaProducer | None = None
         self.max_operator_parallelism: int | None = None
 
+        # Migration fault tolerance: track pre-migration snapshot
+        self.pre_migration_snapshot_id: int = -1
+        self.pre_migration_snapshot_pending: bool = False
+        # Deferred graph finalization: wait for post-migration snapshot before committing
+        self.post_migration_snapshot_pending: bool = False
+        # Deferred graph update: held until migration completes
+        self._pending_graph: StateflowGraph | None = None
+
+        # Checkpoint-and-resume migration FT
+        self._migration_checkpoint_blob: bytes | None = None
+        self._migration_checkpoint_baseline_snap_id: int = -1
+        self._migration_checkpoint_snapshot_complete: asyncio.Event = asyncio.Event()
+
     async def start_kafka_metadata_producer(self) -> None:
         self.kafka_metadata_producer = AIOKafkaProducer(
             bootstrap_servers=[KAFKA_URL],
@@ -109,6 +122,9 @@ class Coordinator:
         worker_assignments = self.worker_pool.get_worker_assignments()
         participating_workers: list[Worker] = self.worker_pool.get_participating_workers()
         self.worker_is_healthy = {worker.worker_id: asyncio.Event() for worker in participating_workers}
+        logging.warning(
+            f"[RECOVERY] Sending InitRecovery to {len(participating_workers)} workers with snap_id={snap_id}",
+        )
         async with asyncio.TaskGroup() as tg:
             for worker in participating_workers:
                 tg.create_task(
@@ -190,6 +206,35 @@ class Coordinator:
         self.completed_epoch_counter = epoch_counter
         self.completed_t_counter = t_counter
         current_completed_snapshot: int = self.get_current_completed_snapshot_id()
+        logging.warning(
+            f"register_snapshot | worker={worker_id} snap={snapshot_id} "
+            f"cluster_min={current_completed_snapshot} prev={self.prev_completed_snapshot_id} "
+            f"baseline={self._migration_checkpoint_baseline_snap_id} "
+            f"blob_set={self._migration_checkpoint_blob is not None}",
+        )
+        # Track pre-migration snapshot for recovery
+        if self.pre_migration_snapshot_pending and current_completed_snapshot != self.prev_completed_snapshot_id:
+            self.pre_migration_snapshot_id = current_completed_snapshot
+            self.pre_migration_snapshot_pending = False
+            logging.warning(f"Pre-migration snapshot recorded: {self.pre_migration_snapshot_id}")
+        # Finalize graph update after first post-migration snapshot completes
+        if self.post_migration_snapshot_pending and current_completed_snapshot != self.prev_completed_snapshot_id:
+            self.post_migration_snapshot_pending = False
+            self.finalize_graph_update()
+            logging.warning(
+                f"Post-migration snapshot {current_completed_snapshot} completed — graph finalized",
+            )
+        # Detect migration checkpoint snapshot completion via baseline ID comparison
+        if (
+            self._migration_checkpoint_baseline_snap_id >= 0
+            and current_completed_snapshot > self._migration_checkpoint_baseline_snap_id
+        ):
+            self._migration_checkpoint_snapshot_complete.set()
+            logging.warning(
+                f"Migration checkpoint snapshot {current_completed_snapshot} completed "
+                f"(baseline was {self._migration_checkpoint_baseline_snap_id})",
+            )
+            self._migration_checkpoint_baseline_snap_id = -1
         if current_completed_snapshot != self.prev_completed_snapshot_id:
             logging.warning(f"Cluster completed snapshot: {current_completed_snapshot}")
             # if we reached a complete snapshot, we could compact its deltas with the previous one
@@ -199,6 +244,7 @@ class Coordinator:
                     self.completed_out_offsets,
                     self.completed_epoch_counter,
                     self.completed_t_counter,
+                    self._migration_checkpoint_blob,
                 ),
             )
             self.s3_client.put_object(
@@ -225,6 +271,10 @@ class Coordinator:
             raise NotAStateflowGraphError
         # TODO the cluster was balanced by the previous deployment, if the graph is complex it might be
         #  unbalanced after the update
+        logging.warning(
+            f"update_stateflow_graph | updating worker pool operators "
+            f"(new partitions: { {n: op.n_partitions for n, op in new_stateflow_graph.nodes.items()} })",
+        )
         for _, operator in iter(new_stateflow_graph):
             for partition in range(self.max_operator_parallelism):
                 operator_copy = deepcopy(operator)
@@ -235,6 +285,15 @@ class Coordinator:
                     (operator_copy.name, partition),
                     operator_copy,
                 )
+        # Set _pending_graph BEFORE sending InitMigration to workers.
+        # This ensures recovery can detect an in-flight migration even if the
+        # gather is stuck retrying a dead worker connection for tens of seconds.
+        # Recovery clears _pending_graph, so if the gather completes after
+        # recovery, it harmlessly re-sets the field (which _perform_recovery
+        # already handles via saved_migration_in_progress).
+        self._pending_graph = new_stateflow_graph
+        logging.warning("update_stateflow_graph | _pending_graph set (before send)")
+
         worker_assignments = self.worker_pool.get_worker_assignments()
         tasks = [
             self.networking.send_message(
@@ -252,14 +311,67 @@ class Coordinator:
             for worker in self.worker_pool.get_participating_workers()
         ]
         await asyncio.gather(*tasks)
-        self.submitted_graph = new_stateflow_graph
+        logging.warning("update_stateflow_graph | InitMigration sent to all workers")
+
+    def revert_worker_pool_to_submitted_graph(self) -> None:
+        """Revert worker pool operators to match the current submitted_graph.
+
+        Called before recovery when migration was in progress — undoes the
+        operator promotions (shadow → active) that update_stateflow_graph()
+        applied so that recovery sends the correct (OLD) layout to workers.
+        Also updates orphaned_operator_assignments so that dead-worker
+        partitions are rescheduled with the OLD layout operator definitions.
+        """
+        if self.submitted_graph is None or self.max_operator_parallelism is None:
+            return
+        for _, operator in iter(self.submitted_graph):
+            for partition in range(self.max_operator_parallelism):
+                operator_copy = deepcopy(operator)
+                if partition >= operator.n_partitions:
+                    operator_copy.make_shadow()
+                op_part = (operator_copy.name, partition)
+                self.worker_pool.update_operator(op_part, operator_copy)
+                # Also revert orphaned (dead-worker) partitions
+                if op_part in self.worker_pool.orphaned_operator_assignments:
+                    self.worker_pool.orphaned_operator_assignments[op_part] = operator_copy
+        logging.warning("Reverted worker pool operators to match submitted_graph (pre-migration layout)")
+
+    def finalize_graph_update(self) -> None:
+        """Commit the deferred graph update after migration completes successfully."""
+        if self._pending_graph is None:
+            logging.warning("finalize_graph_update | no-op (_pending_graph is None)")
+            return
+        logging.warning("finalize_graph_update | committing pending graph to submitted_graph")
+        self.submitted_graph = self._pending_graph
+        self._pending_graph = None
+        # Write to Kafka via a background task; the producer is already running
+        # and the next snapshot will capture the new layout.
         metadata_key = msgpack_serialization(self.submitted_graph.name)
-        serialized_graph = cloudpickle_serialization(new_stateflow_graph)
-        await self.kafka_metadata_producer.send_and_wait(
-            "styx-metadata",
-            key=metadata_key,
-            value=serialized_graph,
+        serialized_graph = cloudpickle_serialization(self.submitted_graph)
+        self._pending_kafka_write = asyncio.ensure_future(
+            self.kafka_metadata_producer.send_and_wait(
+                "styx-metadata",
+                key=metadata_key,
+                value=serialized_graph,
+            ),
         )
+
+    def set_migration_checkpoint(
+        self,
+        new_graph: StateflowGraph,
+        operator_partition_locations: dict,
+    ) -> None:
+        """Serialize migration metadata for inclusion in the next sequencer file."""
+        self._migration_checkpoint_blob = cloudpickle_serialization(
+            {
+                "new_graph": new_graph,
+                "operator_partition_locations": operator_partition_locations,
+            },
+        )
+
+    def clear_migration_checkpoint(self) -> None:
+        """Clear migration metadata so subsequent snapshots are normal."""
+        self._migration_checkpoint_blob = None
 
     async def submit_stateflow_graph(
         self,

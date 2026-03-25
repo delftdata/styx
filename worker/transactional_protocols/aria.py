@@ -51,7 +51,7 @@ ASYNC_MIGRATION_BATCH_SIZE: int = int(os.getenv("ASYNC_MIGRATION_BATCH_SIZE", "2
 
 
 class AriaProtocol(BaseTransactionalProtocol):
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         worker_id: int,
         peers: dict[int, tuple[str, int, int]],
@@ -68,6 +68,7 @@ class AriaProtocol(BaseTransactionalProtocol):
         request_id_to_t_id_map: dict[bytes, int] | None = None,
         restart_after_recovery: bool = False,
         restart_after_migration: bool = False,
+        dedup_output_offsets: dict[OperatorPartition, int] | None = None,
     ) -> None:
         if topic_partition_offsets is None:
             topic_partition_offsets = {(tp.topic, tp.partition): -1 for tp in topic_partitions}
@@ -127,6 +128,7 @@ class AriaProtocol(BaseTransactionalProtocol):
         self.egress: StyxKafkaBatchEgress = StyxKafkaBatchEgress(
             output_offsets,
             restart_after_recovery or restart_after_migration,
+            dedup_output_offsets=dedup_output_offsets,
         )
         # Primary task used for processing
         self.function_scheduler_task: asyncio.Task | None = None
@@ -169,6 +171,7 @@ class AriaProtocol(BaseTransactionalProtocol):
         self.wait_responses_to_be_sent = asyncio.Event()
 
         self.running: bool = True
+        self._stopping: bool = False
         self.stopped: asyncio.Event = asyncio.Event()
         self.snapshot_marker_received: bool = False
         self.snapshotting_port: int = snapshotting_port
@@ -198,6 +201,11 @@ class AriaProtocol(BaseTransactionalProtocol):
         await self.stopped.wait()
 
     async def stop(self) -> None:
+        if self._stopping:
+            # Another caller is already tearing down — just wait for completion.
+            await self.stopped.wait()
+            return
+        self._stopping = True
         await self.ingress.stop()
         await self.egress.stop()
         await self.aio_task_scheduler.close()
@@ -383,6 +391,7 @@ class AriaProtocol(BaseTransactionalProtocol):
         async with self.networking_locks[mt]:
             (stop_gracefully,) = self.networking.decode_message(data)
             if stop_gracefully:
+                logging.warning(f"Worker {self.id} | SyncCleanup received stop_gracefully=True")
                 self.running = False
             self.sync_workers_event[mt].set()
 
@@ -551,25 +560,37 @@ class AriaProtocol(BaseTransactionalProtocol):
         await self.started.wait()
         logging.warning("STARTED function scheduler")
 
-        while self.running:
-            # Wait until the ingress signals that messages are available,
-            # or a remote peer wants to proceed, instead of busy-spinning.
-            with contextlib.suppress(TimeoutError):
-                await asyncio.wait_for(
-                    self.ingress.messages_available.wait(),
-                    timeout=0.1,
-                )
-            self.ingress.messages_available.clear()
+        try:
+            while self.running:
+                # Wait until the ingress signals that messages are available,
+                # or a remote peer wants to proceed, instead of busy-spinning.
+                with contextlib.suppress(TimeoutError):
+                    await asyncio.wait_for(
+                        self.ingress.messages_available.wait(),
+                        timeout=0.1,
+                    )
+                self.ingress.messages_available.clear()
 
-            async with self.sequencer.lock:
-                sequence: list[SequencedItem] = self.sequencer.get_epoch()
-                if not sequence and not self.remote_wants_to_proceed:
-                    continue
+                async with self.sequencer.lock:
+                    sequence: list[SequencedItem] = self.sequencer.get_epoch()
+                    if not sequence and not self.remote_wants_to_proceed:
+                        continue
 
-                self.currently_processing = True
-                await self._process_epoch(sequence)
+                    self.currently_processing = True
+                    await self._process_epoch(sequence)
 
-        await self.stop()
+            logging.warning(f"Worker {self.id} | function_scheduler exiting (running=False)")
+        except asyncio.CancelledError:
+            logging.warning(f"Worker {self.id} | function_scheduler cancelled")
+            raise
+        except Exception:
+            logging.exception(f"Worker {self.id} | function_scheduler crashed")
+        finally:
+            # Only call stop() if no external caller (e.g. recovery) is
+            # already tearing down.  Otherwise we deadlock: the external
+            # stop() awaits this task, while this task awaits stopped.
+            if not self._stopping:
+                await self.stop()
 
     async def _process_epoch(self, sequence: list[SequencedItem]) -> None:
         epoch_start = timer()
@@ -1047,5 +1068,13 @@ class AriaProtocol(BaseTransactionalProtocol):
             msg_type=msg_type,
             serializer=serializer,
         )
-        await self.sync_workers_event[msg_type].wait()
+        # Detect stuck barriers during migration debugging
+        try:
+            await asyncio.wait_for(self.sync_workers_event[msg_type].wait(), timeout=10.0)
+        except TimeoutError:
+            logging.warning(
+                f"Worker {self.id} | BARRIER STUCK for 10s on {msg_type.name} @epoch {self.sequencer.epoch_counter}",
+            )
+            # Continue waiting (no timeout)
+            await self.sync_workers_event[msg_type].wait()
         self.sync_workers_event[msg_type].clear()

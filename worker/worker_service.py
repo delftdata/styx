@@ -34,7 +34,7 @@ from styx.common.local_state_backends import LocalStateBackend
 from styx.common.logging import logging
 from styx.common.message_types import MessageType
 from styx.common.protocols import Protocols
-from styx.common.serialization import Serializer, msgpack_deserialization
+from styx.common.serialization import Serializer, cloudpickle_deserialization, msgpack_deserialization
 from styx.common.tcp_networking import MessagingMode, NetworkingManager
 from styx.common.util.aio_task_scheduler import AIOTaskScheduler
 import uvloop
@@ -142,6 +142,7 @@ class Worker:
         self.worker_operators: dict[OperatorPartition, Operator] | None = None
 
         self.migration_completed: asyncio.Event = asyncio.Event()
+        self._migration_generation: int = 0  # bumped on recovery to invalidate zombie Phase B tasks
 
         self.m_input_offsets: dict[OperatorPartition, int] = {}
         self.m_output_offsets: dict[OperatorPartition, int] = {}
@@ -289,6 +290,15 @@ class Worker:
             serializer=Serializer.MSGPACK,
         )
 
+    async def _send_snap_migration_reassign(self) -> None:
+        await self.networking.send_message(
+            self.networking.host_name,
+            self.snapshotting_port,
+            msg=(list(self.registered_operators.keys()),),
+            msg_type=MessageType.SnapMigrationReassign,
+            serializer=Serializer.MSGPACK,
+        )
+
     def _attach_operator_networking(self) -> None:
         for operator in self.registered_operators.values():
             operator.attach_state_networking(
@@ -329,7 +339,7 @@ class Worker:
         await self._send_snap_assigned(snapshot_id=snapshot_id)
 
         logging.warning("Retrieving Snapshot from S3")
-        (snap_data, _in_off, _out_off, epoch, t_counter) = self.async_snapshots.retrieve_snapshot(
+        (snap_data, _in_off, _out_off, epoch, t_counter, _migration_blob) = self.async_snapshots.retrieve_snapshot(
             snapshot_id,
             self.registered_operators.keys(),
         )
@@ -381,7 +391,16 @@ class Worker:
             logging.error(f"Uncaught exception during migration Phase A: {e}")
 
     async def _migration_stop_protocol(self) -> None:
-        await self.function_execution_protocol.wait_stopped()
+        try:
+            await asyncio.wait_for(
+                self.function_execution_protocol.wait_stopped(),
+                timeout=15.0,
+            )
+        except TimeoutError:
+            logging.warning(
+                "MIGRATION | Protocol did not stop within 15s via stop_gracefully — force-stopping",
+            )
+            await self.function_execution_protocol.stop()
         logging.warning("MIGRATION | ARIA STOPPED")
 
     async def _migration_decode_and_apply_plan(self, data: bytes) -> None:
@@ -522,8 +541,8 @@ class Worker:
             n_assigned_partitions=len(self.registered_operators),
         )
 
-        # Snapshot id -1 indicates "migration"
-        await self._send_snap_assigned(snapshot_id=-1)
+        # Reassign partitions in snapshotting subprocess, preserving accumulated deltas
+        await self._send_snap_migration_reassign()
 
         # Ensure local state has all newly assigned partitions
         self._ensure_local_state_partitions()
@@ -550,6 +569,7 @@ class Worker:
             epoch_counter=self.m_epoch_counter,
             t_counter=self.m_t_counter,
             restart_after_migration=True,
+            dedup_output_offsets=dict(self.m_output_offsets),
         )
 
     async def _handle_receive_migration_hashes(
@@ -604,6 +624,7 @@ class Worker:
         _: MessageType,
     ) -> None:
         """Phase B: protocol stops, catch-up, send hashes, rebuild, resume."""
+        my_generation = self._migration_generation
         try:
             logging.warning(f"MIGRATION | PHASE B START at {time.time_ns() // 1_000_000}")
             phase_b_start = timer()
@@ -612,6 +633,14 @@ class Worker:
             t_stop_start = timer()
             await self._migration_stop_protocol()
             t_stop_end = timer()
+
+            # Bail out if recovery invalidated this Phase B task
+            if self._migration_generation != my_generation:
+                logging.warning(
+                    "MIGRATION | PHASE B ZOMBIE detected after protocol stop — bailing out",
+                )
+                return
+
             logging.warning(
                 "MIGRATION | PHASE B Protocol Stopped |"
                 f" @Epoch {self.function_execution_protocol.sequencer.epoch_counter} |"
@@ -641,6 +670,24 @@ class Worker:
                 f"MIGRATION | PHASE B Hash metadata sent | took: {t_hash_send_end - t_hash_send_start}",
             )
 
+            # 5.5 Trigger a migration checkpoint snapshot.
+            # This captures the state at the exact moment before data transfer begins,
+            # enabling checkpoint-and-resume recovery instead of revert-and-retry.
+            await self.function_execution_protocol.send_delta_to_snapshotting_proc()
+            await self.function_execution_protocol.snapshotting_networking_manager.send_message(
+                self.function_execution_protocol.networking.host_name,
+                self.function_execution_protocol.snapshotting_port,
+                msg=(
+                    self.function_execution_protocol.topic_partition_offsets,
+                    self.function_execution_protocol.egress.topic_partition_output_offsets,
+                    self.function_execution_protocol.sequencer.epoch_counter,
+                    self.function_execution_protocol.sequencer.t_counter,
+                ),
+                msg_type=MessageType.SnapTakeSnapshot,
+                serializer=Serializer.MSGPACK,
+            )
+            logging.warning("MIGRATION | PHASE B Migration checkpoint snapshot triggered")
+
             # 6. Send MigrationInitDone with actual stop-time counters
             await self.networking.send_message(
                 DISCOVERY_HOST,
@@ -659,6 +706,13 @@ class Worker:
             logging.warning("MIGRATION | PHASE B WAITING FOR MigrationDone")
             await self.migration_completed.wait()
 
+            # Bail out if recovery invalidated this Phase B task
+            if self._migration_generation != my_generation:
+                logging.warning(
+                    "MIGRATION | PHASE B ZOMBIE detected (generation mismatch) — bailing out",
+                )
+                return
+
             # 8. Rebuild runtime (now has correct merged counters from MigrationDone)
             t_deploy_start = timer()
             await self._migration_rebuild_runtime()
@@ -669,6 +723,9 @@ class Worker:
 
             # 9. Start protocol with background migration
             self.function_execution_protocol.start()
+            # Run dedup scan after the MigrationDone barrier ensures all workers
+            # have flushed their old egress batches, then mark egress started.
+            await self.function_execution_protocol.egress.run_dedup_scan_and_mark_started()
             self.function_execution_protocol.started.set()
 
             # Reset sync events for next time
@@ -693,6 +750,14 @@ class Worker:
 
     async def _handle_init_recovery(self, data: bytes, _: MessageType) -> None:
         start_time = timer()
+
+        # Invalidate any zombie Phase B tasks from an interrupted migration.
+        # Bump the generation so that any Phase B task waiting on
+        # migration_completed will detect the generation mismatch and bail out.
+        self._migration_generation += 1
+        self.migration_completed.set()  # unblock the zombie so it can exit
+        await asyncio.sleep(0)  # yield to let the zombie run its bail-out check
+        self.migration_completed.clear()
 
         (
             self.id,
@@ -729,15 +794,71 @@ class Worker:
         )
         await self._send_snap_assigned(snapshot_id=snapshot_id)
 
-        (snap_data, tp_offsets, tp_out_offsets, epoch, t_counter) = self.async_snapshots.retrieve_snapshot(
-            snapshot_id,
-            self.registered_operators.keys(),
+        (snap_data, tp_offsets, tp_out_offsets, epoch, t_counter, migration_blob) = (
+            self.async_snapshots.retrieve_snapshot(
+                snapshot_id,
+                self.registered_operators.keys(),
+            )
         )
 
+        logging.warning(
+            f"[RECOVERY] W{self.id} snapshot_id={snapshot_id} epoch={epoch} t_counter={t_counter}"
+            f" migration_blob={'present' if migration_blob else 'none'}",
+        )
+        logging.warning(
+            f"[RECOVERY] W{self.id} registered_operators={list(self.registered_operators.keys())}",
+        )
+        logging.warning(
+            f"[RECOVERY] W{self.id} raw tp_offsets from snapshot: {tp_offsets}",
+        )
+        logging.warning(
+            f"[RECOVERY] W{self.id} raw tp_out_offsets from snapshot: {tp_out_offsets}",
+        )
+
+        # Keep the FULL output offsets for dedup scanning (all partitions from
+        # the global snapshot).  Each worker must scan ALL output partitions so
+        # that cross-worker dedup works: a request originally processed on
+        # worker A may be replayed on worker B after recovery.
+        all_dedup_out_offsets = dict(tp_out_offsets)
         tp_offsets = {k: v for k, v in tp_offsets.items() if k in self.registered_operators}
         tp_out_offsets = {k: v for k, v in tp_out_offsets.items() if k in self.registered_operators}
 
+        logging.warning(
+            f"[RECOVERY] W{self.id} filtered tp_offsets: {tp_offsets}",
+        )
+        logging.warning(
+            f"[RECOVERY] W{self.id} filtered tp_out_offsets: {tp_out_offsets}",
+        )
+        logging.warning(
+            f"[RECOVERY] W{self.id} dedup_output_offsets (all partitions): {all_dedup_out_offsets}",
+        )
+
         self.attach_state_to_operators_after_snapshot(snap_data)
+
+        # Detect migration checkpoint: if present, re-derive keys_to_send and resume transfer
+        restart_after_migration = False
+        if migration_blob is not None:
+            logging.warning(f"[RECOVERY] W{self.id} Migration checkpoint detected — resuming migration transfer")
+            migration_meta = cloudpickle_deserialization(migration_blob)
+            new_graph = migration_meta["new_graph"]
+
+            # Re-derive keys_to_send from local state + new partitioner
+            keys_to_send: dict[tuple, set] = defaultdict(set)
+            for op_part in self.registered_operators:
+                op_name, partition = op_part
+                partitioner = new_graph.get_operator_by_name(op_name).get_partitioner()
+                op_data = self.local_state.get_operator_data_for_repartitioning(op_part)
+                for key in op_data:
+                    new_part = partitioner.get_partition_no_cache(key)
+                    if new_part != partition:
+                        keys_to_send[op_part].add((key, new_part))
+
+            if keys_to_send:
+                self.local_state.add_keys_to_send(keys_to_send)
+                logging.warning(
+                    f"[RECOVERY] W{self.id} Re-derived {sum(len(v) for v in keys_to_send.values())} keys to send",
+                )
+            restart_after_migration = True
 
         request_id_to_t_id_map = await self.get_sequencer_assignments_before_failure(
             epoch,
@@ -757,7 +878,9 @@ class Worker:
             epoch_counter=epoch,
             t_counter=t_counter,
             request_id_to_t_id_map=request_id_to_t_id_map,
-            restart_after_recovery=True,
+            restart_after_recovery=not restart_after_migration,
+            restart_after_migration=restart_after_migration,
+            dedup_output_offsets=all_dedup_out_offsets,
         )
         self.function_execution_protocol.start()
 
@@ -776,6 +899,11 @@ class Worker:
         )
 
     async def _handle_ready_after_recovery(self, _data: bytes, _: MessageType) -> None:
+        # All workers have stopped their old protocols by this point (the
+        # coordinator only sends ReadyAfterRecovery after all workers reported).
+        # Run the dedup scan NOW so it captures every message flushed by every
+        # surviving worker's old egress.
+        await self.function_execution_protocol.egress.run_dedup_scan_and_mark_started()
         self.function_execution_protocol.started.set()
         logging.warning(
             f"Worker: {self.id} recovered and ready at : {time.time() * 1000}",

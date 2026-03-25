@@ -255,7 +255,7 @@ def _stop_cluster(paths: _Paths, env: dict, cluster: _ClusterParams, *, timeout_
         log.warning("stop_styx_cluster.sh failed (rc=%s). Output:\n%s", rc, out)
 
 
-@pytest.mark.e2e
+@pytest.mark.e2e_migration
 def test_styx_e2e_migration_tpcc(tmp_path: Path):
     paths = _resolve_paths()
     results_dir = _make_results_dir(tmp_path)

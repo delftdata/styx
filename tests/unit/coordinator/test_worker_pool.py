@@ -212,6 +212,23 @@ class TestWorkerPoolScheduling:
         w = pool.peek(1)
         assert w.assigned_operators[("users", 0)] is op_new
 
+    def test_update_operator_skips_unknown_partition(self):
+        """update_operator should no-op when partition is not mapped to any worker."""
+        pool = WorkerPool()
+        pool.register_worker("127.0.0.1", 5000, 6000)
+        # ("users", 99) was never scheduled — operator_partition_to_worker has no entry
+        pool.update_operator(("users", 99), _mock_operator())  # should not raise
+
+    def test_update_operator_skips_removed_worker(self):
+        """update_operator should no-op when the owning worker was already removed."""
+        pool = WorkerPool()
+        pool.register_worker("127.0.0.1", 5000, 6000)  # id=1
+        op = _mock_operator()
+        pool.schedule_operator_partition(("users", 0), op)
+        # Simulate worker death: remove worker but leave stale mapping
+        pool.remove_worker(1)
+        pool.update_operator(("users", 0), _mock_operator())  # should not raise
+
 
 # ---------------------------------------------------------------------------
 # WorkerPool — query methods

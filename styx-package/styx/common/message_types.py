@@ -44,3 +44,4 @@ class MessageType(IntEnum):
     MigrationInitDone = 39
     InitDataComplete = 40
     UpdateExecutionGraph = 41
+    SnapMigrationReassign = 42
