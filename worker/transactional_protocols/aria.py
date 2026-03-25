@@ -171,6 +171,7 @@ class AriaProtocol(BaseTransactionalProtocol):
         self.wait_responses_to_be_sent = asyncio.Event()
 
         self.running: bool = True
+        self._stopping: bool = False
         self.stopped: asyncio.Event = asyncio.Event()
         self.snapshot_marker_received: bool = False
         self.snapshotting_port: int = snapshotting_port
@@ -200,6 +201,11 @@ class AriaProtocol(BaseTransactionalProtocol):
         await self.stopped.wait()
 
     async def stop(self) -> None:
+        if self._stopping:
+            # Another caller is already tearing down — just wait for completion.
+            await self.stopped.wait()
+            return
+        self._stopping = True
         await self.ingress.stop()
         await self.egress.stop()
         await self.aio_task_scheduler.close()
@@ -554,26 +560,33 @@ class AriaProtocol(BaseTransactionalProtocol):
         await self.started.wait()
         logging.warning("STARTED function scheduler")
 
-        while self.running:
-            # Wait until the ingress signals that messages are available,
-            # or a remote peer wants to proceed, instead of busy-spinning.
-            with contextlib.suppress(TimeoutError):
-                await asyncio.wait_for(
-                    self.ingress.messages_available.wait(),
-                    timeout=0.1,
-                )
-            self.ingress.messages_available.clear()
+        try:
+            while self.running:
+                # Wait until the ingress signals that messages are available,
+                # or a remote peer wants to proceed, instead of busy-spinning.
+                with contextlib.suppress(TimeoutError):
+                    await asyncio.wait_for(
+                        self.ingress.messages_available.wait(),
+                        timeout=0.1,
+                    )
+                self.ingress.messages_available.clear()
 
-            async with self.sequencer.lock:
-                sequence: list[SequencedItem] = self.sequencer.get_epoch()
-                if not sequence and not self.remote_wants_to_proceed:
-                    continue
+                async with self.sequencer.lock:
+                    sequence: list[SequencedItem] = self.sequencer.get_epoch()
+                    if not sequence and not self.remote_wants_to_proceed:
+                        continue
 
-                self.currently_processing = True
-                await self._process_epoch(sequence)
+                    self.currently_processing = True
+                    await self._process_epoch(sequence)
 
-        logging.warning(f"Worker {self.id} | function_scheduler exiting (running=False)")
-        await self.stop()
+            logging.warning(f"Worker {self.id} | function_scheduler exiting (running=False)")
+        except asyncio.CancelledError:
+            logging.warning(f"Worker {self.id} | function_scheduler cancelled")
+            raise
+        except Exception:
+            logging.exception(f"Worker {self.id} | function_scheduler crashed")
+        finally:
+            await self.stop()
 
     async def _process_epoch(self, sequence: list[SequencedItem]) -> None:
         epoch_start = timer()

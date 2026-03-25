@@ -391,7 +391,16 @@ class Worker:
             logging.error(f"Uncaught exception during migration Phase A: {e}")
 
     async def _migration_stop_protocol(self) -> None:
-        await self.function_execution_protocol.wait_stopped()
+        try:
+            await asyncio.wait_for(
+                self.function_execution_protocol.wait_stopped(),
+                timeout=15.0,
+            )
+        except TimeoutError:
+            logging.warning(
+                "MIGRATION | Protocol did not stop within 15s via stop_gracefully — force-stopping",
+            )
+            await self.function_execution_protocol.stop()
         logging.warning("MIGRATION | ARIA STOPPED")
 
     async def _migration_decode_and_apply_plan(self, data: bytes) -> None:
