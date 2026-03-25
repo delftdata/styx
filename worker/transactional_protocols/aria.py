@@ -586,7 +586,11 @@ class AriaProtocol(BaseTransactionalProtocol):
         except Exception:
             logging.exception(f"Worker {self.id} | function_scheduler crashed")
         finally:
-            await self.stop()
+            # Only call stop() if no external caller (e.g. recovery) is
+            # already tearing down.  Otherwise we deadlock: the external
+            # stop() awaits this task, while this task awaits stopped.
+            if not self._stopping:
+                await self.stop()
 
     async def _process_epoch(self, sequence: list[SequencedItem]) -> None:
         epoch_start = timer()
