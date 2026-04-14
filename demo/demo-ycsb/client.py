@@ -46,7 +46,7 @@ SAVE_DIR: str = sys.argv[7]
 warmup_seconds: int = int(sys.argv[8])
 run_with_validation = sys.argv[9].lower() == "true"
 load_config_path: str = sys.argv[10]
-kill_at: int = int(sys.argv[11]) if len(sys.argv) > 10 else -1
+kill_at: int = int(sys.argv[11]) if len(sys.argv) > 11 else -1
 ####################################################################################################################
 g = StateflowGraph("ycsb-benchmark",
                    operator_state_backend=LocalStateBackend.DICT,

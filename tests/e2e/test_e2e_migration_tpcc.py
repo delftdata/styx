@@ -133,6 +133,7 @@ def _client_cmd(results_dir: Path, cluster: _ClusterParams, client: _ClientParam
         cluster.enable_compression,
         cluster.use_composite_keys,
         cluster.use_fallback_cache,
+        "../load_profiles/constant.yaml",
     ]
 
 

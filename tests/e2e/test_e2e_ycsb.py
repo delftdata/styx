@@ -112,7 +112,7 @@ def _stop_cmd(paths: _Paths, p: _ClusterParams) -> list[str]:
 
 
 def _client_cmd(results_dir: Path, cluster: _ClusterParams, client: _ClientParams) -> list[str]:
-    # client.py expects argv[10] = kill_at
+    # client.py expects argv[10] = load_config_path, argv[11] = kill_at
     return [
         "python",
         "client.py",
@@ -125,6 +125,7 @@ def _client_cmd(results_dir: Path, cluster: _ClusterParams, client: _ClientParam
         str(results_dir),
         str(client.warmup_seconds),
         client.run_with_validation,
+        "../load_profiles/constant.yaml",
         str(client.kill_at),
     ]
 

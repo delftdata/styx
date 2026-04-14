@@ -112,6 +112,7 @@ def _client_cmd(results_dir: Path, cluster: _ClusterParams, client: _ClientParam
         str(client.input_rate),
         str(client.total_time),
         str(client.warmup_seconds),
+        "../load_profiles/constant.yaml",
         str(client.kill_at),
     ]
 
