@@ -17,6 +17,9 @@ from styx.client.sync_client import SyncStyxClient
 from styx.common.local_state_backends import LocalStateBackend
 from styx.common.operator import Operator
 from styx.common.stateflow_graph import StateflowGraph
+
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+from load_generator import LoadSchedule
 from tqdm import tqdm
 from ycsb import ycsb_operator
 from zipfian_generator import ZipfGenerator
@@ -42,13 +45,21 @@ S3_REG: str = os.getenv("S3_REGION") or "us-east-1"
 SAVE_DIR: str = sys.argv[7]
 warmup_seconds: int = int(sys.argv[8])
 run_with_validation = sys.argv[9].lower() == "true"
-kill_at: int = int(sys.argv[10])
+load_config_path: str = sys.argv[10]
+kill_at: int = int(sys.argv[11]) if len(sys.argv) > 11 else -1
 ####################################################################################################################
 g = StateflowGraph("ycsb-benchmark",
                    operator_state_backend=LocalStateBackend.DICT,
                    max_operator_parallelism=N_PARTITIONS)
 ycsb_operator.set_n_partitions(N_PARTITIONS)
 g.add_operators(ycsb_operator)
+
+load_schedule = LoadSchedule.from_config_file(
+    load_config_path, 
+    target_tps=messages_per_second,
+    time=seconds
+)
+
 
 def submit_graph(styx: SyncStyxClient):
     print(f"Partitions: {list(g.nodes.values())[0].n_partitions}")
@@ -107,8 +118,10 @@ def benchmark_runner(proc_num) -> dict[bytes, dict]:
             subprocess.run(["docker", "kill", "styx-worker-1"], check=False)
             print("KILL -> styx-worker-1 done")
         sec_start = timer()
-        step = max(1, messages_per_second // sleeps_per_second)
-        for i in range(messages_per_second):
+
+        current_tps = load_schedule.get_tps(second)
+        step = max(1, current_tps // sleeps_per_second)
+        for i in range(current_tps):
             if i % step == 0:
                 time.sleep(sleep_time)
             operator, key, func_name, params = next(ycsb_generator)
@@ -123,7 +136,7 @@ def benchmark_runner(proc_num) -> dict[bytes, dict]:
         if lps < 1:
             time.sleep(1 - lps)
         sec_end2 = timer()
-        print(f"{second} | Latency per second: {sec_end2 - sec_start}")
+        print(f"{second} | TPS: {current_tps} | Latency per second: {sec_end2 - sec_start}")
     end = timer()
     print(f"Average latency per second: {(end - start) / seconds}")
 
@@ -157,7 +170,6 @@ def main():
         results = p.map(benchmark_runner, range(threads))
 
     results = {k: v for d in results for k, v in d.items()}
-    assert len(results) == messages_per_second * seconds * threads
 
     if run_with_validation:
         # wait for system to stabilize

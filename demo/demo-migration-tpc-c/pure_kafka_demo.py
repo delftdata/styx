@@ -35,6 +35,8 @@ from styx.client import SyncStyxClient
 from styx.common.local_state_backends import LocalStateBackend
 from styx.common.stateflow_graph import StateflowGraph
 from tqdm import tqdm
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+from load_generator import LoadSchedule
 
 SAVE_DIR: str = sys.argv[1]
 threads = int(sys.argv[2])
@@ -65,6 +67,8 @@ MAX_PAYMENT = 5000.0
 enable_compression: bool = bool(strtobool(sys.argv[9]))
 use_composite_keys: bool = bool(strtobool(sys.argv[10]))
 use_fallback_cache: bool = bool(strtobool(sys.argv[11]))
+load_config_path: str = sys.argv[12]
+
 os.environ["ENABLE_COMPRESSION"] = str(enable_compression)
 os.environ["USE_COMPOSITE_KEYS"] = str(use_composite_keys)
 os.environ["USE_FALLBACK_CACHE"] = str(use_fallback_cache)
@@ -97,7 +101,11 @@ g.add_operators(customer_operator, district_operator, history_operator, item_ope
                 order_operator, order_line_operator, stock_operator, warehouse_operator,
                 new_order_txn_operator, customer_idx_operator, payment_txn_operator)
 
-
+load_schedule = LoadSchedule.from_config_file(
+    load_config_path, 
+    target_tps=messages_per_second,
+    time=seconds
+)
 
 def populate_warehouse(styx: SyncStyxClient):
     with open(os.path.join(script_path, "data/warehouse.csv")) as f:
@@ -501,8 +509,9 @@ def benchmark_runner(proc_num) -> dict[bytes, dict]:
     start = timer()
     for cur_sec in range(seconds):
         sec_start = timer()
-        for i in range(messages_per_second):
-            if i % (messages_per_second // sleeps_per_second) == 0:
+        current_tps = load_schedule.get_tps(cur_sec)
+        for i in range(current_tps):
+            if i % (current_tps // sleeps_per_second) == 0:
                 time.sleep(sleep_time)
             operator, key, func_name, params = next(tpc_c_generator)
             future = styx.send_event(operator=operator,
@@ -516,7 +525,7 @@ def benchmark_runner(proc_num) -> dict[bytes, dict]:
         if lps < 1:
             time.sleep(1 - lps)
         sec_end2 = timer()
-        print(f"Latency per second: {sec_end2 - sec_start}")
+        print(f"{cur_sec} | TPS: {current_tps} | Latency: {sec_end2 - sec_start:.3f}s")
         if cur_sec == SECOND_TO_TAKE_MIGRATION:
             new_g = StateflowGraph("tpcc_benchmark", operator_state_backend=LocalStateBackend.DICT)
             ####################################################################################################################

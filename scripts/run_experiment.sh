@@ -5,6 +5,7 @@ enable_compression=true
 use_composite_keys=true
 use_fallback_cache=true
 regenerate_tpcc_data=false
+workload_profile="constant"
 
 workload_name=$1
 input_rate=$2
@@ -16,12 +17,12 @@ total_time=$7
 saving_dir=$8
 warmup_seconds=$9
 epoch_size=${10}
-
-[ -n "${11}" ] && styx_threads_per_worker=${11}
-[ -n "${12}" ] && enable_compression=${12}
-[ -n "${13}" ] && use_composite_keys=${13}
-[ -n "${14}" ] && use_fallback_cache=${14}
-[ -n "${15}" ] && regenerate_tpcc_data=${15}
+[ -n "${11}" ] && workload_profile=${11}
+[ -n "${12}" ] && styx_threads_per_worker=${12}
+[ -n "${13}" ] && enable_compression=${13}
+[ -n "${14}" ] && use_composite_keys=${14}
+[ -n "${15}" ] && use_fallback_cache=${15}
+[ -n "${16}" ] && regenerate_tpcc_data=${16}
 kill_at="-1" # This means that we are not going to kill any containers using this script
 
 # Deployment mode configuration (read from environment).
@@ -47,7 +48,17 @@ echo "use_composite_keys: $use_composite_keys"
 echo "use_fallback_cache: $use_fallback_cache"
 echo "regenerate_tpcc_data: $regenerate_tpcc_data"
 echo "deploy_mode: $DEPLOY_MODE"
+echo "workload_profile: $workload_profile"
 echo "==================================================="
+
+case "$workload_profile" in
+    constant|increasing|decreasing|random|cosine|step) ;;
+    *)
+        echo "ERROR: Unknown workload profile: $workload_profile"
+        exit 1
+        ;;
+esac
+load_config_path="demo/load_profiles/$workload_profile.yaml"
 
 # Use kubefwd to forward all services in the namespace.
 # kubefwd adds /etc/hosts entries for service names and pod FQDNs, which is
@@ -87,13 +98,13 @@ if [[ $workload_name == "ycsbt" ]]; then
     # To check if the state is correct within Styx, expensive to run together with large scale experiments, use for debug
     # values true | false
     run_with_validation=false
-    python demo/demo-ycsb/client.py "$client_threads" "$n_keys" "$n_part" "$zipf_const" "$input_rate" "$total_time" "$saving_dir" "$warmup_seconds" "$run_with_validation" "$kill_at"
+    python demo/demo-ycsb/client.py "$client_threads" "$n_keys" "$n_part" "$zipf_const" "$input_rate" "$total_time" "$saving_dir" "$warmup_seconds" "$run_with_validation" "$load_config_path" "$kill_at"
 elif [[ $workload_name == "dhr" ]]; then
     # Deathstar Hotel Reservation
-    python demo/demo-deathstar-hotel-reservation/pure_kafka_demo.py "$saving_dir" "$client_threads" "$n_part" "$input_rate" "$total_time" "$warmup_seconds" "$kill_at"
+    python demo/demo-deathstar-hotel-reservation/pure_kafka_demo.py "$saving_dir" "$client_threads" "$n_part" "$input_rate" "$total_time" "$warmup_seconds" "$load_config_path" "$kill_at"
 elif [[ $workload_name == "dmr" ]]; then
     # Deathstar Movie Review
-    python demo/demo-deathstar-movie-review/pure_kafka_demo.py "$saving_dir" "$client_threads" "$n_part" "$input_rate" "$total_time" "$warmup_seconds" "$kill_at"
+    python demo/demo-deathstar-movie-review/pure_kafka_demo.py "$saving_dir" "$client_threads" "$n_part" "$input_rate" "$total_time" "$warmup_seconds" "$load_config_path" "$kill_at"
 elif [[ $workload_name == "tpcc" ]]; then
     # TPC-C
     DATA_DIR="demo/demo-tpc-c/data_${n_keys}"
@@ -123,7 +134,7 @@ elif [[ $workload_name == "tpcc" ]]; then
     python demo/demo-tpc-c/pure_kafka_demo.py \
         "$saving_dir" "$client_threads" "$n_part" \
         "$input_rate" "$total_time" "$warmup_seconds" \
-        "$n_keys" "$enable_compression" "$use_composite_keys" "$use_fallback_cache" "$kill_at"
+        "$n_keys" "$enable_compression" "$use_composite_keys" "$use_fallback_cache" "$load_config_path" "$kill_at"
 else
     echo "Benchmark not supported!"
 fi
@@ -137,5 +148,6 @@ if [[ "$DEPLOY_MODE" == "k8s-minikube" || "$DEPLOY_MODE" == "k8s-cluster" ]]; th
     fi
     bash scripts/uninstall_styx_cluster_with_helm.sh
 else
-    bash scripts/stop_styx_cluster.sh "$styx_threads_per_worker"
+    #bash scripts/stop_styx_cluster.sh "$styx_threads_per_worker"
+    docker compose stop coordinator worker 
 fi

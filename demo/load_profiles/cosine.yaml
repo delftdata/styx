@@ -1,0 +1,6 @@
+profile: cosine
+step_size: 5
+cosine_period: 30
+mean_input_rate: 5000
+max_divergence: 1500
+max_noise: 50

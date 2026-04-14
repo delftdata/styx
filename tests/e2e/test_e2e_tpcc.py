@@ -117,7 +117,8 @@ def _client_cmd(results_dir: Path, cluster: _ClusterParams, client: _ClientParam
     #  8  enable_compression
     #  9  use_composite_keys
     # 10  use_fallback_cache
-    # 11  kill_at (optional; default -1)
+    # 11  load_config_path
+    # 12  kill_at (optional; default -1)
     return [
         "python",
         "pure_kafka_demo.py",
@@ -131,6 +132,7 @@ def _client_cmd(results_dir: Path, cluster: _ClusterParams, client: _ClientParam
         cluster.enable_compression,
         cluster.use_composite_keys,
         cluster.use_fallback_cache,
+        "../load_profiles/constant.yaml",
         str(client.kill_at),
     ]
 

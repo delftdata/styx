@@ -23,6 +23,8 @@ from styx.common.serialization import (
 from styx.common.stateflow_graph import StateflowGraph
 from tqdm import tqdm
 from ycsb import ycsb_operator
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+from load_generator import LoadSchedule
 
 
 def ycsb_field(size=100, seed=0):
@@ -43,6 +45,7 @@ messages_per_second = int(sys.argv[4])
 seconds = int(sys.argv[5])
 SAVE_DIR: str = sys.argv[6]
 warmup_seconds: int = int(sys.argv[7])
+load_config_path: str = sys.argv[9]
 
 BATCH_SIZE = 100_000
 
@@ -57,6 +60,12 @@ g = StateflowGraph("ycsb-benchmark",
                    max_operator_parallelism=max(START_N_PARTITIONS, END_N_PARTITIONS))
 ycsb_operator.set_n_partitions(START_N_PARTITIONS)
 g.add_operators(ycsb_operator)
+
+load_schedule = LoadSchedule.from_config_file(
+    load_config_path, 
+    target_tps=messages_per_second,
+    time=seconds
+)
 
 def submit_graph(styx: SyncStyxClient):
     print(f"Partitions: {list(g.nodes.values())[0].n_partitions}")
@@ -133,8 +142,9 @@ def benchmark_runner(proc_num) -> dict[bytes, dict]:
     start = timer()
     for cur_sec in range(seconds):
         sec_start = timer()
-        for i in range(messages_per_second):
-            if i % (messages_per_second // sleeps_per_second) == 0:
+        current_tps = load_schedule.get_tps(cur_sec)
+        for i in range(current_tps):
+            if i % (current_tps // sleeps_per_second) == 0:
                 time.sleep(sleep_time)
             operator, key, func_name = next(ycsb_generator)
             future = styx.send_event(operator=operator,
@@ -147,7 +157,7 @@ def benchmark_runner(proc_num) -> dict[bytes, dict]:
         if lps < 1:
             time.sleep(1 - lps)
         sec_end2 = timer()
-        print(f"Latency per second: {sec_end2 - sec_start}")
+        print(f"{cur_sec} | TPS: {current_tps} | Latency: {sec_end2 - sec_start:.3f}s")
         if cur_sec == SECOND_TO_TAKE_MIGRATION and proc_num == 0:
             new_g = StateflowGraph("ycsb-benchmark", operator_state_backend=LocalStateBackend.DICT)
             ycsb_operator.set_n_partitions(END_N_PARTITIONS)
@@ -187,7 +197,6 @@ def main():
         results = p.map(benchmark_runner, range(threads))
 
     results = {k: v for d in results for k, v in d.items()}
-    assert len(results) == messages_per_second * seconds * threads
 
     pd.DataFrame({"request_id": list(results.keys()),
                   "timestamp": [res["timestamp"] for res in results.values()],

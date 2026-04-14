@@ -124,6 +124,7 @@ def _client_cmd(results_dir: Path, client: _ClientParams) -> list[str]:
         str(results_dir),
         str(client.warmup_seconds),
         str(client.n_entities),
+        "../load_profiles/constant.yaml",
     ]
 
 
