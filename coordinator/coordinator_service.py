@@ -17,9 +17,10 @@ from aria_sync_metadata import AriaSyncMetadata
 import boto3
 import botocore
 from coordinator_metadata import Coordinator
-from prometheus_client import Gauge, start_http_server
+from prometheus_client import Counter, Gauge, start_http_server
 from styx.common.logging import logging
 from styx.common.message_types import MessageType
+from styx.common.metrics import WorkerEpochStats
 from styx.common.protocols import Protocols
 from styx.common.serialization import Serializer
 from styx.common.tcp_networking import MessagingMode, NetworkingManager
@@ -119,6 +120,7 @@ class CoordinatorService:
         self.recovery_state: RecoveryState = RecoveryState.IDLE
 
         self.metrics_server = start_http_server(8000)
+        self.live_worker_count_gauge = Gauge("live_worker_count", "Number of live workers registered with coordinator")
         self.cpu_usage_gauge = Gauge(
             "worker_cpu_usage_percent",
             "CPU usage percentage",
@@ -168,6 +170,77 @@ class CoordinatorService:
             "time_since_last_heartbeat",
             "Time Since Last Heartbeat",
             ["instance"],
+        )
+
+        self.queue_backlog_gauge = Gauge("queue_backlog", "Backlog in the worker queue", ["instance"])
+
+        self.input_rate_counter = Counter("input_rate_counter", "Input rate", ["instance"])
+        # Transaction count metrics
+        self.epoch_total_txns_counter = Counter(
+            "epoch_total_transactions", "Total transactions processed (cumulative)", ["instance"]
+        )
+        self.epoch_committed_txns_counter = Counter(
+            "epoch_committed_transactions", "Committed transactions (cumulative)", ["instance"]
+        )
+        self.epoch_logic_aborts_counter = Counter(
+            "epoch_logic_aborts", "Logic/global aborts (cumulative)", ["instance"]
+        )
+        self.epoch_concurrency_aborts_counter = Counter(
+            "epoch_concurrency_aborts", "Concurrency aborts (cumulative)", ["instance"]
+        )
+        self.epoch_committed_lock_free_counter = Counter(
+            "epoch_committed_lock_free", "Transactions committed in lock-free phase (cumulative)", ["instance"]
+        )
+        self.epoch_committed_fallback_counter = Counter(
+            "epoch_committed_fallback", "Transactions committed in fallback phase (cumulative)", ["instance"]
+        )
+        self.cpu_utilization_ratio_gauge = Gauge(
+            "worker_cpu_utilization", "Ratio of CPU work in the epoch", ["instance"]
+        )
+        self.io_utilization_ratio_gauge = Gauge(
+            "worker_io_utilization", "Ratio of IO wait time in the epoch", ["instance"]
+        )
+        # Operator-level performance metrics
+        self.operator_tps_counter = Counter(
+            "operator_tps",
+            "Transactions per second per operator partition (cumulative)",
+            ["instance", "operator", "partition"],
+        )
+        self.operator_call_count_counter = Counter(
+            "operator_call_count",
+            "Number of calls to an operator partition (cumulative)",
+            ["instance", "operator", "partition"],
+        )
+        self.operator_latency_gauge = Gauge(
+            "operator_latency_ms",
+            "Average operator call latency in ms for this epoch",
+            ["instance", "operator", "partition"],
+        )
+
+        # Used for annotations in the grafana dashboard
+        self.migration_start_time_gauge = Gauge("migration_start_time_ms", "Timestamp when the migration started", [])
+        self.migration_end_time_gauge = Gauge("migration_end_time_ms", "Timestamp when the migration completed", [])
+
+        # Phase-attributed resource metrics (aggregated per epoch in the worker, scraped at coordinator).
+        self.phase_cpu_ms_total = Counter(
+            "phase_cpu_ms_total",
+            "Process CPU time attributed to a transactional protocol phase (ms, cumulative)",
+            ["instance", "phase"],
+        )
+        self.phase_net_rx_bytes_total = Counter(
+            "phase_net_rx_bytes_total",
+            "Network RX bytes attributed to a transactional protocol phase (bytes, cumulative)",
+            ["instance", "phase"],
+        )
+        self.phase_net_tx_bytes_total = Counter(
+            "phase_net_tx_bytes_total",
+            "Network TX bytes attributed to a transactional protocol phase (bytes, cumulative)",
+            ["instance", "phase"],
+        )
+        self.phase_rss_max_mb = Gauge(
+            "phase_rss_max_mb",
+            "Max RSS observed during a transactional protocol phase within the last reported epoch (MB)",
+            ["instance", "phase"],
         )
 
         self.migration_in_progress: bool = False
@@ -284,6 +357,8 @@ class CoordinatorService:
         await self.stop_snapshotting()
 
         logging.warning(f"MIGRATION | START {graph}")
+        start_time = time.time_ns()
+        self.migration_start_time_gauge.set(start_time / 1_000_000)
         await self.coordinator.update_stateflow_graph(graph)
 
         n_workers = len(self.coordinator.worker_pool.get_participating_workers())
@@ -377,6 +452,7 @@ class CoordinatorService:
             logging.warning(
                 f"Worker registered {worker_ip}:{worker_port} with id {worker_id}",
             )
+            self.live_worker_count_gauge.set(len(self.coordinator.worker_pool.get_live_workers()))
 
     async def _track_reregistered_worker(self, worker_id: int) -> None:
         async with self.recovery_lock:
@@ -565,9 +641,21 @@ class CoordinatorService:
                 commit_time,
                 fallback_time,
                 snap_time,
+                input_rate,
+                queue_backlog,
+                total_txns,
+                committed_txns,
+                logic_aborts,
+                concurrency_aborts,
+                committed_lock_free,
+                committed_fallback,
+                cpu_utilization,
+                io_wait_utilization,
+                operator_epoch_stats,
+                phase_resources,
             ) = self.protocol_networking.decode_message(data)
 
-            self._record_epoch_metrics(
+            worker_epoch_stats = WorkerEpochStats(
                 worker_id=worker_id,
                 epoch_throughput=epoch_throughput,
                 epoch_latency=epoch_latency,
@@ -580,6 +668,22 @@ class CoordinatorService:
                 commit_time=commit_time,
                 fallback_time=fallback_time,
                 snap_time=snap_time,
+                input_rate=input_rate,
+                queue_backlog=queue_backlog,
+                total_txns=total_txns,
+                committed_txns=committed_txns,
+                logic_aborts=logic_aborts,
+                concurrency_aborts=concurrency_aborts,
+                committed_lock_free=committed_lock_free,
+                committed_fallback=committed_fallback,
+                cpu_utilization=cpu_utilization,
+                io_wait_utilization=io_wait_utilization,
+                operator_epoch_stats=operator_epoch_stats,
+                phase_resources=phase_resources,
+            )
+
+            self._record_epoch_metrics(
+                worker_epoch_stats,
             )
 
             sync_complete: bool = self.aria_metadata.set_empty_sync_done(worker_id)
@@ -595,32 +699,66 @@ class CoordinatorService:
 
     def _record_epoch_metrics(
         self,
-        *,
-        worker_id: str,
-        epoch_throughput: float,
-        epoch_latency: float,
-        local_abort_rate: float,
-        wal_time: float,
-        func_time: float,
-        chain_ack_time: float,
-        sync_time: float,
-        conflict_res_time: float,
-        commit_time: float,
-        fallback_time: float,
-        snap_time: float,
+        worker_epoch_stats: WorkerEpochStats,
     ) -> None:
-        self.epoch_throughput_gauge.labels(instance=worker_id).set(epoch_throughput)
-        self.epoch_latency_gauge.labels(instance=worker_id).set(epoch_latency)
-        self.epoch_abort_gauge.labels(instance=worker_id).set(local_abort_rate)
+        worker_id = worker_epoch_stats.worker_id
 
-        self.latency_breakdown_gauge.labels(instance=worker_id, component="WAL").set(wal_time)
-        self.latency_breakdown_gauge.labels(instance=worker_id, component="1st Run").set(func_time)
-        self.latency_breakdown_gauge.labels(instance=worker_id, component="Chain Acks").set(chain_ack_time)
-        self.latency_breakdown_gauge.labels(instance=worker_id, component="SYNC").set(sync_time)
-        self.latency_breakdown_gauge.labels(instance=worker_id, component="Conflict Resolution").set(conflict_res_time)
-        self.latency_breakdown_gauge.labels(instance=worker_id, component="Commit time").set(commit_time)
-        self.latency_breakdown_gauge.labels(instance=worker_id, component="Fallback").set(fallback_time)
-        self.latency_breakdown_gauge.labels(instance=worker_id, component="Async Snapshot").set(snap_time)
+        self.epoch_throughput_gauge.labels(instance=worker_id).set(worker_epoch_stats.epoch_throughput)
+        self.epoch_latency_gauge.labels(instance=worker_id).set(worker_epoch_stats.epoch_latency)
+        self.epoch_abort_gauge.labels(instance=worker_id).set(worker_epoch_stats.local_abort_rate)
+
+        self.latency_breakdown_gauge.labels(instance=worker_id, component="WAL").set(worker_epoch_stats.wal_time)
+        self.latency_breakdown_gauge.labels(instance=worker_id, component="1st Run").set(worker_epoch_stats.func_time)
+        self.latency_breakdown_gauge.labels(instance=worker_id, component="Chain Acks").set(
+            worker_epoch_stats.chain_ack_time
+        )
+        self.latency_breakdown_gauge.labels(instance=worker_id, component="SYNC").set(worker_epoch_stats.sync_time)
+        self.latency_breakdown_gauge.labels(instance=worker_id, component="Conflict Resolution").set(
+            worker_epoch_stats.conflict_res_time
+        )
+        self.latency_breakdown_gauge.labels(instance=worker_id, component="Commit time").set(
+            worker_epoch_stats.commit_time
+        )
+        self.latency_breakdown_gauge.labels(instance=worker_id, component="Fallback").set(
+            worker_epoch_stats.fallback_time
+        )
+        self.latency_breakdown_gauge.labels(instance=worker_id, component="Async Snapshot").set(
+            worker_epoch_stats.snap_time
+        )
+
+        self.input_rate_counter.labels(instance=worker_id).inc(worker_epoch_stats.input_rate)
+        self.queue_backlog_gauge.labels(instance=worker_id).set(worker_epoch_stats.queue_backlog)
+
+        # Transaction count metrics
+        self.epoch_total_txns_counter.labels(instance=worker_id).inc(worker_epoch_stats.total_txns)
+        self.epoch_committed_txns_counter.labels(instance=worker_id).inc(worker_epoch_stats.committed_txns)
+        self.epoch_logic_aborts_counter.labels(instance=worker_id).inc(worker_epoch_stats.logic_aborts)
+        self.epoch_concurrency_aborts_counter.labels(instance=worker_id).inc(worker_epoch_stats.concurrency_aborts)
+        self.epoch_committed_lock_free_counter.labels(instance=worker_id).inc(worker_epoch_stats.committed_lock_free)
+        self.epoch_committed_fallback_counter.labels(instance=worker_id).inc(worker_epoch_stats.committed_fallback)
+
+        self.cpu_utilization_ratio_gauge.labels(instance=worker_id).set(worker_epoch_stats.cpu_utilization)
+        self.io_utilization_ratio_gauge.labels(instance=worker_id).set(worker_epoch_stats.io_wait_utilization)
+
+        # Operator-level metrics for this worker and epoch
+        for op_name, partition, tps, avg_latency_ms, call_count in worker_epoch_stats.operator_epoch_stats:
+            labels = {"instance": worker_id, "operator": op_name, "partition": str(partition)}
+            self.operator_tps_counter.labels(**labels).inc(tps)
+            self.operator_call_count_counter.labels(**labels).inc(call_count)
+            self.operator_latency_gauge.labels(**labels).set(avg_latency_ms)
+
+        for phase, v in worker_epoch_stats.phase_resources.get("cpu_ns", {}).items():
+            self.phase_cpu_ms_total.labels(instance=worker_id, phase=phase).inc(float(v) / 1e6)
+            logging.warning(f"  Phase {phase} CPU: {float(v) / 1e6} ms")
+        for phase, v in worker_epoch_stats.phase_resources.get("rx_bytes", {}).items():
+            self.phase_net_rx_bytes_total.labels(instance=worker_id, phase=phase).inc(float(v))
+            logging.warning(f"  Phase {phase} RX: {float(v)} bytes")
+        for phase, v in worker_epoch_stats.phase_resources.get("tx_bytes", {}).items():
+            self.phase_net_tx_bytes_total.labels(instance=worker_id, phase=phase).inc(float(v))
+            logging.warning(f"  Phase {phase} TX: {float(v)} bytes")
+        for phase, v in worker_epoch_stats.phase_resources.get("rss_max_bytes", {}).items():
+            self.phase_rss_max_mb.labels(instance=worker_id, phase=phase).set(float(v) / (1024 * 1024))
+            logging.warning(f"  Phase {phase} RSS Max: {float(v) / (1024 * 1024)} MB")
 
     async def _handle_deterministic_reordering(self, data: bytes) -> None:
         mt = MessageType.DeterministicReordering
@@ -662,8 +800,10 @@ class CoordinatorService:
             if not sync_complete:
                 return
 
+            end_time = time.time_ns()
+            self.migration_end_time_gauge.set(end_time / 1_000_000)
             logging.warning(
-                f"MIGRATION_FINISHED at time: {time.time_ns() // 1_000_000}",
+                f"MIGRATION_FINISHED at time: {end_time // 1_000_000}",
             )
             await self.migration_metadata.cleanup(mt)
             self.migration_in_progress = False

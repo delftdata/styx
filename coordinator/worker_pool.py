@@ -55,6 +55,15 @@ class WorkerPool:
         self.operator_partition_to_worker: dict[OperatorPartition, int] = {}
         self.orphaned_operator_assignments: dict[OperatorPartition, Operator] = {}
 
+    def get_live_workers(self) -> list[Worker]:
+        """Returns all currently known (non-tombstoned) workers"""
+        live: list[Worker] = []
+        for _, _, worker in self._queue:
+            if worker == self._tombstone:
+                continue
+            live.append(worker)
+        return live
+
     def register_worker(
         self,
         worker_ip: str,

@@ -1,5 +1,6 @@
 import asyncio
 import os
+import time
 from typing import TYPE_CHECKING
 
 from setuptools._distutils.util import strtobool
@@ -132,6 +133,7 @@ class Operator(BaseOperator):
         )
         params = (f, *tuple(params))
         success: bool = True
+        start_time = time.time()
         if ack_payload is not None:
             # part of a chain (not root)
             (
@@ -178,6 +180,10 @@ class Operator(BaseOperator):
             elif resp is not None:
                 resp: str | Exception
                 self.__networking.add_response(t_id, resp)
+        end_time = time.time()
+        duration_ms = (end_time - start_time) * 1000
+        if hasattr(protocol, "record_operator_call"):
+            protocol.record_operator_call(self.name, partition, function_name, duration_ms, success)
         return success
 
     async def _send_response_to_root(
