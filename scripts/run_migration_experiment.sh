@@ -10,6 +10,8 @@ enable_compression=true
 use_composite_keys=true
 use_fallback_cache=true
 regenerate_tpcc_data=false
+workload_profile="constant"
+
 
 # Read positional arguments
 input_rate=$1
@@ -22,13 +24,14 @@ warmup_seconds=$7
 epoch_size=$8
 workload_name=$9
 n_keys=${10}
-[ -n "${11:-}" ] && regenerate_tpcc_data=${11}
 
+[ -n "${11:-}" ] && workload_profile=${11}
+[ -n "${12:-}" ] && regenerate_tpcc_data=${12}
 # Optional overrides (minimal, but allows parity with start_experiment.sh style)
-[ -n "${12:-}" ] && styx_threads_per_worker=${12}
-[ -n "${13:-}" ] && enable_compression=${13}
-[ -n "${14:-}" ] && use_composite_keys=${14}
-[ -n "${15:-}" ] && use_fallback_cache=${15}
+[ -n "${13:-}" ] && styx_threads_per_worker=${13}
+[ -n "${14:-}" ] && enable_compression=${14}
+[ -n "${15:-}" ] && use_composite_keys=${15}
+[ -n "${16:-}" ] && use_fallback_cache=${16}
 
 # Determine the maximum number of partitions
 if (( start_n_part > end_n_part )); then
@@ -54,7 +57,17 @@ echo "enable_compression: $enable_compression"
 echo "use_composite_keys: $use_composite_keys"
 echo "use_fallback_cache: $use_fallback_cache"
 echo "regenerate_tpcc_data: $regenerate_tpcc_data"
+echo "workload_profile: $workload_profile"
 echo "============================================================"
+
+case "$workload_profile" in
+    constant|increasing|decreasing|random|cosine|step) ;;
+    *)
+        echo "ERROR: Unknown workload profile: $workload_profile"
+        exit 1
+        ;;
+esac
+load_config_path="demo/load_profiles/$workload_profile.yaml"
 
 bash "$ROOT_DIR/scripts/start_styx_cluster.sh" \
   "$start_n_part" "$epoch_size" "$styx_threads_per_worker" \
@@ -67,7 +80,7 @@ if [[ "$workload_name" == "ycsb" ]]; then
 
     python "$ROOT_DIR/demo/demo-migration-ycsb/client.py" \
         "$client_threads" "$start_n_part" "$end_n_part" \
-        "$input_rate" "$total_time" "$saving_dir" "$warmup_seconds" "$n_keys"
+        "$input_rate" "$total_time" "$saving_dir" "$warmup_seconds" "$n_keys" "$load_config_path"
 
 elif [[ "$workload_name" == "tpcc" ]]; then
 
@@ -98,7 +111,7 @@ elif [[ "$workload_name" == "tpcc" ]]; then
     python "$ROOT_DIR/demo/demo-migration-tpc-c/pure_kafka_demo.py" \
         "$saving_dir" "$client_threads" "$start_n_part" "$end_n_part" \
         "$input_rate" "$total_time" "$warmup_seconds" "$n_keys" \
-        "$enable_compression" "$use_composite_keys" "$use_fallback_cache"
+        "$enable_compression" "$use_composite_keys" "$use_fallback_cache" "$load_config_path"
 
 else
     echo "Benchmark not supported: $workload_name"

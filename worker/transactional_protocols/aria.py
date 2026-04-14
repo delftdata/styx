@@ -682,7 +682,6 @@ class AriaProtocol(BaseTransactionalProtocol):
         await self._sync_cleanup(worker_epoch_stats)
         self.operator_metrics.clear()
 
-
     async def _run_epoch_functions_and_chain(
         self,
         sequence: list[SequencedItem],

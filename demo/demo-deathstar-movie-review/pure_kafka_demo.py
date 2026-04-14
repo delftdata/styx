@@ -31,6 +31,9 @@ import pandas as pd
 from styx.client import SyncStyxClient
 from styx.common.local_state_backends import LocalStateBackend
 from styx.common.stateflow_graph import StateflowGraph
+
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+from load_generator import LoadSchedule
 from workload_data import charset, movie_titles
 
 SAVE_DIR: str = sys.argv[1]
@@ -45,7 +48,8 @@ warmup_seconds = int(sys.argv[6])
 STYX_HOST: str = os.getenv("STYX_HOST", "localhost")
 STYX_PORT: int = int(os.getenv("STYX_PORT", "8886"))
 KAFKA_URL: str = os.getenv("KAFKA_URL", "localhost:9092")
-kill_at = int(sys.argv[7]) if len(sys.argv) > 7 else -1
+load_config_path: str = sys.argv[7]
+kill_at = int(sys.argv[8]) if len(sys.argv) > 8 else -1
 
 g = StateflowGraph("deathstar_movie_review",
                    operator_state_backend=LocalStateBackend.DICT,
@@ -70,6 +74,12 @@ g.add_operators(
     unique_id_operator,
     user_operator,
     frontend_operator
+)
+
+load_schedule = LoadSchedule.from_config_file(
+    load_config_path, 
+    target_tps=messages_per_second,
+    time=seconds
 )
 
 
@@ -211,8 +221,9 @@ def benchmark_runner(proc_num) -> dict[bytes, dict]:
             subprocess.run(["docker", "kill", "styx-worker-1"], check=False)
             print("KILL -> styx-worker-1 done")
         sec_start = timer()
-        for i in range(messages_per_second):
-            if i % (messages_per_second // sleeps_per_second) == 0:
+        current_tps = load_schedule.get_tps(second)
+        for i in range(current_tps):
+            if i % (current_tps // sleeps_per_second) == 0:
                 time.sleep(sleep_time)
             operator, key, func_name, params = next(deathstar_generator)
             future = styx.send_event(operator=operator,
@@ -226,7 +237,7 @@ def benchmark_runner(proc_num) -> dict[bytes, dict]:
         if lps < 1:
             time.sleep(1 - lps)
         sec_end2 = timer()
-        print(f"Latency per second: {sec_end2 - sec_start}")
+        print(f"{second} | TPS: {current_tps} | Latency: {sec_end2 - sec_start:.3f}s")
     end = timer()
     print(f"Average latency per second: {(end - start) / seconds}")
     styx.close()

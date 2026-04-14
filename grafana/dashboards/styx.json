@@ -28,7 +28,7 @@
         },
         "hide": false,
         "iconColor": "orange",
-        "name": "Scale up start",
+        "name": "Migration start",
         "target": {
           "limit": 100,
           "matchAny": false,
@@ -36,7 +36,7 @@
           "type": "dashboard"
         },
         "textFormat": "",
-        "titleFormat": "Scale Up Start",
+        "titleFormat": "Migration Start",
         "useValueForTime": "on"
       },
       {
@@ -54,8 +54,8 @@
         },
         "hide": false,
         "iconColor": "yellow",
-        "name": "Scale up end",
-        "titleFormat": "Scale up end",
+        "name": "Migration end",
+        "titleFormat": "Migration end",
         "useValueForTime": "on"
       }
     ]
@@ -1991,7 +1991,9 @@
       "pluginVersion": "11.5.2",
       "targets": [
         {
+          "editorMode": "code",
           "expr": "avg(worker_total_snapshotting_time_ms)",
+          "range": true,
           "refId": "A"
         }
       ],
@@ -2125,8 +2127,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "orange",

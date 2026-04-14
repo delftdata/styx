@@ -38,6 +38,9 @@ from styx.client import SyncStyxClient
 from styx.common.local_state_backends import LocalStateBackend
 from styx.common.stateflow_graph import StateflowGraph
 
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+from load_generator import LoadSchedule
+
 random.seed(42)
 
 SAVE_DIR: str = sys.argv[1]
@@ -69,7 +72,8 @@ use_fallback_cache: bool = bool(strtobool(sys.argv[10]))
 os.environ["ENABLE_COMPRESSION"] = str(enable_compression)
 os.environ["USE_COMPOSITE_KEYS"] = str(use_composite_keys)
 os.environ["USE_FALLBACK_CACHE"] = str(use_fallback_cache)
-kill_at = int(sys.argv[11]) if len(sys.argv) > 11 else -1
+load_config_path = sys.argv[11]
+kill_at = int(sys.argv[12]) if len(sys.argv) > 12 else -1
 
 
 customers_per_district: dict[tuple, list] = {}
@@ -104,7 +108,11 @@ g.add_operators(customer_operator, district_operator, history_operator, item_ope
                 order_operator, order_line_operator, stock_operator, warehouse_operator,
                 new_order_txn_operator, customer_idx_operator, payment_txn_operator)
 
-
+load_schedule = LoadSchedule.from_config_file(
+    load_config_path, 
+    target_tps=messages_per_second,
+    time=seconds
+)
 
 # -------------------------------------------------------------------------------------
 # Cache helper
@@ -419,8 +427,9 @@ def benchmark_runner(proc_num) -> dict[bytes, dict]:
             subprocess.run(["docker", "kill", "styx-worker-1"], check=False)
             print("KILL -> styx-worker-1 done")
         sec_start = timer()
-        for i in range(messages_per_second):
-            if i % (messages_per_second // sleeps_per_second) == 0:
+        current_tps = load_schedule.get_tps(second)
+        for i in range(current_tps):
+            if i % (current_tps // sleeps_per_second) == 0:
                 time.sleep(sleep_time)
             operator, key, func_name, params = next(tpc_c_generator)
             future = styx.send_event(operator=operator,
@@ -434,7 +443,7 @@ def benchmark_runner(proc_num) -> dict[bytes, dict]:
         if lps < 1:
             time.sleep(1 - lps)
         sec_end2 = timer()
-        print(f"Latency per second: {sec_end2 - sec_start}")
+        print(f"{second} | TPS: {current_tps} | Latency per second: {sec_end2 - sec_start}")
     end = timer()
     print(f"Average latency per second: {(end - start) / seconds}")
     styx.close()
