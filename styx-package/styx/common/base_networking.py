@@ -113,22 +113,26 @@ class BaseNetworking(ABC):
         chain_participants: list[int],
     ) -> None:
         if ack_id in self.aborted_events:
-            # if the transaction was aborted we can instantly return
             return
         try:
             self.add_chain_participants(ack_id, chain_participants)
             self.ack_fraction[ack_id] += fractions.Fraction(fraction_str)
+            logging.warning(
+                f"ACK t_id={ack_id} += {fraction_str} -> {self.ack_fraction[ack_id]} "
+                f"participants={chain_participants}",
+            )
             if self.ack_fraction[ack_id] == 1:
                 self.waited_ack_events[ack_id].set()
+                logging.warning(f"ACK t_id={ack_id} complete (event set)")
             elif self.ack_fraction[ack_id] > 1:
                 logging.error(
                     f"ack: {ack_id} larger than 1 -> {self.ack_fraction[ack_id]}",
                 )
         except KeyError:
-            logging.error(f"TID: {ack_id} not in ack list!")
+            logging.error(f"TID: {ack_id} not in ack list! (event missing)")
 
     def prepare_function_chain(self, t_id: int) -> None:
-        logging.info(f"New function chain for T_ID: {t_id}")
+        logging.warning(f"PREPARE chain t_id={t_id}")
         self.waited_ack_events[t_id] = asyncio.Event()
         self.ack_fraction[t_id] = fractions.Fraction(0)
 
