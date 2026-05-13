@@ -7,7 +7,6 @@ import os
 from pickle import UnpicklingError
 import socket
 import struct
-from typing import TYPE_CHECKING
 
 from setuptools._distutils.util import strtobool
 
@@ -25,9 +24,6 @@ from styx.common.serialization import (
     zstd_msgpack_deserialization,
     zstd_msgpack_serialization,
 )
-
-if TYPE_CHECKING:
-    from styx.common.run_func_payload import RunFuncPayload
 
 USE_COMPRESSION: bool = bool(strtobool(os.getenv("ENABLE_COMPRESSION", "true")))
 COMPRESS_AFTER: int = int(os.getenv("COMPRESS_AFTER", "4096"))
@@ -52,14 +48,10 @@ class BaseNetworking(ABC):
         self.waited_ack_events: dict[int, asyncio.Event] = {}
         # tid: |fraction|
         self.ack_fraction: dict[int, fractions.Fraction] = {}
-        # tid: |count, total|
-        self.ack_cnts: dict[int, tuple[int, int]] = {}
         # t_id: |list of workers|
         self.chain_participants: dict[int, list[int]] = defaultdict(list)
         self.aborted_events: dict[int, str] = {}
         self.client_responses: dict[int, str] = {}
-        # t_id: functions that it runs
-        self.remote_function_calls: dict[int, list[RunFuncPayload]] = defaultdict(list)
         # set of t_ids that aborted because of an exception
         self.logic_aborts_everywhere: set[int] = set()
 
@@ -104,15 +96,10 @@ class BaseNetworking(ABC):
     def cleanup_after_epoch(self) -> None:
         self.waited_ack_events.clear()
         self.ack_fraction.clear()
-        self.ack_cnts.clear()
         self.aborted_events.clear()
-        self.remote_function_calls.clear()
         self.logic_aborts_everywhere.clear()
         self.chain_participants.clear()
         self.client_responses.clear()
-
-    def add_remote_function_call(self, t_id: int, payload: RunFuncPayload) -> None:
-        self.remote_function_calls[t_id].append(payload)
 
     def add_chain_participants(self, t_id: int, chain_participants: list[int]) -> None:
         for participant in chain_participants:
@@ -124,17 +111,12 @@ class BaseNetworking(ABC):
         ack_id: int,
         fraction_str: str,
         chain_participants: list[int],
-        partial_node_count: int,
     ) -> None:
         if ack_id in self.aborted_events:
             # if the transaction was aborted we can instantly return
             return
         try:
             self.add_chain_participants(ack_id, chain_participants)
-            self.ack_cnts[ack_id] = (
-                self.ack_cnts[ack_id][0],
-                self.ack_cnts[ack_id][1] + partial_node_count,
-            )
             self.ack_fraction[ack_id] += fractions.Fraction(fraction_str)
             if self.ack_fraction[ack_id] == 1:
                 self.waited_ack_events[ack_id].set()
@@ -145,39 +127,15 @@ class BaseNetworking(ABC):
         except KeyError:
             logging.error(f"TID: {ack_id} not in ack list!")
 
-    def add_ack_cnt(self, ack_id: int, cnt: int = 1) -> None:
-        if ack_id in self.aborted_events:
-            # if the transaction was aborted we can instantly return
-            return
-        try:
-            self.ack_cnts[ack_id] = (
-                self.ack_cnts[ack_id][0] + cnt,
-                self.ack_cnts[ack_id][1],
-            )
-            if self.ack_cnts[ack_id][0] == self.ack_cnts[ack_id][1]:
-                # All ACK parts have been gathered
-                self.waited_ack_events[ack_id].set()
-            elif self.ack_cnts[ack_id][0] > self.ack_cnts[ack_id][1]:
-                logging.error(
-                    f"ack: {ack_id} larger than total: {self.ack_cnts[ack_id][0]}>{self.ack_cnts[ack_id][1]}",
-                )
-        except KeyError:
-            logging.error(f"TID: {ack_id} not in ack list!")
-
     def prepare_function_chain(self, t_id: int) -> None:
         logging.info(f"New function chain for T_ID: {t_id}")
         self.waited_ack_events[t_id] = asyncio.Event()
         self.ack_fraction[t_id] = fractions.Fraction(0)
-        self.ack_cnts[t_id] = (0, 0)
 
     def reset_ack_for_fallback(self, ack_id: int) -> None:
         if ack_id in self.waited_ack_events:
             self.waited_ack_events[ack_id].clear()
             self.ack_fraction[ack_id] = fractions.Fraction(0)
-
-    def reset_ack_for_fallback_cache(self, ack_id: int) -> None:
-        if ack_id in self.waited_ack_events:
-            self.waited_ack_events[ack_id].clear()
 
     def clear_aborted_events_for_fallback(self) -> None:
         self.aborted_events.clear()

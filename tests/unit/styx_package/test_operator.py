@@ -181,7 +181,6 @@ class TestRunFunctionErrors:
                     partition=0,
                     ack_payload=None,
                     fallback_mode=False,
-                    use_fallback_cache=False,
                     params=(),
                     protocol=None,
                 )

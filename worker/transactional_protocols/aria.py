@@ -44,7 +44,6 @@ FALLBACK_STRATEGY_PERCENTAGE: float = float(
 )
 SNAPSHOTTING_THREADS: int = int(os.getenv("SNAPSHOTTING_THREADS", "4"))
 SEQUENCE_MAX_SIZE: int = int(os.getenv("SEQUENCE_MAX_SIZE", "1_000"))
-USE_FALLBACK_CACHE: bool = bool(strtobool(os.getenv("USE_FALLBACK_CACHE", "true")))
 KAFKA_URL: str = os.environ["KAFKA_URL"]
 USE_ASYNC_MIGRATION: bool = bool(strtobool(os.getenv("USE_ASYNC_MIGRATION", "true")))
 ASYNC_MIGRATION_BATCH_SIZE: int = int(os.getenv("ASYNC_MIGRATION_BATCH_SIZE", "2_000"))
@@ -153,7 +152,6 @@ class AriaProtocol(BaseTransactionalProtocol):
             MessageType.SyncCleanup: asyncio.Lock(),
             MessageType.AriaProcessingDone: asyncio.Lock(),
             MessageType.Ack: asyncio.Lock(),
-            MessageType.AckCache: asyncio.Lock(),
             MessageType.ChainAbort: asyncio.Lock(),
             MessageType.Unlock: asyncio.Lock(),
             MessageType.DeterministicReordering: asyncio.Lock(),
@@ -185,7 +183,6 @@ class AriaProtocol(BaseTransactionalProtocol):
             MessageType.SyncCleanup: self._handle_sync_cleanup,
             MessageType.AriaProcessingDone: self._handle_aria_processing_done,
             MessageType.Ack: self._handle_ack,
-            MessageType.AckCache: self._handle_ack_cache,
             MessageType.ChainAbort: self._handle_chain_abort,
             MessageType.ResponseToRoot: self._handle_response_to_root,
             MessageType.Unlock: self._handle_unlock,
@@ -246,7 +243,6 @@ class AriaProtocol(BaseTransactionalProtocol):
             payload.partition,
             payload.ack_payload,
             fallback_mode,
-            USE_FALLBACK_CACHE,
             payload.params,
             self,
         )
@@ -323,9 +319,6 @@ class AriaProtocol(BaseTransactionalProtocol):
                 )
                 return
 
-            if USE_FALLBACK_CACHE:
-                self.networking.add_remote_function_call(t_id, payload)
-
             self.background_functions.create_task(self.run_function(t_id, payload))
 
     async def _handle_wrong_partition_request(self, data: bytes) -> None:
@@ -395,19 +388,12 @@ class AriaProtocol(BaseTransactionalProtocol):
     async def _handle_ack(self, data: bytes) -> None:
         mt = MessageType.Ack
         async with self.networking_locks[mt]:
-            ack_id, fraction_str, chain_participants, partial_node_count = self.networking.decode_message(data)
+            ack_id, fraction_str, chain_participants = self.networking.decode_message(data)
             self.networking.add_ack_fraction_str(
                 ack_id,
                 fraction_str,
                 chain_participants,
-                partial_node_count,
             )
-
-    async def _handle_ack_cache(self, data: bytes) -> None:
-        mt = MessageType.AckCache
-        async with self.networking_locks[mt]:
-            (ack_id,) = self.networking.decode_message(data)
-            self.networking.add_ack_cnt(ack_id)
 
     async def _handle_chain_abort(self, data: bytes) -> None:
         mt = MessageType.ChainAbort
@@ -861,7 +847,6 @@ class AriaProtocol(BaseTransactionalProtocol):
         t_id: int,
         payload: RunFuncPayload,
         internal: bool = False,
-        collocated_same_t_id_functions: list[RunFuncPayload] | None = None,  # important when fallback cache is true
     ) -> None:
         # Wait for all transactions that this transaction depends on to finish
         if self.waiting_on_transactions.get(t_id):
@@ -875,15 +860,6 @@ class AriaProtocol(BaseTransactionalProtocol):
         # Run transaction
         success = await self.run_function(t_id, payload, fallback_mode=True)
         if not internal:
-            # if root of chain
-            if collocated_same_t_id_functions is not None:
-                await asyncio.gather(
-                    *[
-                        self.run_function(t_id, c_payload, fallback_mode=True)
-                        for c_payload in collocated_same_t_id_functions
-                    ],
-                )
-
             if t_id in self.networking.waited_ack_events:
                 # wait on ack of parts
                 await self.networking.waited_ack_events[t_id].wait()
@@ -930,36 +906,12 @@ class AriaProtocol(BaseTransactionalProtocol):
         self.networking.clear_aborted_events_for_fallback()
         for sequenced_item in aborted_sequence:
             # current worker is the root of the chain
-            collocated_t_id_functions = None
-            if USE_FALLBACK_CACHE:
-                self.networking.reset_ack_for_fallback_cache(sequenced_item.t_id)
-                if sequenced_item.t_id in self.networking.remote_function_calls:
-                    collocated_t_id_functions = self.networking.remote_function_calls[sequenced_item.t_id]
-                    del self.networking.remote_function_calls[sequenced_item.t_id]
-            else:
-                self.networking.reset_ack_for_fallback(sequenced_item.t_id)
+            self.networking.reset_ack_for_fallback(sequenced_item.t_id)
             fallback_tasks.append(
                 self.run_fallback_function(
                     sequenced_item.t_id,
                     sequenced_item.payload,
-                    collocated_same_t_id_functions=collocated_t_id_functions,
                 ),
-            )
-
-        if USE_FALLBACK_CACHE:
-            remote_payloads = [
-                (t_id, payloads)
-                for t_id, payloads in self.networking.remote_function_calls.items()
-                if t_id in self.t_ids_to_reschedule
-            ]
-            fallback_tasks.extend(
-                self.run_fallback_function(
-                    t_id,
-                    payload,
-                    internal=True,
-                )
-                for t_id, payloads in remote_payloads
-                for payload in payloads
             )
 
         await self.sync_workers(

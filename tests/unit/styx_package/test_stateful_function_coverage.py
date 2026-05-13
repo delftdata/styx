@@ -1,7 +1,7 @@
 """Additional coverage tests for styx/common/stateful_function.py
 
 Focuses on: __prepare_message_transmission, __call_remote_function_no_response,
-__send_async_calls (local vs remote, root vs middle chain), partial_node_count kwargs.
+__send_async_calls (local vs remote, root vs middle chain).
 """
 
 import asyncio
@@ -21,7 +21,6 @@ def _make_sf(
     partition=0,
     operator_name="users",
     fallback_mode=False,
-    use_fallback_cache=False,
     same_network=False,
 ):
     state = MagicMock()
@@ -33,7 +32,6 @@ def _make_sf(
     networking.in_the_same_network = MagicMock(return_value=same_network)
     networking.send_message = AsyncMock()
     networking.prepare_function_chain = MagicMock()
-    networking.add_remote_function_call = MagicMock()
     dns = {
         "users": {0: ("10.0.0.1", 5000, 6000), 1: ("10.0.0.2", 5001, 6001)},
         "orders": {0: ("10.0.0.3", 5002, 6002)},
@@ -62,7 +60,6 @@ def _make_sf(
         t_id=t_id,
         request_id=request_id,
         fallback_mode=fallback_mode,
-        use_fallback_cache=use_fallback_cache,
         deployed_graph=graph,
         operator_lock=lock,
         protocol=protocol,
@@ -91,7 +88,7 @@ class TestPrepareMessageTransmission:
 
     def test_payload_with_ack(self):
         sf, *_ = _make_sf()
-        ack = ("h", 5000, 1, "1/2", [], 0)
+        ack = ("h", 5000, 1, "1/2", [])
         result = sf._StatefulFunction__prepare_message_transmission("users", "k1", "my_func", 0, (), ack)
         payload, _, _ = result
         assert len(payload) == 9  # base 8 + ack tuple
@@ -118,7 +115,7 @@ class TestCallRemoteFunctionNoResponse:
             key="k1",
             partition=0,
             params=(1,),
-            ack_payload=("h", 5000, 1, "1/1", [], 0),
+            ack_payload=("h", 5000, 1, "1/1", []),
         )
         networking.send_message.assert_called_once()
 
@@ -154,7 +151,7 @@ class TestSendAsyncCallsRoot:
 
         sf.run = my_run
 
-        result, n_calls, _partial = await sf()
+        result, n_calls = await sf()
         assert result == "result"
         assert n_calls == 1
         networking.prepare_function_chain.assert_called_once_with(42)
@@ -176,36 +173,16 @@ class TestSendAsyncCallsMiddle:
 
         sf.run = my_run
 
-        result, n_calls, _partial = await sf(
+        result, n_calls = await sf(
             ack_host="10.0.0.2",
             ack_port=6001,
             ack_share="1/1",
             chain_participants=[],
-            partial_node_count=0,
         )
         assert result == "mid_result"
         assert n_calls == 1
         # Should append worker_id to chain_participants since remote
         assert networking.worker_id == 0  # sanity check
-
-    @pytest.mark.asyncio
-    async def test_middle_chain_with_partial_node_count(self):
-        sf, _state, _networking, _graph, _protocol = _make_sf(same_network=True)
-
-        async def my_run(*args):
-            sf.call_remote_async("users", "my_func", "k2")
-
-        sf.run = my_run
-
-        _result, n_calls, partial = await sf(
-            ack_host="10.0.0.1",
-            ack_port=6000,
-            ack_share="1/1",
-            chain_participants=[],
-            partial_node_count=5,
-        )
-        assert n_calls == 1
-        assert partial == 5  # partial_node_count passed through
 
 
 # ---------------------------------------------------------------------------
@@ -219,7 +196,6 @@ class TestSendAsyncCallsFallback:
         sf, _state, _networking, _graph, protocol = _make_sf(
             same_network=True,
             fallback_mode=True,
-            use_fallback_cache=False,
         )
 
         async def my_run(*args):
@@ -228,13 +204,11 @@ class TestSendAsyncCallsFallback:
 
         sf.run = my_run
 
-        # Not in cache, so async calls should run fallback
-        _result, n_calls, _partial = await sf(
+        _result, n_calls = await sf(
             ack_host="10.0.0.1",
             ack_port=6000,
             ack_share="1/1",
             chain_participants=[],
-            partial_node_count=0,
         )
         assert n_calls == 1
         protocol.run_fallback_function.assert_called_once()
@@ -255,6 +229,6 @@ class TestSendAsyncCallsEmpty:
 
         sf.run = my_run
 
-        result, n_calls, _partial = await sf()
+        result, n_calls = await sf()
         assert result == "simple"
         assert n_calls == 0

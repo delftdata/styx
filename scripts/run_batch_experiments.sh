@@ -58,10 +58,9 @@ do
   epoch_size="${ss[8]}"
   enable_compression="${ss[9]}"
   use_composite_keys="${ss[10]}"
-  use_fallback_cache="${ss[11]}"
 
   ./scripts/run_experiment.sh "$workload_name" "$input_rate" "$n_keys" "$n_part" "$zipf_const" "$client_threads" \
                               "$total_time" "$saving_dir" "$warmup_seconds" "$epoch_size" "$styx_threads_per_worker" \
-                              "$enable_compression" "$use_composite_keys" "$use_fallback_cache"
+                              "$enable_compression" "$use_composite_keys"
 
 done < "$input"

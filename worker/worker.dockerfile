@@ -40,12 +40,10 @@ ARG epoch_size=100
 ARG worker_threads=1
 ARG enable_compression=true
 ARG use_composite_keys=true
-ARG use_fallback_cache=true
 
 ENV SEQUENCE_MAX_SIZE=$epoch_size \
     WORKER_THREADS=$worker_threads \
     ENABLE_COMPRESSION=$enable_compression \
-    USE_COMPOSITE_KEYS=$use_composite_keys \
-    USE_FALLBACK_CACHE=$use_fallback_cache
+    USE_COMPOSITE_KEYS=$use_composite_keys
 
 CMD ["/usr/local/bin/start-worker.sh"]

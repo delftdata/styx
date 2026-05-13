@@ -3,7 +3,6 @@
 styx_threads_per_worker=1
 enable_compression=true
 use_composite_keys=true
-use_fallback_cache=true
 regenerate_tpcc_data=false
 
 workload_name=$1
@@ -20,8 +19,7 @@ epoch_size=${10}
 [ -n "${11}" ] && styx_threads_per_worker=${11}
 [ -n "${12}" ] && enable_compression=${12}
 [ -n "${13}" ] && use_composite_keys=${13}
-[ -n "${14}" ] && use_fallback_cache=${14}
-[ -n "${15}" ] && regenerate_tpcc_data=${15}
+[ -n "${14}" ] && regenerate_tpcc_data=${14}
 kill_at="-1" # This means that we are not going to kill any containers using this script
 
 # Deployment mode configuration (read from environment).
@@ -44,7 +42,6 @@ echo "epoch_size: $epoch_size"
 echo "styx_threads_per_worker: $styx_threads_per_worker"
 echo "enable_compression: $enable_compression"
 echo "use_composite_keys: $use_composite_keys"
-echo "use_fallback_cache: $use_fallback_cache"
 echo "regenerate_tpcc_data: $regenerate_tpcc_data"
 echo "deploy_mode: $DEPLOY_MODE"
 echo "==================================================="
@@ -78,7 +75,7 @@ if [[ "$DEPLOY_MODE" == "k8s-minikube" || "$DEPLOY_MODE" == "k8s-cluster" ]]; th
 
 else
     # docker-compose mode
-    bash scripts/start_styx_cluster.sh "$n_part" "$epoch_size" "$styx_threads_per_worker" "$enable_compression" "$use_composite_keys" "$use_fallback_cache"
+    bash scripts/start_styx_cluster.sh "$n_part" "$epoch_size" "$styx_threads_per_worker" "$enable_compression" "$use_composite_keys"
     sleep 10
 fi
 
@@ -123,7 +120,7 @@ elif [[ $workload_name == "tpcc" ]]; then
     python demo/demo-tpc-c/pure_kafka_demo.py \
         "$saving_dir" "$client_threads" "$n_part" \
         "$input_rate" "$total_time" "$warmup_seconds" \
-        "$n_keys" "$enable_compression" "$use_composite_keys" "$use_fallback_cache" "$kill_at"
+        "$n_keys" "$enable_compression" "$use_composite_keys" "$kill_at"
 else
     echo "Benchmark not supported!"
 fi

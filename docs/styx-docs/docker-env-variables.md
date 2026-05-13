@@ -106,7 +106,6 @@ These environment variables configure the **Styx Worker**, including discovery, 
 |------------------------------|----------------|----------------------------------------------------------------------------|
 | `CONFLICT_DETECTION_METHOD` | `0`            | Styx's conflict detection strategy                                         |
 | `FALLBACK_STRATEGY_PERCENTAGE` | `-0.1`       | % aborts before fallback logic triggers (negative enables it at all times) |
-| `USE_FALLBACK_CACHE`         | `True`         | Whether to use the fallback cache mechanism                                |
 
 ---
 

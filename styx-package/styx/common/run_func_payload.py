@@ -11,8 +11,8 @@ class RunFuncPayload:
     params: tuple
     kafka_offset: int = -1
     kafka_ingress_partition: int = -1
-    # host, port, t_id, stake, chain_participants, partial_node_count
-    ack_payload: tuple[str, int, int, str, list[int], int] | None = None
+    # host, port, t_id, stake, chain_participants
+    ack_payload: tuple[str, int, int, str, list[int]] | None = None
 
 
 @dataclass

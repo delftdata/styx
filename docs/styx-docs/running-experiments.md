@@ -105,7 +105,7 @@ sudo kubefwd --version
   <workload_name> <input_rate> <n_keys> <n_part> <zipf_const> \
   <client_threads> <total_time> <saving_dir> <warmup_seconds> <epoch_size> \
   [styx_threads_per_worker] [enable_compression] [use_composite_keys] \
-  [use_fallback_cache] [regenerate_tpcc_data]
+  [regenerate_tpcc_data]
 ```
 
 ### Parameters
@@ -125,8 +125,7 @@ sudo kubefwd --version
 | 11 _(optional)_ | `styx_threads_per_worker` | Worker threads per container (default: `1`) |
 | 12 _(optional)_ | `enable_compression` | `true`/`false` — ZSTD snapshot compression (default: `true`) |
 | 13 _(optional)_ | `use_composite_keys` | `true`/`false` — composite key hashing (default: `true`) |
-| 14 _(optional)_ | `use_fallback_cache` | `true`/`false` — fallback result cache (default: `true`) |
-| 15 _(optional)_ | `regenerate_tpcc_data` | `true`/`false` — force TPC-C data regeneration (default: `false`) |
+| 14 _(optional)_ | `regenerate_tpcc_data` | `true`/`false` — force TPC-C data regeneration (default: `false`) |
 
 ### Environment variables
 
@@ -220,7 +219,7 @@ Runs a benchmark in which the number of partitions is scaled (up or down) mid-ex
   <total_time> <saving_dir> <warmup_seconds> <epoch_size> \
   <workload_name> <n_keys> \
   [regenerate_tpcc_data] [styx_threads_per_worker] \
-  [enable_compression] [use_composite_keys] [use_fallback_cache]
+  [enable_compression] [use_composite_keys]
 ```
 
 ### Workloads

@@ -30,9 +30,7 @@ def _mock_networking(same_network=False):
     n.add_response = MagicMock()
     n.abort_chain = MagicMock()
     n.add_ack_fraction_str = MagicMock()
-    n.add_ack_cnt = MagicMock()
     n.prepare_function_chain = MagicMock()
-    n.add_remote_function_call = MagicMock()
     return n
 
 
@@ -113,7 +111,6 @@ class TestMaterializeFunctionError:
                 partition=0,
                 ack_payload=None,
                 fallback_mode=False,
-                use_fallback_cache=False,
                 params=(),
                 protocol=protocol,
             )
@@ -153,7 +150,6 @@ class TestRunFunctionRoot:
             partition=0,
             ack_payload=None,
             fallback_mode=False,
-            use_fallback_cache=False,
             params=(),
             protocol=protocol,
         )
@@ -177,7 +173,6 @@ class TestRunFunctionRoot:
             partition=0,
             ack_payload=None,
             fallback_mode=False,
-            use_fallback_cache=False,
             params=(),
             protocol=protocol,
         )
@@ -205,7 +200,6 @@ class TestRunFunctionRoot:
             partition=0,
             ack_payload=None,
             fallback_mode=False,
-            use_fallback_cache=False,
             params=(),
             protocol=protocol,
         )
@@ -223,7 +217,7 @@ class TestRunFunctionChain:
     async def test_chain_success_sends_ack_local(self):
         op, _state, networking, _graph = _setup_operator(same_network=True)
         protocol = _mock_protocol()
-        ack_payload = ("10.0.0.1", 6000, 1, "1/1", [], 0)
+        ack_payload = ("10.0.0.1", 6000, 1, "1/1", [])
         result = await op.run_function(
             key="k1",
             t_id=1,
@@ -232,7 +226,6 @@ class TestRunFunctionChain:
             partition=0,
             ack_payload=ack_payload,
             fallback_mode=False,
-            use_fallback_cache=False,
             params=(),
             protocol=protocol,
         )
@@ -243,7 +236,7 @@ class TestRunFunctionChain:
     async def test_chain_success_sends_ack_remote(self):
         op, _state, networking, _graph = _setup_operator(same_network=False)
         protocol = _mock_protocol()
-        ack_payload = ("10.0.0.2", 6001, 1, "1/1", [], 0)
+        ack_payload = ("10.0.0.2", 6001, 1, "1/1", [])
         result = await op.run_function(
             key="k1",
             t_id=1,
@@ -252,7 +245,6 @@ class TestRunFunctionChain:
             partition=0,
             ack_payload=ack_payload,
             fallback_mode=False,
-            use_fallback_cache=False,
             params=(),
             protocol=protocol,
         )
@@ -268,7 +260,7 @@ class TestRunFunctionChain:
             return ValueError("chain_error")
 
         op.register(bad_func)
-        ack_payload = ("10.0.0.1", 6000, 1, "1/1", [], 0)
+        ack_payload = ("10.0.0.1", 6000, 1, "1/1", [])
         result = await op.run_function(
             key="k1",
             t_id=1,
@@ -277,7 +269,6 @@ class TestRunFunctionChain:
             partition=0,
             ack_payload=ack_payload,
             fallback_mode=False,
-            use_fallback_cache=False,
             params=(),
             protocol=protocol,
         )
@@ -337,53 +328,3 @@ class TestSetNPartitions:
         op = _operator(n_partitions=2)
         op.set_n_partitions(4)
         assert op.n_partitions == 4
-
-
-# ---------------------------------------------------------------------------
-# Fallback cache ack
-# ---------------------------------------------------------------------------
-
-
-class TestFallbackCacheAck:
-    @pytest.mark.asyncio
-    async def test_chain_fallback_cache_sends_cache_ack_local(self):
-        op, _state, networking, _graph = _setup_operator(same_network=True)
-        protocol = _mock_protocol()
-        ack_payload = ("10.0.0.1", 6000, 1, "1/1", [], 0)
-        result = await op.run_function(
-            key="k1",
-            t_id=1,
-            request_id=b"req",
-            function_name="my_func",
-            partition=0,
-            ack_payload=ack_payload,
-            fallback_mode=True,
-            use_fallback_cache=True,
-            params=(),
-            protocol=protocol,
-        )
-        assert result is True
-        networking.add_ack_cnt.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_chain_fallback_cache_sends_cache_ack_remote(self):
-        op, _state, networking, _graph = _setup_operator(same_network=False)
-        protocol = _mock_protocol()
-        ack_payload = ("10.0.0.2", 6001, 1, "1/1", [], 0)
-        result = await op.run_function(
-            key="k1",
-            t_id=1,
-            request_id=b"req",
-            function_name="my_func",
-            partition=0,
-            ack_payload=ack_payload,
-            fallback_mode=True,
-            use_fallback_cache=True,
-            params=(),
-            protocol=protocol,
-        )
-        assert result is True
-        # Should send both AckCache and ResponseToRoot (because resp is not None)
-        assert networking.send_message.call_count >= 1
-        msg_types = [c[1]["msg_type"] for c in networking.send_message.call_args_list]
-        assert MessageType.AckCache in msg_types

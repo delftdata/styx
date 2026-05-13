@@ -8,7 +8,6 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 styx_threads_per_worker=1
 enable_compression=true
 use_composite_keys=true
-use_fallback_cache=true
 regenerate_tpcc_data=false
 
 # Read positional arguments
@@ -28,7 +27,6 @@ n_keys=${10}
 [ -n "${12:-}" ] && styx_threads_per_worker=${12}
 [ -n "${13:-}" ] && enable_compression=${13}
 [ -n "${14:-}" ] && use_composite_keys=${14}
-[ -n "${15:-}" ] && use_fallback_cache=${15}
 
 # Determine the maximum number of partitions
 if (( start_n_part > end_n_part )); then
@@ -52,13 +50,12 @@ echo "n_keys: $n_keys"
 echo "styx_threads_per_worker: $styx_threads_per_worker"
 echo "enable_compression: $enable_compression"
 echo "use_composite_keys: $use_composite_keys"
-echo "use_fallback_cache: $use_fallback_cache"
 echo "regenerate_tpcc_data: $regenerate_tpcc_data"
 echo "============================================================"
 
 bash "$ROOT_DIR/scripts/start_styx_cluster.sh" \
   "$start_n_part" "$epoch_size" "$styx_threads_per_worker" \
-  "$enable_compression" "$use_composite_keys" "$use_fallback_cache"
+  "$enable_compression" "$use_composite_keys"
 
 sleep 10
 
@@ -98,7 +95,7 @@ elif [[ "$workload_name" == "tpcc" ]]; then
     python "$ROOT_DIR/demo/demo-migration-tpc-c/pure_kafka_demo.py" \
         "$saving_dir" "$client_threads" "$start_n_part" "$end_n_part" \
         "$input_rate" "$total_time" "$warmup_seconds" "$n_keys" \
-        "$enable_compression" "$use_composite_keys" "$use_fallback_cache"
+        "$enable_compression" "$use_composite_keys"
 
 else
     echo "Benchmark not supported: $workload_name"
