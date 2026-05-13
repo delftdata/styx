@@ -180,31 +180,51 @@ class BaseAriaState(BaseOperatorState):
         optimistic execution, the fallback dependency graph is invalid and the
         transaction must be rescheduled to the next epoch.
         """
-        # Compare read sets: original vs fallback
+        from styx.common.logging import logging
+
         fallback_reads = self.fallback_read_sets.get(t_id, {})
         for op_part in self.operator_partitions:
             original_read_keys = self.read_sets[op_part].get(t_id, set())
             fallback_read_keys = fallback_reads.get(op_part, set())
             if original_read_keys != fallback_read_keys:
+                logging.warning(
+                    f"RW_CHANGED t_id={t_id} READS op={op_part} "
+                    f"orig={sorted(original_read_keys)[:8]} "
+                    f"fb={sorted(fallback_read_keys)[:8]} "
+                    f"orig_n={len(original_read_keys)} fb_n={len(fallback_read_keys)} "
+                    f"orig-fb={sorted(original_read_keys - fallback_read_keys)[:5]} "
+                    f"fb-orig={sorted(fallback_read_keys - original_read_keys)[:5]}",
+                )
                 return True
 
-        # Check for fallback reads on operator_partitions not in self.operator_partitions
         for op_part in fallback_reads:
             if op_part not in self.operator_partitions:
-                # Original had no reads here (since it's not a local partition),
-                # but fallback did — sets differ
+                logging.warning(
+                    f"RW_CHANGED t_id={t_id} READS on extra op={op_part} "
+                    f"keys={sorted(fallback_reads[op_part])[:5]}",
+                )
                 return True
 
-        # Compare write sets: original vs fallback
         fallback_writes = self.fallback_commit_buffer.get(t_id, {})
         for op_part in self.operator_partitions:
             original_write_keys = set(self.write_sets[op_part].get(t_id, {}).keys())
             fallback_write_keys = set(fallback_writes.get(op_part, {}).keys())
             if original_write_keys != fallback_write_keys:
+                logging.warning(
+                    f"RW_CHANGED t_id={t_id} WRITES op={op_part} "
+                    f"orig_n={len(original_write_keys)} fb_n={len(fallback_write_keys)} "
+                    f"orig-fb={sorted(original_write_keys - fallback_write_keys)[:5]} "
+                    f"fb-orig={sorted(fallback_write_keys - original_write_keys)[:5]}",
+                )
                 return True
 
-        # Check for fallback writes on operator_partitions not in self.operator_partitions
-        return any(op_part not in self.operator_partitions for op_part in fallback_writes)
+        for op_part in fallback_writes:
+            if op_part not in self.operator_partitions:
+                logging.warning(
+                    f"RW_CHANGED t_id={t_id} WRITES on extra op={op_part}",
+                )
+                return True
+        return False
 
     def cleanup(self) -> None:
         for operator_partition in self.operator_partitions:
