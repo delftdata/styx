@@ -286,10 +286,17 @@ class StatefulFunction(Function):
                     ack_payload=ack_payload,
                 )
                 if self.__fallback_enabled:
+                    # internal=True: this is a chain participant, not the root.
+                    # The root is already running run_fallback_function for this
+                    # t_id and awaiting waited_ack_events[t_id]; if we entered
+                    # the non-internal path here we'd recursively wait on the
+                    # same event from inside the gather that's supposed to set
+                    # it, deadlocking fallback.
                     remote_calls.append(
                         self.__protocol.run_fallback_function(
                             t_id=self.__t_id,
                             payload=payload,
+                            internal=True,
                         ),
                     )
                 else:
