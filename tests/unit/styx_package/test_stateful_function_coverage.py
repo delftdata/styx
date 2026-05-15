@@ -115,7 +115,7 @@ class TestCallRemoteFunctionNoResponse:
             key="k1",
             partition=0,
             params=(1,),
-            ack_payload=("h", 5000, 1, "1/1", []),
+            ack_payload=("h", 5000, 1, "1", []),
         )
         networking.send_message.assert_called_once()
 
@@ -176,7 +176,7 @@ class TestSendAsyncCallsMiddle:
         result, n_calls = await sf(
             ack_host="10.0.0.2",
             ack_port=6001,
-            ack_share="1/1",
+            ack_share="1",
             chain_participants=[],
         )
         assert result == "mid_result"
@@ -207,7 +207,7 @@ class TestSendAsyncCallsFallback:
         _result, n_calls = await sf(
             ack_host="10.0.0.1",
             ack_port=6000,
-            ack_share="1/1",
+            ack_share="1",
             chain_participants=[],
         )
         assert n_calls == 1

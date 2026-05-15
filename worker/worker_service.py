@@ -160,12 +160,6 @@ class Worker:
         self._pending_migration_data: bytes | None = None
         self.migration_error: BaseException | None = None
 
-        self.networking_locks: dict[MessageType, asyncio.Lock] = {
-            MessageType.ReceiveMigrationHashes: asyncio.Lock(),
-            MessageType.ReceiveRemoteKey: asyncio.Lock(),
-            MessageType.RequestRemoteKey: asyncio.Lock(),
-        }
-
         # Bounded queues for backpressure
         # - protocol_queue: for protocol TCP messages
         # - control_queue: for control-plane / worker_controller messages
@@ -557,46 +551,50 @@ class Worker:
         data: bytes,
         msg_type: MessageType,
     ) -> None:
+        # Lock-free: add_remote_keys is sync; single-threaded asyncio gives atomicity.
+        del msg_type
         n_op, payload = self.networking.decode_message(data)
-        async with self.networking_locks[msg_type]:
-            self.local_state.add_remote_keys(n_op, payload)
+        self.local_state.add_remote_keys(n_op, payload)
 
     async def _handle_request_remote_key(
         self,
         data: bytes,
         msg_type: MessageType,
     ) -> None:
+        # Lock-free: pop() is atomic in CPython; concurrent requests for the same
+        # key are race-safe (loser gets None, which the requester handles).
+        del msg_type
         operator_partition, key, old_partition, host, port = self.networking.decode_message(data)
-        async with self.networking_locks[msg_type]:
-            value = self.local_state.get_key_to_migrate(
-                operator_partition,
-                key,
-                old_partition,
-            )
-            await self.networking.send_message(
-                host,
-                port,
-                msg=(operator_partition, key, value),
-                msg_type=MessageType.ReceiveRemoteKey,
-                serializer=Serializer.MSGPACK,
-            )
+        value = self.local_state.get_key_to_migrate(
+            operator_partition,
+            key,
+            old_partition,
+        )
+        await self.networking.send_message(
+            host,
+            port,
+            msg=(operator_partition, key, value),
+            msg_type=MessageType.ReceiveRemoteKey,
+            serializer=Serializer.MSGPACK,
+        )
 
     async def _handle_receive_remote_key(
         self,
         data: bytes,
         msg_type: MessageType,
     ) -> None:
+        # Lock-free: no awaits.
+        del msg_type
         operator_partition, key, value = self.networking.decode_message(data)
-        async with self.networking_locks[msg_type]:
-            self.local_state.set_data_from_migration(operator_partition, key, value)
-            # Guard: the event may have been already signaled by the async
-            # migration handler, or may not exist if no transaction requested it.
-            op = tuple(operator_partition)
-            if (
-                op in self.protocol_networking.wait_remote_key_event
-                and key in self.protocol_networking.wait_remote_key_event[op]
-            ):
-                self.protocol_networking.key_received(op, key)
+        self.local_state.set_data_from_migration(operator_partition, key, value)
+        # Guard: the event may have been already signaled by the async
+        # migration handler, or may not exist if no transaction requested it.
+        op = tuple(operator_partition)
+        if (
+            op in self.protocol_networking.wait_remote_key_event
+            and key in self.protocol_networking.wait_remote_key_event[op]
+        ):
+            self.protocol_networking.key_received(op, key)
 
     async def _handle_migration_repartitioning_done(
         self,
@@ -864,7 +862,13 @@ class Worker:
         while True:
             message: bytes = await self.control_queue.get()
             try:
-                self.aio_task_scheduler.create_task(self.worker_controller(message))
+                # Unbounded: control-plane handlers can suspend on cross-handler
+                # events (e.g. `_handle_migration_repartitioning_done` awaits
+                # `migration_completed` set by `_handle_migration_done`). A
+                # bounded scheduler would let suspended handlers hog slots and
+                # starve the setter. Control volume is low so no backpressure
+                # cost.
+                self.aio_task_scheduler.create_unbounded_task(self.worker_controller(message))
             except Exception as e:
                 logging.error(f"Error while processing control-plane message: {e}")
             finally:

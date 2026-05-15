@@ -56,6 +56,31 @@ class AIOTaskScheduler:
         task.add_done_callback(self._on_done)
         return
 
+    def create_unbounded_task(self, coroutine: Awaitable) -> None:
+        """
+        Schedule a coroutine without taking a concurrency slot.
+
+        Use for tasks whose dominant time is `await event.wait()` and that
+        therefore must NOT hold a semaphore slot while suspended — otherwise
+        they starve other tasks waiting on those very events. Concretely, this
+        is the fix for the fallback chain-participant deadlock: many
+        participants suspend on `fallback_locking_event_map[d]`, those events
+        only fire when other participants (queued behind the semaphore) get to
+        run, so the sleeping ones must release the slot.
+
+        Still strongly references the task — `asyncio.create_task` only keeps
+        a weak ref via the event loop, and a suspended task with no other
+        strong ref can be GC'd mid-await.
+        """
+        if self.closed:
+            logging.warning("Trying to create a task in a closed AIOTaskScheduler!")
+            return
+
+        task = asyncio.create_task(coroutine)
+        self.background_tasks.add(task)
+        task.add_done_callback(self._on_done)
+        return
+
     async def close(self) -> None:
         """
         Stop accepting new tasks, cancel all running/queued tasks, and wait for them.

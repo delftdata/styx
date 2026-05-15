@@ -2,7 +2,6 @@ from abc import ABC, abstractmethod
 import asyncio
 from collections import defaultdict
 from enum import IntEnum
-import fractions
 import os
 from pickle import UnpicklingError
 import socket
@@ -46,8 +45,11 @@ class BaseNetworking(ABC):
 
         # event_id: |ack_event|
         self.waited_ack_events: dict[int, asyncio.Event] = {}
-        # tid: |fraction|
-        self.ack_fraction: dict[int, fractions.Fraction] = {}
+        # tid: |float fraction accumulated by leaves of the chain|
+        # We use float (not fractions.Fraction) for speed; chain ACK shares
+        # are 1/N at each level, and sums of those across leaves converge
+        # close to 1.0. Compare with an ε tolerance instead of equality.
+        self.ack_fraction: dict[int, float] = {}
         # t_id: |list of workers|
         self.chain_participants: dict[int, list[int]] = defaultdict(list)
         self.aborted_events: dict[int, str] = {}
@@ -106,6 +108,12 @@ class BaseNetworking(ABC):
             if participant != self.worker_id and participant not in self.chain_participants[t_id]:
                 self.chain_participants[t_id].append(participant)
 
+    # Float ACK accounting: each chain leaf contributes share = 1/(N1*N2*...)
+    # where Ni is the fan-out at level i. Sum of all leaf shares should equal
+    # 1.0 modulo floating-point error. ε of 1e-9 tolerates accumulation error
+    # for chains with up to ~10^9 leaves — vastly more than any real workload.
+    _ACK_FRACTION_COMPLETE_EPSILON: float = 1e-9
+
     def add_ack_fraction_str(
         self,
         ack_id: int,
@@ -113,33 +121,25 @@ class BaseNetworking(ABC):
         chain_participants: list[int],
     ) -> None:
         if ack_id in self.aborted_events:
+            # if the transaction was aborted we can instantly return
             return
         try:
             self.add_chain_participants(ack_id, chain_participants)
-            self.ack_fraction[ack_id] += fractions.Fraction(fraction_str)
-            logging.warning(
-                f"ACK t_id={ack_id} += {fraction_str} -> {self.ack_fraction[ack_id]} "
-                f"participants={chain_participants}",
-            )
-            if self.ack_fraction[ack_id] == 1:
+            self.ack_fraction[ack_id] += float(fraction_str)
+            if self.ack_fraction[ack_id] >= 1.0 - self._ACK_FRACTION_COMPLETE_EPSILON:
                 self.waited_ack_events[ack_id].set()
-                logging.warning(f"ACK t_id={ack_id} complete (event set)")
-            elif self.ack_fraction[ack_id] > 1:
-                logging.error(
-                    f"ack: {ack_id} larger than 1 -> {self.ack_fraction[ack_id]}",
-                )
         except KeyError:
-            logging.error(f"TID: {ack_id} not in ack list! (event missing)")
+            logging.error(f"TID: {ack_id} not in ack list!")
 
     def prepare_function_chain(self, t_id: int) -> None:
-        logging.warning(f"PREPARE chain t_id={t_id}")
+        logging.info(f"New function chain for T_ID: {t_id}")
         self.waited_ack_events[t_id] = asyncio.Event()
-        self.ack_fraction[t_id] = fractions.Fraction(0)
+        self.ack_fraction[t_id] = 0.0
 
     def reset_ack_for_fallback(self, ack_id: int) -> None:
         if ack_id in self.waited_ack_events:
             self.waited_ack_events[ack_id].clear()
-            self.ack_fraction[ack_id] = fractions.Fraction(0)
+            self.ack_fraction[ack_id] = 0.0
 
     def clear_aborted_events_for_fallback(self) -> None:
         self.aborted_events.clear()

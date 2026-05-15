@@ -1,5 +1,4 @@
 import asyncio
-import fractions
 from typing import TYPE_CHECKING
 
 from styx.common.function import Function
@@ -257,7 +256,10 @@ class StatefulFunction(Function):
         n_remote_calls: int = len(self.__async_remote_calls)
         if n_remote_calls == 0:
             return n_remote_calls
-        new_share_fraction: str = str(fractions.Fraction(ack_share) / n_remote_calls)
+        # Chain-ACK share — float arithmetic is ~100x cheaper than Fraction.
+        # The string round-trip preserves wire compatibility with the existing
+        # `_handle_ack` / `add_ack_fraction_str` decoder.
+        new_share_fraction: str = repr(float(ack_share) / n_remote_calls)
         if is_root:
             # This is the root
             ack_host = self.__networking.host_name

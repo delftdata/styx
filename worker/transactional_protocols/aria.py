@@ -5,7 +5,6 @@ import time
 from timeit import default_timer as timer
 from typing import TYPE_CHECKING
 
-from msgspec import msgpack
 from setuptools._distutils.util import strtobool
 from styx.common.base_protocol import BaseTransactionalProtocol
 from styx.common.logging import logging
@@ -144,22 +143,6 @@ class AriaProtocol(BaseTransactionalProtocol):
             MessageType.DeterministicReordering: asyncio.Event(),
         }
 
-        self.networking_locks: dict[MessageType, asyncio.Lock] = {
-            MessageType.RunFunRemote: asyncio.Lock(),
-            MessageType.AriaCommit: asyncio.Lock(),
-            MessageType.AriaFallbackDone: asyncio.Lock(),
-            MessageType.AriaFallbackStart: asyncio.Lock(),
-            MessageType.SyncCleanup: asyncio.Lock(),
-            MessageType.AriaProcessingDone: asyncio.Lock(),
-            MessageType.Ack: asyncio.Lock(),
-            MessageType.ChainAbort: asyncio.Lock(),
-            MessageType.Unlock: asyncio.Lock(),
-            MessageType.DeterministicReordering: asyncio.Lock(),
-            MessageType.WrongPartitionRequest: asyncio.Lock(),
-            MessageType.ResponseToRoot: asyncio.Lock(),
-            MessageType.AsyncMigration: asyncio.Lock(),
-        }
-
         self.remote_wants_to_proceed: bool = False
         self.currently_processing: bool = False
 
@@ -211,7 +194,7 @@ class AriaProtocol(BaseTransactionalProtocol):
                 await self.migration_sender_task
         except asyncio.CancelledError:
             logging.warning("Protocol coroutines stopped")
-        logging.warning(f"Active tasks: {asyncio.all_tasks()}")
+        logging.info(f"Active tasks: {asyncio.all_tasks()}")
         self.stopped.set()
         logging.warning(f"Aria protocol stopped at: {self.topic_partition_offsets}")
 
@@ -230,7 +213,7 @@ class AriaProtocol(BaseTransactionalProtocol):
         payload: RunFuncPayload,
         fallback_mode: bool = False,
     ) -> bool:
-        # logging.warning(f"Running function: {payload.function_name} with T_ID {t_id} with params {payload.params}"
+        # logging.info(f"Running function: {payload.function_name} with T_ID {t_id} with params {payload.params}"
         #              f" and ack payload {payload.ack_payload}")
 
         operator_partition = self.registered_operators[(payload.operator_name, payload.partition)]
@@ -288,147 +271,146 @@ class AriaProtocol(BaseTransactionalProtocol):
     # Handlers
     # -------------------
     async def _handle_run_fun_remote(self, data: bytes) -> None:
-        mt = MessageType.RunFunRemote
-        async with self.networking_locks[mt]:
-            logging.warning("CALLED RUN FUN FROM PEER")
-            (
-                t_id,
-                request_id,
-                operator_name,
-                function_name,
-                key,
-                partition,
-                fallback_enabled,
-                params,
-                ack,
-            ) = self.networking.decode_message(data)
+        # Lock-free: no awaits in this handler; single-threaded asyncio gives atomicity.
+        logging.debug("CALLED RUN FUN FROM PEER")
+        (
+            t_id,
+            request_id,
+            operator_name,
+            function_name,
+            key,
+            partition,
+            fallback_enabled,
+            params,
+            ack,
+        ) = self.networking.decode_message(data)
 
-            payload = RunFuncPayload(
-                request_id=request_id,
-                key=key,
-                operator_name=operator_name,
-                partition=partition,
-                function_name=function_name,
-                params=params,
-                ack_payload=ack,
+        payload = RunFuncPayload(
+            request_id=request_id,
+            key=key,
+            operator_name=operator_name,
+            partition=partition,
+            function_name=function_name,
+            params=params,
+            ack_payload=ack,
+        )
+
+        if fallback_enabled:
+            # Bypass the semaphore for fallback chain participants: their
+            # dominant time is `await fallback_locking_event_map[d].wait()`,
+            # and those events fire only when other participants (queued
+            # behind the very same semaphore) get to run. Holding a slot
+            # while sleeping causes a cluster-wide deadlock under load.
+            self.background_functions.create_unbounded_task(
+                self.run_fallback_function(t_id, payload, internal=True),
             )
+            return
 
-            if fallback_enabled:
-                self.background_functions.create_task(
-                    self.run_fallback_function(t_id, payload, internal=True),
-                )
-                return
-
-            self.background_functions.create_task(self.run_function(t_id, payload))
+        self.background_functions.create_task(self.run_function(t_id, payload))
 
     async def _handle_wrong_partition_request(self, data: bytes) -> None:
-        mt = MessageType.WrongPartitionRequest
-        async with self.networking_locks[mt]:
-            (
-                request_id,
-                operator_name,
-                function_name,
-                key,
-                partition,
-                kafka_ingress_partition,
-                kafka_offset,
-                params,
-            ) = self.networking.decode_message(data)
+        # Lock-free: no awaits.
+        (
+            request_id,
+            operator_name,
+            function_name,
+            key,
+            partition,
+            kafka_ingress_partition,
+            kafka_offset,
+            params,
+        ) = self.networking.decode_message(data)
 
-            logging.warning(
-                f"Aria WrongPartitionRequest: {request_id}:{operator_name}:{kafka_ingress_partition}",
-            )
+        logging.debug(
+            f"Aria WrongPartitionRequest: {request_id}:{operator_name}:{kafka_ingress_partition}",
+        )
 
-            payload = RunFuncPayload(
-                request_id=request_id,
-                key=key,
-                operator_name=operator_name,
-                partition=partition,
-                function_name=function_name,
-                params=params,
-                kafka_ingress_partition=kafka_ingress_partition,
-                kafka_offset=kafka_offset,
-            )
-            self.sequencer.sequence(payload)
+        payload = RunFuncPayload(
+            request_id=request_id,
+            key=key,
+            operator_name=operator_name,
+            partition=partition,
+            function_name=function_name,
+            params=params,
+            kafka_ingress_partition=kafka_ingress_partition,
+            kafka_offset=kafka_offset,
+        )
+        self.sequencer.sequence(payload)
 
     async def _handle_deprecated_rqrs(self, _: bytes) -> None:
         logging.error("REQUEST RESPONSE HAS BEEN DEPRECATED")
 
     async def _handle_aria_commit(self, data: bytes) -> None:
+        # Lock-free: no awaits.
         mt = MessageType.AriaCommit
-        async with self.networking_locks[mt]:
-            (
-                self.concurrency_aborts_everywhere,
-                self.total_processed_seq_size,
-                self.max_t_counter,
-                self.snapshot_marker_received,
-            ) = self.networking.decode_message(data)
-            self.sync_workers_event[mt].set()
+        (
+            self.concurrency_aborts_everywhere,
+            self.total_processed_seq_size,
+            self.max_t_counter,
+            self.snapshot_marker_received,
+        ) = self.networking.decode_message(data)
+        self.sync_workers_event[mt].set()
 
     async def _handle_sync_event_only(self, data: bytes) -> None:
-        # Used for AriaFallbackDone / AriaFallbackStart
+        # Used for AriaFallbackDone / AriaFallbackStart. Lock-free: no awaits.
         mt: MessageType = self.networking.get_msg_type(data)
-        async with self.networking_locks[mt]:
-            self.sync_workers_event[mt].set()
+        self.sync_workers_event[mt].set()
 
     async def _handle_sync_cleanup(self, data: bytes) -> None:
+        # Lock-free: no awaits.
         mt = MessageType.SyncCleanup
-        async with self.networking_locks[mt]:
-            (stop_gracefully,) = self.networking.decode_message(data)
-            if stop_gracefully:
-                self.running = False
-            self.sync_workers_event[mt].set()
+        (stop_gracefully,) = self.networking.decode_message(data)
+        if stop_gracefully:
+            self.running = False
+        self.sync_workers_event[mt].set()
 
     async def _handle_aria_processing_done(self, data: bytes) -> None:
+        # Lock-free: no awaits.
         mt = MessageType.AriaProcessingDone
-        async with self.networking_locks[mt]:
-            (self.networking.logic_aborts_everywhere,) = self.networking.decode_message(data)
-            self.sync_workers_event[mt].set()
+        (self.networking.logic_aborts_everywhere,) = self.networking.decode_message(data)
+        self.sync_workers_event[mt].set()
 
     async def _handle_ack(self, data: bytes) -> None:
-        mt = MessageType.Ack
-        async with self.networking_locks[mt]:
-            ack_id, fraction_str, chain_participants = self.networking.decode_message(data)
-            self.networking.add_ack_fraction_str(
-                ack_id,
-                fraction_str,
-                chain_participants,
-            )
+        # Lock-free: no awaits.
+        ack_id, fraction_str, chain_participants = self.networking.decode_message(data)
+        self.networking.add_ack_fraction_str(
+            ack_id,
+            fraction_str,
+            chain_participants,
+        )
 
     async def _handle_chain_abort(self, data: bytes) -> None:
-        mt = MessageType.ChainAbort
-        async with self.networking_locks[mt]:
-            ack_id, exception_str = self.networking.decode_message(data)
-            self.networking.abort_chain(ack_id, exception_str)
+        # Lock-free: no awaits.
+        ack_id, exception_str = self.networking.decode_message(data)
+        self.networking.abort_chain(ack_id, exception_str)
 
     async def _handle_response_to_root(self, data: bytes) -> None:
-        mt = MessageType.ResponseToRoot
-        async with self.networking_locks[mt]:
-            ack_id, resp = self.networking.decode_message(data)
-            self.networking.add_response(ack_id, resp)
+        # Lock-free: no awaits.
+        ack_id, resp = self.networking.decode_message(data)
+        self.networking.add_response(ack_id, resp)
 
     async def _handle_unlock(self, data: bytes) -> None:
-        mt = MessageType.Unlock
-        async with self.networking_locks[mt]:
-            # fallback phase
-            # here we handle the logic to unlock locks held by the provided distributed transaction
-            t_id, success = self.networking.decode_message(data)
-            if success:
-                # commit changes
-                self.local_state.commit_fallback_transaction(t_id)
-            # unlock
-            await self.unlock_tid(t_id)
+        # fallback phase
+        # here we handle the logic to unlock locks held by the provided distributed transaction
+        # The outer lock is unnecessary: commit_fallback_transaction is sync, and
+        # unlock_tid acquires its own fallback_locking_event_map_lock around the await.
+        t_id, success = self.networking.decode_message(data)
+        if success:
+            # commit changes
+            self.local_state.commit_fallback_transaction(t_id)
+        # unlock
+        await self.unlock_tid(t_id)
 
     async def _handle_deterministic_reordering(self, data: bytes) -> None:
+        # Lock-free: no awaits.
         mt = MessageType.DeterministicReordering
-        async with self.networking_locks[mt]:
-            _, global_read_reservations, global_write_set, global_read_set = self.networking.decode_message(data)
-            self.local_state.set_global_read_write_sets(
-                global_read_reservations,
-                global_write_set,
-                global_read_set,
-            )
-            self.sync_workers_event[mt].set()
+        _, global_read_reservations, global_write_set, global_read_set = self.networking.decode_message(data)
+        self.local_state.set_global_read_write_sets(
+            global_read_reservations,
+            global_write_set,
+            global_read_set,
+        )
+        self.sync_workers_event[mt].set()
 
     async def _handle_remote_wants_to_proceed(self, _: bytes) -> None:
         if not self.currently_processing:
@@ -436,18 +418,17 @@ class AriaProtocol(BaseTransactionalProtocol):
             self.ingress.messages_available.set()
 
     async def _handle_async_migration(self, data: bytes) -> None:
-        mt = MessageType.AsyncMigration
+        # Lock-free: no awaits.
         operator_partition, batch = self.networking.decode_message(data)
-        logging.warning(f"MIGRATION | Received migration batch for: {operator_partition}")
+        logging.debug(f"MIGRATION | Received migration batch for: {operator_partition}")
 
-        async with self.networking_locks[mt]:
-            self.local_state.set_batch_data_from_migration(operator_partition, batch)
-            # Unblock any transactions waiting for these keys via RequestRemoteKey
-            op = tuple(operator_partition)
-            if op in self.networking.wait_remote_key_event:
-                for key in batch:
-                    if key in self.networking.wait_remote_key_event.get(op, {}):
-                        self.networking.wait_remote_key_event[op][key].set()
+        self.local_state.set_batch_data_from_migration(operator_partition, batch)
+        # Unblock any transactions waiting for these keys via RequestRemoteKey
+        op = tuple(operator_partition)
+        if op in self.networking.wait_remote_key_event:
+            for key in batch:
+                if key in self.networking.wait_remote_key_event.get(op, {}):
+                    self.networking.wait_remote_key_event[op][key].set()
 
     async def _write_to_wal(self, sequence: list[SequencedItem]) -> tuple[float, float]:
         start_wal = timer()
@@ -460,7 +441,7 @@ class AriaProtocol(BaseTransactionalProtocol):
             topic="sequencer-wal",
         )
         end_wal = timer()
-        logging.warning(
+        logging.debug(
             f"Write to WAL successful at epoch: {self.sequencer.epoch_counter}",
         )
         return start_wal, end_wal
@@ -475,11 +456,10 @@ class AriaProtocol(BaseTransactionalProtocol):
             operator_name, partition = operator_partition
             worker = self.dns[operator_name][partition]
             if worker == self.id:
-                async with self.networking_locks[MessageType.AsyncMigration]:
-                    self.local_state.set_batch_data_from_migration(
-                        operator_partition,
-                        k_v_pairs,
-                    )
+                self.local_state.set_batch_data_from_migration(
+                    operator_partition,
+                    k_v_pairs,
+                )
             else:
                 send_tasks.append(
                     self.networking.send_message(
@@ -559,8 +539,6 @@ class AriaProtocol(BaseTransactionalProtocol):
 
     async def _process_epoch(self, sequence: list[SequencedItem]) -> None:
         epoch_start = timer()
-        ec = self.sequencer.epoch_counter
-        logging.warning(f"{self.id} ||| EPOCH {ec} BEGIN (seq={len(sequence)})")
 
         timings = await self._run_epoch_functions_and_chain(sequence)
 
@@ -568,20 +546,19 @@ class AriaProtocol(BaseTransactionalProtocol):
         sync_time += await self._sync_processing_done()
 
         conflict_resolution_start = timer()
+        # HERE WE KNOW ALL THE LOGIC ABORTS
         self.local_state.remove_aborted_from_rw_sets(
             self.networking.logic_aborts_everywhere,
         )
         concurrency_aborts = await self._compute_concurrency_aborts()
         conflict_resolution_end = timer()
-        logging.warning(
-            f"{self.id} ||| EPOCH {ec} concurrency_aborts={len(concurrency_aborts)} "
-            f"logic_aborts={len(self.networking.logic_aborts_everywhere)}",
-        )
 
         local_abort_rate = (len(concurrency_aborts) / len(sequence)) if sequence else 0.0
 
+        # Notify peers that we are ready to commit
         sync_time += await self._sync_commit(sequence, concurrency_aborts)
 
+        # HERE WE KNOW ALL THE CONCURRENCY ABORTS
         commit_start = timer()
         self._commit_and_prepare_responses(sequence)
         await self.send_delta_to_snapshotting_proc()
@@ -590,20 +567,16 @@ class AriaProtocol(BaseTransactionalProtocol):
         fallback_start = timer()
         abort_rate = await self._maybe_run_fallback()
         fallback_end = timer()
-        logging.warning(f"{self.id} ||| EPOCH {ec} fallback_ms={(fallback_end - fallback_start) * 1000:.1f}")
 
         self._advance_offsets(sequence)
 
         self.sequencer.increment_epoch(self.max_t_counter, self.t_ids_to_reschedule)
-        logging.warning(f"{self.id} ||| EPOCH {ec} waiting on responses to be sent")
         await self.wait_responses_to_be_sent.wait()
-        logging.warning(f"{self.id} ||| EPOCH {ec} responses sent, cleaning up")
         self.cleanup_after_epoch()
 
         snap_start = timer()
         await self.take_snapshot()
         snap_end = timer()
-        logging.warning(f"{self.id} ||| EPOCH {ec} END")
 
         epoch_end = timer()
 
@@ -628,8 +601,6 @@ class AriaProtocol(BaseTransactionalProtocol):
         if not sequence:
             return {"wal_ms": 0.0, "func_ms": 0.0, "chain_ms": 0.0}
 
-        logging.warning(f"{self.id} ||| EPOCH {self.sequencer.epoch_counter} | running {len(sequence)} txns")
-
         start_wal, end_wal = await self._write_to_wal(sequence)
 
         start_func = timer()
@@ -637,10 +608,6 @@ class AriaProtocol(BaseTransactionalProtocol):
             *[self.run_function(item.t_id, item.payload) for item in sequence],
         )
         end_func = timer()
-        logging.warning(
-            f"{self.id} ||| EPOCH {self.sequencer.epoch_counter} | functions done, "
-            f"{len(self.networking.waited_ack_events)} chains pending ack",
-        )
 
         # Wait for chains to finish
         start_chain = timer()
@@ -648,10 +615,6 @@ class AriaProtocol(BaseTransactionalProtocol):
             *[ack.wait() for ack in self.networking.waited_ack_events.values()],
         )
         end_chain = timer()
-        logging.warning(
-            f"{self.id} ||| EPOCH {self.sequencer.epoch_counter} | chain acks settled in "
-            f"{(end_chain - start_chain) * 1000:.1f}ms",
-        )
 
         return {
             "wal_ms": (end_wal - start_wal) * 1000,
@@ -668,13 +631,13 @@ class AriaProtocol(BaseTransactionalProtocol):
         )
         end = timer()
 
-        logging.warning(
+        logging.debug(
             f"{self.id} ||| logic_aborts_everywhere: {self.networking.logic_aborts_everywhere}",
         )
         return end - start
 
     async def _compute_concurrency_aborts(self) -> set[int]:
-        logging.warning(f"{self.id} ||| Checking conflicts...")
+        logging.debug(f"{self.id} ||| Checking conflicts...")
 
         handlers = {
             AriaConflictDetectionType.DEFAULT_SERIALIZABLE: self._conflicts_default,
@@ -731,7 +694,7 @@ class AriaProtocol(BaseTransactionalProtocol):
         return end - start
 
     def _commit_and_prepare_responses(self, sequence: list[SequencedItem]) -> None:
-        logging.warning(
+        logging.debug(
             f"{self.id} ||| Starting commit! {self.concurrency_aborts_everywhere}",
         )
 
@@ -743,15 +706,19 @@ class AriaProtocol(BaseTransactionalProtocol):
             item for item in sequence if item.t_id not in self.concurrency_aborts_everywhere
         ]
 
+        # Shallow copies — values (response bytes / exception strings) are
+        # immutable, and cleanup_after_epoch will rebind the originals rather
+        # than mutating these dicts. Cheaper than the msgpack round-trip we
+        # used to do here.
         self.aio_task_scheduler.create_task(
             self.send_responses(
                 current_completed_t_ids,
-                msgpack.decode(msgpack.encode(self.networking.client_responses)),
-                msgpack.decode(msgpack.encode(self.networking.aborted_events)),
+                dict(self.networking.client_responses),
+                dict(self.networking.aborted_events),
             ),
         )
 
-        logging.warning(
+        logging.debug(
             f"{self.id} ||| Sequence committed! | "
             f"{len(self.concurrency_aborts_everywhere)} / {self.total_processed_seq_size}",
         )
@@ -763,7 +730,7 @@ class AriaProtocol(BaseTransactionalProtocol):
             else 0.0
         )
         if abort_rate > FALLBACK_STRATEGY_PERCENTAGE:
-            logging.warning(
+            logging.debug(
                 f"{self.id} ||| Epoch: {self.sequencer.epoch_counter} "
                 f"Abort percentage: {int(abort_rate * 100)}% initiating fallback strategy...",
             )
@@ -808,7 +775,7 @@ class AriaProtocol(BaseTransactionalProtocol):
         epoch_latency = max(round((epoch_end - epoch_start) * 1000, 4), 1)
         epoch_throughput = ((len(sequence) - len(self.concurrency_aborts_everywhere)) * 1000) // epoch_latency  # TPS
 
-        logging.warning(
+        logging.debug(
             f"{self.id} ||| Epoch: {self.sequencer.epoch_counter - 1} done in "
             f"{epoch_latency}ms "
             f"global logic aborts: {len(self.networking.logic_aborts_everywhere)} "
@@ -865,84 +832,77 @@ class AriaProtocol(BaseTransactionalProtocol):
         payload: RunFuncPayload,
         internal: bool = False,
     ) -> None:
-        logging.warning(
-            f"{self.id} ||| FB enter t_id={t_id} internal={internal} fn={payload.function_name}",
-        )
         # Wait for all transactions that this transaction depends on to finish
         if self.waiting_on_transactions.get(t_id):
-            deps = [
-                d for d in self.waiting_on_transactions[t_id]
-                if d in self.fallback_locking_event_map
+            tasks = [
+                self.fallback_locking_event_map[dependency_t_id].wait()
+                for dependency_t_id in self.waiting_on_transactions[t_id]
+                if dependency_t_id in self.fallback_locking_event_map
             ]
-            if deps:
-                logging.warning(f"{self.id} ||| FB t_id={t_id} waiting on deps {deps}")
-            tasks = [self.fallback_locking_event_map[d].wait() for d in deps]
             await asyncio.gather(*tasks)
-            if deps:
-                logging.warning(f"{self.id} ||| FB t_id={t_id} deps released")
 
         # Run transaction
         success = await self.run_function(t_id, payload, fallback_mode=True)
         if not internal:
             if t_id in self.networking.waited_ack_events:
-                logging.warning(f"{self.id} ||| FB root t_id={t_id} awaiting chain ack")
+                # wait on ack of parts
                 await self.networking.waited_ack_events[t_id].wait()
-                logging.warning(f"{self.id} ||| FB root t_id={t_id} chain ack received")
             transaction_failed: bool = t_id in self.networking.aborted_events or not success
 
+            # Per the Aria paper: if the rw-set changed during fallback
+            # re-execution, the dependency graph is invalid — reschedule
+            # the transaction to the next epoch instead of committing.
             rw_changed = self.local_state.has_fallback_rw_set_changed(t_id)
             if not transaction_failed and not rw_changed:
                 self.local_state.commit_fallback_transaction(t_id)
             elif rw_changed:
                 self.fallback_rescheduled_t_ids.add(t_id)
                 transaction_failed = True
-            logging.warning(
-                f"{self.id} ||| FB root t_id={t_id} commit_path "
-                f"failed={transaction_failed} rw_changed={rw_changed}",
-            )
 
             await self.fallback_unlock(t_id, success=not transaction_failed)
 
-            if t_id in self.networking.aborted_events:
-                await self.egress.send_immediate(
+            # If the txn was rescheduled because the fallback rw-set drifted
+            # from the optimistic one, the commit hasn't happened and the
+            # response isn't durable yet. Defer egress to the next epoch's
+            # run; otherwise we'd send the response now AND again when the
+            # txn finally commits, producing duplicates.
+            # Batched send: each `egress.send` enqueues a Kafka future and
+            # returns immediately; the strategy flushes all of them with a
+            # single `send_batch()` at the end of fallback. Previously we
+            # used `send_immediate` here, which did a synchronous round-trip
+            # per txn — fine with 1-2 fallback commits per epoch, but a major
+            # bottleneck when fallback commits ~100 txns at once.
+            if rw_changed:
+                pass
+            elif t_id in self.networking.aborted_events:
+                await self.egress.send(
                     key=payload.request_id,
                     value=msgpack_serialization(self.networking.aborted_events[t_id]),
                     operator_name=payload.operator_name,
                     partition=payload.partition,
                 )
             elif t_id in self.networking.client_responses:
-                await self.egress.send_immediate(
+                await self.egress.send(
                     key=payload.request_id,
                     value=msgpack_serialization(self.networking.client_responses[t_id]),
                     operator_name=payload.operator_name,
                     partition=payload.partition,
                 )
-        logging.warning(f"{self.id} ||| FB exit t_id={t_id} internal={internal}")
 
     async def run_fallback_strategy(self) -> None:
-        logging.warning(
-            f"{self.id} ||| FB STRATEGY start epoch={self.sequencer.epoch_counter} "
-            f"reschedule={sorted(self.t_ids_to_reschedule)}",
-        )
+        logging.debug("Starting fallback strategy...")
 
         (self.waiting_on_transactions, self.fallback_locking_event_map) = self.local_state.get_dep_transactions(
             self.t_ids_to_reschedule
-        )
-        logging.warning(
-            f"{self.id} ||| FB deps={dict(self.waiting_on_transactions)} "
-            f"locks_for={sorted(self.fallback_locking_event_map.keys())}",
         )
 
         fallback_tasks = []
         aborted_sequence: list[SequencedItem] = self.sequencer.get_aborted_sequence(
             self.t_ids_to_reschedule,
         )
-        logging.warning(
-            f"{self.id} ||| FB aborted_sequence size={len(aborted_sequence)} "
-            f"t_ids={[s.t_id for s in aborted_sequence]}",
-        )
         self.networking.clear_aborted_events_for_fallback()
         for sequenced_item in aborted_sequence:
+            # current worker is the root of the chain
             self.networking.reset_ack_for_fallback(sequenced_item.t_id)
             fallback_tasks.append(
                 self.run_fallback_function(
@@ -957,11 +917,14 @@ class AriaProtocol(BaseTransactionalProtocol):
             serializer=Serializer.MSGPACK,
         )
         if fallback_tasks:
-            logging.warning(f"{self.id} ||| FB gather {len(fallback_tasks)} root tasks")
             await asyncio.gather(*fallback_tasks)
+            # Flush all fallback egress sends in one batch (each root above
+            # used `egress.send`, which enqueues; `send_batch` awaits the
+            # producer futures together).
+            await self.egress.send_batch()
 
-        logging.warning(
-            f"{self.id} ||| FB STRATEGY local-done epoch={self.sequencer.epoch_counter}, waiting for peers",
+        logging.debug(
+            f"Epoch: {self.sequencer.epoch_counter} Fallback strategy done waiting for peers",
         )
 
         await self.sync_workers(
@@ -1030,9 +993,6 @@ class AriaProtocol(BaseTransactionalProtocol):
         message: tuple | bytes,
         serializer: Serializer = Serializer.MSGPACK,
     ) -> None:
-        logging.warning(
-            f"{self.id} ||| EPOCH {self.sequencer.epoch_counter} | sync_workers -> {msg_type.name} (sending)",
-        )
         await self.networking.send_message(
             DISCOVERY_HOST,
             DISCOVERY_PORT + 1,
@@ -1042,6 +1002,3 @@ class AriaProtocol(BaseTransactionalProtocol):
         )
         await self.sync_workers_event[msg_type].wait()
         self.sync_workers_event[msg_type].clear()
-        logging.warning(
-            f"{self.id} ||| EPOCH {self.sequencer.epoch_counter} | sync_workers -> {msg_type.name} (released)",
-        )

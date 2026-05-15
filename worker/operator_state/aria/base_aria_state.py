@@ -178,53 +178,45 @@ class BaseAriaState(BaseOperatorState):
 
         Per the Aria paper, if a transaction's rw-set differs from its original
         optimistic execution, the fallback dependency graph is invalid and the
-        transaction must be rescheduled to the next epoch.
-        """
-        from styx.common.logging import logging
+        transaction must be rescheduled.
 
+        Relaxation (read & write side): a diff key K that does not yet exist
+        in committed state (`self.data`) is treated as safe.
+          - Write side: K is a fresh insert. Check-then-commit runs without an
+            `await` so {check, commit} is atomic on the asyncio loop; a sibling
+            inserting K serializes via reschedule.
+          - Read side: the read returned `None` (K didn't exist); whether K
+            was "observed" is immaterial to the txn's outcome. A sibling that
+            actually committed K shows up in `self.data` at check time and
+            forces reschedule.
+        """
         fallback_reads = self.fallback_read_sets.get(t_id, {})
         for op_part in self.operator_partitions:
             original_read_keys = self.read_sets[op_part].get(t_id, set())
             fallback_read_keys = fallback_reads.get(op_part, set())
-            if original_read_keys != fallback_read_keys:
-                logging.warning(
-                    f"RW_CHANGED t_id={t_id} READS op={op_part} "
-                    f"orig={sorted(original_read_keys)[:8]} "
-                    f"fb={sorted(fallback_read_keys)[:8]} "
-                    f"orig_n={len(original_read_keys)} fb_n={len(fallback_read_keys)} "
-                    f"orig-fb={sorted(original_read_keys - fallback_read_keys)[:5]} "
-                    f"fb-orig={sorted(fallback_read_keys - original_read_keys)[:5]}",
-                )
+            if original_read_keys == fallback_read_keys:
+                continue
+            diff_keys = original_read_keys.symmetric_difference(fallback_read_keys)
+            committed = self.data[op_part]
+            if any(k in committed for k in diff_keys):
                 return True
 
         for op_part in fallback_reads:
             if op_part not in self.operator_partitions:
-                logging.warning(
-                    f"RW_CHANGED t_id={t_id} READS on extra op={op_part} "
-                    f"keys={sorted(fallback_reads[op_part])[:5]}",
-                )
                 return True
 
         fallback_writes = self.fallback_commit_buffer.get(t_id, {})
         for op_part in self.operator_partitions:
             original_write_keys = set(self.write_sets[op_part].get(t_id, {}).keys())
             fallback_write_keys = set(fallback_writes.get(op_part, {}).keys())
-            if original_write_keys != fallback_write_keys:
-                logging.warning(
-                    f"RW_CHANGED t_id={t_id} WRITES op={op_part} "
-                    f"orig_n={len(original_write_keys)} fb_n={len(fallback_write_keys)} "
-                    f"orig-fb={sorted(original_write_keys - fallback_write_keys)[:5]} "
-                    f"fb-orig={sorted(fallback_write_keys - original_write_keys)[:5]}",
-                )
+            if original_write_keys == fallback_write_keys:
+                continue
+            diff_keys = original_write_keys.symmetric_difference(fallback_write_keys)
+            committed = self.data[op_part]
+            if any(k in committed for k in diff_keys):
                 return True
 
-        for op_part in fallback_writes:
-            if op_part not in self.operator_partitions:
-                logging.warning(
-                    f"RW_CHANGED t_id={t_id} WRITES on extra op={op_part}",
-                )
-                return True
-        return False
+        return any(op_part not in self.operator_partitions for op_part in fallback_writes)
 
     def cleanup(self) -> None:
         for operator_partition in self.operator_partitions:

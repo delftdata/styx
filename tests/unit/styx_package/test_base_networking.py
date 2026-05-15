@@ -6,7 +6,6 @@ event loop.  We make those tests ``async`` so that pytest-asyncio
 """
 
 import asyncio
-import fractions
 from unittest.mock import patch
 
 import pytest
@@ -106,7 +105,7 @@ class TestCleanupAfterEpoch:
     async def test_clears_all_dicts(self):
         n = _net()
         n.waited_ack_events[1] = asyncio.Event()
-        n.ack_fraction[1] = fractions.Fraction(1, 2)
+        n.ack_fraction[1] = 0.5
         n.aborted_events[1] = "err"
         n.logic_aborts_everywhere.add(1)
         n.chain_participants[1] = [2]
@@ -133,14 +132,14 @@ class TestFunctionChain:
         n.prepare_function_chain(10)
         assert 10 in n.waited_ack_events
         assert isinstance(n.waited_ack_events[10], asyncio.Event)
-        assert n.ack_fraction[10] == fractions.Fraction(0)
+        assert n.ack_fraction[10] == 0.0
 
     async def test_add_ack_fraction_completes_at_1(self):
         n = _net()
         n.prepare_function_chain(10)
-        n.add_ack_fraction_str(10, "1/2", [])
+        n.add_ack_fraction_str(10, "0.5", [])
         assert not n.waited_ack_events[10].is_set()
-        n.add_ack_fraction_str(10, "1/2", [])
+        n.add_ack_fraction_str(10, "0.5", [])
         assert n.waited_ack_events[10].is_set()
 
     async def test_add_ack_fraction_skips_aborted(self):
@@ -149,7 +148,7 @@ class TestFunctionChain:
         n.aborted_events[10] = "err"
         n.add_ack_fraction_str(10, "1", [])
         # Should not set the event (aborted early return)
-        assert n.ack_fraction[10] == fractions.Fraction(0)
+        assert n.ack_fraction[10] == 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -162,10 +161,10 @@ class TestResetAck:
         n = _net()
         n.prepare_function_chain(10)
         n.waited_ack_events[10].set()
-        n.ack_fraction[10] = fractions.Fraction(1)
+        n.ack_fraction[10] = 1.0
         n.reset_ack_for_fallback(10)
         assert not n.waited_ack_events[10].is_set()
-        assert n.ack_fraction[10] == fractions.Fraction(0)
+        assert n.ack_fraction[10] == 0.0
 
     def test_reset_for_fallback_missing_id(self):
         n = _net()
@@ -325,18 +324,20 @@ class TestEncodeDecodeMessage:
 
 
 class TestAddAckFractionStrEdgeCases:
-    async def test_fraction_exceeds_one_logs_error(self):
+    async def test_fraction_at_one_sets_event(self):
         n = _net()
         n.prepare_function_chain(10)
-        n.add_ack_fraction_str(10, "1/2", [])
-        n.add_ack_fraction_str(10, "3/4", [])
-        # fraction is 1/2 + 3/4 = 5/4 > 1, should log but not crash
+        n.add_ack_fraction_str(10, "0.5", [])
+        assert not n.waited_ack_events[10].is_set()
+        n.add_ack_fraction_str(10, "0.75", [])
+        # 0.5 + 0.75 = 1.25 >= 1.0 - eps, event fires
+        assert n.waited_ack_events[10].is_set()
         assert n.ack_fraction[10] > 1
 
     async def test_fraction_key_error_on_missing_tid(self):
         n = _net()
         # Don't prepare chain — ack_fraction[99] does not exist
-        n.add_ack_fraction_str(99, "1/2", [])
+        n.add_ack_fraction_str(99, "0.5", [])
         # Should not raise; handled internally via KeyError
 
 

@@ -711,7 +711,14 @@ class CoordinatorService:
                         data = await reader.readexactly(8)
                         (size,) = struct.unpack(">Q", data)
                         message = await reader.readexactly(size)
-                        self.aio_task_scheduler_coord.create_task(
+                        # Unbounded: this scheduler also runs
+                        # `heartbeat_monitor_coroutine` (a perpetual loop) which
+                        # drives recovery via `wait_cluster_healthy()` — that
+                        # await is unblocked by `_handle_ready_after_recovery`
+                        # running through this same scheduler. A bounded slot
+                        # held by a suspended awaiter could starve the setter
+                        # under a large cluster.
+                        self.aio_task_scheduler_coord.create_unbounded_task(
                             self.coordinator_controller(writer, message, pool),
                         )
                 except asyncio.IncompleteReadError as e:
@@ -976,7 +983,11 @@ class CoordinatorService:
         logging.warning("Coordinator Booted Successfully")
         self.init_snapshot_bucket()
         logging.warning("Coordinator Connected to S3")
-        self.aio_task_scheduler_coord.create_task(self.heartbeat_monitor_coroutine())
+        # Unbounded: heartbeat_monitor is a long-lived loop that also drives
+        # recovery (awaits `wait_cluster_healthy`). It must not consume a
+        # semaphore slot while suspended, or it would permanently reduce the
+        # scheduler's capacity and could starve `_handle_ready_after_recovery`.
+        self.aio_task_scheduler_coord.create_unbounded_task(self.heartbeat_monitor_coroutine())
         logging.warning("Coordinator Heartbeat Sentinel online")
         self.snapshotting_task = asyncio.create_task(self.send_snapshot_marker())
         logging.warning("Coordinator Snapshotting online")
