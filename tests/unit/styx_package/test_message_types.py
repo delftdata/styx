@@ -10,15 +10,17 @@ class TestMessageType:
         assert issubclass(MessageType, IntEnum)
 
     def test_total_count(self):
-        assert len(MessageType) == 42
+        assert len(MessageType) == 41
 
     def test_all_values_unique(self):
         values = [m.value for m in MessageType]
         assert len(values) == len(set(values))
 
-    def test_values_are_contiguous_from_zero(self):
+    def test_values_in_expected_range(self):
+        # 25 (AckCache) was removed when the fallback cache was dropped; the
+        # remaining IDs are preserved to keep wire-format stability.
         values = sorted(m.value for m in MessageType)
-        assert values == list(range(42))
+        assert values == [v for v in range(42) if v != 25]
 
     def test_known_values(self):
         assert MessageType.RunFunRemote == 0

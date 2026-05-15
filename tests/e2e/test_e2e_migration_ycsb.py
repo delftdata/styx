@@ -39,7 +39,6 @@ class _ClusterParams:
     threads_per_worker: int = 1
     enable_compression: str = "true"
     use_composite_keys: str = "true"
-    use_fallback_cache: str = "true"
 
 
 @dataclass(frozen=True)
@@ -95,7 +94,6 @@ def _start_cmd(paths: _Paths, p: _ClusterParams) -> list[str]:
         str(p.threads_per_worker),
         p.enable_compression,
         p.use_composite_keys,
-        p.use_fallback_cache,
     ]
 
 

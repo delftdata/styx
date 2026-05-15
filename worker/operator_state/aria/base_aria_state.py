@@ -178,32 +178,44 @@ class BaseAriaState(BaseOperatorState):
 
         Per the Aria paper, if a transaction's rw-set differs from its original
         optimistic execution, the fallback dependency graph is invalid and the
-        transaction must be rescheduled to the next epoch.
+        transaction must be rescheduled.
+
+        Relaxation (read & write side): a diff key K that does not yet exist
+        in committed state (`self.data`) is treated as safe.
+          - Write side: K is a fresh insert. Check-then-commit runs without an
+            `await` so {check, commit} is atomic on the asyncio loop; a sibling
+            inserting K serializes via reschedule.
+          - Read side: the read returned `None` (K didn't exist); whether K
+            was "observed" is immaterial to the txn's outcome. A sibling that
+            actually committed K shows up in `self.data` at check time and
+            forces reschedule.
         """
-        # Compare read sets: original vs fallback
         fallback_reads = self.fallback_read_sets.get(t_id, {})
         for op_part in self.operator_partitions:
             original_read_keys = self.read_sets[op_part].get(t_id, set())
             fallback_read_keys = fallback_reads.get(op_part, set())
-            if original_read_keys != fallback_read_keys:
+            if original_read_keys == fallback_read_keys:
+                continue
+            diff_keys = original_read_keys.symmetric_difference(fallback_read_keys)
+            committed = self.data[op_part]
+            if any(k in committed for k in diff_keys):
                 return True
 
-        # Check for fallback reads on operator_partitions not in self.operator_partitions
         for op_part in fallback_reads:
             if op_part not in self.operator_partitions:
-                # Original had no reads here (since it's not a local partition),
-                # but fallback did — sets differ
                 return True
 
-        # Compare write sets: original vs fallback
         fallback_writes = self.fallback_commit_buffer.get(t_id, {})
         for op_part in self.operator_partitions:
             original_write_keys = set(self.write_sets[op_part].get(t_id, {}).keys())
             fallback_write_keys = set(fallback_writes.get(op_part, {}).keys())
-            if original_write_keys != fallback_write_keys:
+            if original_write_keys == fallback_write_keys:
+                continue
+            diff_keys = original_write_keys.symmetric_difference(fallback_write_keys)
+            committed = self.data[op_part]
+            if any(k in committed for k in diff_keys):
                 return True
 
-        # Check for fallback writes on operator_partitions not in self.operator_partitions
         return any(op_part not in self.operator_partitions for op_part in fallback_writes)
 
     def cleanup(self) -> None:

@@ -65,11 +65,9 @@ MIN_PAYMENT = 1.0
 MAX_PAYMENT = 5000.0
 enable_compression: bool = bool(strtobool(sys.argv[8]))
 use_composite_keys: bool = bool(strtobool(sys.argv[9]))
-use_fallback_cache: bool = bool(strtobool(sys.argv[10]))
 os.environ["ENABLE_COMPRESSION"] = str(enable_compression)
 os.environ["USE_COMPOSITE_KEYS"] = str(use_composite_keys)
-os.environ["USE_FALLBACK_CACHE"] = str(use_fallback_cache)
-kill_at = int(sys.argv[11]) if len(sys.argv) > 11 else -1
+kill_at = int(sys.argv[10]) if len(sys.argv) > 10 else -1
 
 
 customers_per_district: dict[tuple, list] = {}
@@ -407,7 +405,7 @@ def tpc_c_workload_generator(proc_num):
 
 def benchmark_runner(proc_num) -> dict[bytes, dict]:
     print(f'Generator: {proc_num} starting with: EC={os.environ["ENABLE_COMPRESSION"]} '
-          f'CK={os.environ["USE_COMPOSITE_KEYS"]} FC={os.environ["USE_FALLBACK_CACHE"]}')
+          f'CK={os.environ["USE_COMPOSITE_KEYS"]}')
     styx = SyncStyxClient(STYX_HOST, STYX_PORT, kafka_url=KAFKA_URL)
     styx.open(consume=False)
     tpc_c_generator = tpc_c_workload_generator(proc_num)
@@ -485,5 +483,4 @@ if __name__ == "__main__":
         N_W,
         enable_compression,
         use_composite_keys,
-        use_fallback_cache
     )

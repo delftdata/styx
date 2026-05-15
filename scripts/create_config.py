@@ -223,13 +223,12 @@ input_throughput = [
 ]
 
 
-# define the four configurations
+# define the three configurations
 configs = [
-    # (enable_compression, use_composite_keys, use_fallback_cache, suffix)
-    (True,  True,  True,  "ALL"),
-    (False, True,  True,  "NO_COMP"),
-    (True,  False, True,  "NO_CK"),
-    (True,  True,  False, "NO_FC"),
+    # (enable_compression, use_composite_keys, suffix)
+    (True,  True,  "ALL"),
+    (False, True,  "NO_COMP"),
+    (True,  False, "NO_CK"),
 ]
 
 if "tpcc" in scenarios:
@@ -238,7 +237,7 @@ if "tpcc" in scenarios:
             # skip rates above the per-worker cap
             if input_rate > max_rate[n_w]:
                 continue
-            for enable_compression, use_composite_keys, use_fallback_cache, tag in configs:
+            for enable_compression, use_composite_keys, tag in configs:
                 # file name now encodes the variant tag
                 file_name = f"tpcc_W{n_w}_{input_rate * n_threads}_{tag}.json"
 
@@ -255,7 +254,6 @@ if "tpcc" in scenarios:
                         100,
                         enable_compression,
                         use_composite_keys,
-                        use_fallback_cache
                     ))
 
 df = pd.DataFrame(lines)

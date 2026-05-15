@@ -96,12 +96,20 @@ class TestFallbackReadSetChange:
         _fallback_read(s, "k1", t_id=1)
         assert s.has_fallback_rw_set_changed(1) is True
 
-    def test_original_reads_but_no_fallback_reads(self):
+    def test_original_reads_but_no_fallback_reads_on_existing_key(self):
         s = _state()
-        # Original read: k1
+        s.data[OP_PART]["k1"] = "v1"
         _read(s, "k1", t_id=1)
-        # No fallback reads
+        # No fallback reads. k1 is in committed state → diff is contended.
         assert s.has_fallback_rw_set_changed(1) is True
+
+    def test_original_reads_but_no_fallback_reads_on_new_key_is_safe(self):
+        """Relaxation: a diff-read on a key absent from committed state was
+        a `None`-read with no effect on the chain's outcome — treat as safe."""
+        s = _state()
+        # k1 not in s.data
+        _read(s, "k1", t_id=1)
+        assert s.has_fallback_rw_set_changed(1) is False
 
 
 # ---------------------------------------------------------------------------
@@ -118,22 +126,41 @@ class TestFallbackWriteSetChange:
         _fallback_write(s, "k1", "v1_new", t_id=1)
         assert s.has_fallback_rw_set_changed(1) is False
 
-    def test_extra_fallback_write_detected(self):
+    def test_extra_fallback_write_to_new_key_is_safe(self):
+        """Diff-write to a key absent from committed state is treated as a
+        pure insert and accepted (see relaxation in
+        has_fallback_rw_set_changed)."""
         s = _state()
-        # Original write: k1
         _put(s, "k1", "v1", t_id=1)
-        # Fallback writes: k1 and k2
         _fallback_write(s, "k1", "v1", t_id=1)
         _fallback_write(s, "k2", "v2", t_id=1)
+        # k2 not in s.data → fresh insert → safe
+        assert s.has_fallback_rw_set_changed(1) is False
+
+    def test_extra_fallback_write_to_existing_key_detected(self):
+        s = _state()
+        s.data[OP_PART]["k2"] = "preexisting"
+        _put(s, "k1", "v1", t_id=1)
+        _fallback_write(s, "k1", "v1", t_id=1)
+        _fallback_write(s, "k2", "v2_new", t_id=1)
+        # k2 already in committed state → contended diff → reschedule
         assert s.has_fallback_rw_set_changed(1) is True
 
-    def test_missing_fallback_write_detected(self):
+    def test_missing_fallback_write_to_new_key_is_safe(self):
         s = _state()
-        # Original writes: k1 and k2
         _put(s, "k1", "v1", t_id=1)
         _put(s, "k2", "v2", t_id=1)
-        # Fallback write: only k1
         _fallback_write(s, "k1", "v1", t_id=1)
+        # k2 dropped in fallback, and not yet in committed state → safe
+        assert s.has_fallback_rw_set_changed(1) is False
+
+    def test_missing_fallback_write_to_existing_key_detected(self):
+        s = _state()
+        s.data[OP_PART]["k2"] = "preexisting"
+        _put(s, "k1", "v1", t_id=1)
+        _put(s, "k2", "v2", t_id=1)
+        _fallback_write(s, "k1", "v1", t_id=1)
+        # k2 dropped in fallback but is in committed state → contended
         assert s.has_fallback_rw_set_changed(1) is True
 
     def test_different_value_same_keys_no_change(self):
@@ -150,12 +177,13 @@ class TestFallbackWriteSetChange:
 
 
 class TestFallbackCombinedRwSetChange:
-    def test_reads_same_writes_changed(self):
+    def test_reads_same_writes_changed_on_existing_key(self):
         s = _state()
         s.data[OP_PART]["k1"] = "v1"
+        s.data[OP_PART]["k3"] = "v3_old"
         _read(s, "k1", t_id=1)
         _put(s, "k2", "v2", t_id=1)
-        # Fallback: same read, but extra write
+        # Fallback: same read, extra write to k3 (which is in committed state)
         _fallback_read(s, "k1", t_id=1)
         _fallback_write(s, "k2", "v2", t_id=1)
         _fallback_write(s, "k3", "v3", t_id=1)

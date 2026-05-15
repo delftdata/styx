@@ -17,7 +17,6 @@ def _make_sf(
     partition=0,
     operator_name="users",
     fallback_mode=False,
-    use_fallback_cache=False,
 ):
     """Creates a StatefulFunction with mocked dependencies."""
     state = MagicMock()
@@ -48,7 +47,6 @@ def _make_sf(
         t_id=t_id,
         request_id=request_id,
         fallback_mode=fallback_mode,
-        use_fallback_cache=use_fallback_cache,
         deployed_graph=graph,
         operator_lock=lock,
         protocol=protocol,
@@ -170,10 +168,9 @@ class TestStatefulFunctionCall:
         sf, state, *_ = _make_sf()
         state.in_remote_keys.return_value = False
         # run() is not implemented on the base class
-        result, n_calls, partial = await sf()
+        result, n_calls = await sf()
         assert isinstance(result, NotImplementedError)
         assert n_calls == -1
-        assert partial == -1
 
     @pytest.mark.asyncio
     async def test_call_with_no_remote_keys(self):
@@ -185,10 +182,9 @@ class TestStatefulFunctionCall:
             return "success"
 
         sf.run = mock_run
-        result, n_calls, partial = await sf()
+        result, n_calls = await sf()
         assert result == "success"
         assert n_calls == 0
-        assert partial == 0
 
     @pytest.mark.asyncio
     async def test_call_local_migration(self):
@@ -201,7 +197,7 @@ class TestStatefulFunctionCall:
             return "migrated"
 
         sf.run = mock_run
-        result, _n_calls, _partial = await sf()
+        result, _n_calls = await sf()
         state.migrate_within_the_same_worker.assert_called_once_with("users", 0, "k1", 1)
         assert result == "migrated"
 
@@ -219,20 +215,7 @@ class TestStatefulFunctionCall:
             return "remote_migrated"
 
         sf.run = mock_run
-        result, _n_calls, _partial = await sf()
+        result, _n_calls = await sf()
         networking.request_key.assert_called_once()
         networking.wait_for_remote_key_event.assert_called_once()
         assert result == "remote_migrated"
-
-    @pytest.mark.asyncio
-    async def test_fallback_cache_shortcircuit(self):
-        sf, state, *_ = _make_sf(fallback_mode=True, use_fallback_cache=True)
-        state.in_remote_keys.return_value = False
-
-        async def mock_run(*args):
-            return "cached"
-
-        sf.run = mock_run
-        result, _n_calls, partial = await sf()
-        assert result == "cached"
-        assert partial == -1

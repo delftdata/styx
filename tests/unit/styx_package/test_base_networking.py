@@ -6,14 +6,12 @@ event loop.  We make those tests ``async`` so that pytest-asyncio
 """
 
 import asyncio
-import fractions
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from styx.common.base_networking import BaseNetworking, MessagingMode
 from styx.common.exceptions import SerializerNotSupportedError
 from styx.common.message_types import MessageType
-from styx.common.run_func_payload import RunFuncPayload
 from styx.common.serialization import Serializer
 
 # ---------------------------------------------------------------------------
@@ -63,7 +61,6 @@ class TestBaseNetworkingInit:
         n = _net()
         assert n.waited_ack_events == {}
         assert n.ack_fraction == {}
-        assert n.ack_cnts == {}
         assert len(n.aborted_events) == 0
         assert len(n.logic_aborts_everywhere) == 0
 
@@ -108,10 +105,8 @@ class TestCleanupAfterEpoch:
     async def test_clears_all_dicts(self):
         n = _net()
         n.waited_ack_events[1] = asyncio.Event()
-        n.ack_fraction[1] = fractions.Fraction(1, 2)
-        n.ack_cnts[1] = (1, 2)
+        n.ack_fraction[1] = 0.5
         n.aborted_events[1] = "err"
-        n.remote_function_calls[1] = [MagicMock()]
         n.logic_aborts_everywhere.add(1)
         n.chain_participants[1] = [2]
         n.client_responses[1] = "resp"
@@ -120,38 +115,14 @@ class TestCleanupAfterEpoch:
 
         assert len(n.waited_ack_events) == 0
         assert len(n.ack_fraction) == 0
-        assert len(n.ack_cnts) == 0
         assert len(n.aborted_events) == 0
-        assert len(n.remote_function_calls) == 0
         assert len(n.logic_aborts_everywhere) == 0
         assert len(n.chain_participants) == 0
         assert len(n.client_responses) == 0
 
 
 # ---------------------------------------------------------------------------
-# add_remote_function_call
-# ---------------------------------------------------------------------------
-
-
-class TestAddRemoteFunctionCall:
-    def test_appends_payload(self):
-        n = _net()
-        p = RunFuncPayload(request_id=b"r", key="k", operator_name="op", partition=0, function_name="fn", params=())
-        n.add_remote_function_call(1, p)
-        assert len(n.remote_function_calls[1]) == 1
-        assert n.remote_function_calls[1][0] is p
-
-    def test_multiple_payloads(self):
-        n = _net()
-        p1 = RunFuncPayload(request_id=b"r1", key="k1", operator_name="op", partition=0, function_name="fn", params=())
-        p2 = RunFuncPayload(request_id=b"r2", key="k2", operator_name="op", partition=0, function_name="fn", params=())
-        n.add_remote_function_call(1, p1)
-        n.add_remote_function_call(1, p2)
-        assert len(n.remote_function_calls[1]) == 2
-
-
-# ---------------------------------------------------------------------------
-# prepare_function_chain / ack_fraction / ack_cnt  (needs loop)
+# prepare_function_chain / ack_fraction  (needs loop)
 # ---------------------------------------------------------------------------
 
 
@@ -161,41 +132,23 @@ class TestFunctionChain:
         n.prepare_function_chain(10)
         assert 10 in n.waited_ack_events
         assert isinstance(n.waited_ack_events[10], asyncio.Event)
-        assert n.ack_fraction[10] == fractions.Fraction(0)
-        assert n.ack_cnts[10] == (0, 0)
+        assert n.ack_fraction[10] == 0.0
 
     async def test_add_ack_fraction_completes_at_1(self):
         n = _net()
         n.prepare_function_chain(10)
-        n.add_ack_fraction_str(10, "1/2", [], 0)
+        n.add_ack_fraction_str(10, "0.5", [])
         assert not n.waited_ack_events[10].is_set()
-        n.add_ack_fraction_str(10, "1/2", [], 0)
+        n.add_ack_fraction_str(10, "0.5", [])
         assert n.waited_ack_events[10].is_set()
 
     async def test_add_ack_fraction_skips_aborted(self):
         n = _net()
         n.prepare_function_chain(10)
         n.aborted_events[10] = "err"
-        n.add_ack_fraction_str(10, "1", [], 0)
+        n.add_ack_fraction_str(10, "1", [])
         # Should not set the event (aborted early return)
-        assert n.ack_fraction[10] == fractions.Fraction(0)
-
-    async def test_add_ack_cnt(self):
-        n = _net()
-        n.prepare_function_chain(10)
-        n.ack_cnts[10] = (0, 2)
-        n.add_ack_cnt(10, 1)
-        assert n.ack_cnts[10] == (1, 2)
-        assert not n.waited_ack_events[10].is_set()
-        n.add_ack_cnt(10, 1)
-        assert n.waited_ack_events[10].is_set()
-
-    async def test_add_ack_cnt_skips_aborted(self):
-        n = _net()
-        n.prepare_function_chain(10)
-        n.aborted_events[10] = "err"
-        n.add_ack_cnt(10, 1)
-        assert n.ack_cnts[10] == (0, 0)
+        assert n.ack_fraction[10] == 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -208,23 +161,14 @@ class TestResetAck:
         n = _net()
         n.prepare_function_chain(10)
         n.waited_ack_events[10].set()
-        n.ack_fraction[10] = fractions.Fraction(1)
+        n.ack_fraction[10] = 1.0
         n.reset_ack_for_fallback(10)
         assert not n.waited_ack_events[10].is_set()
-        assert n.ack_fraction[10] == fractions.Fraction(0)
+        assert n.ack_fraction[10] == 0.0
 
     def test_reset_for_fallback_missing_id(self):
         n = _net()
         n.reset_ack_for_fallback(999)  # should not raise
-
-    async def test_reset_for_fallback_cache(self):
-        n = _net()
-        n.prepare_function_chain(10)
-        n.waited_ack_events[10].set()
-        n.reset_ack_for_fallback_cache(10)
-        assert not n.waited_ack_events[10].is_set()
-        # fraction NOT reset in cache mode
-        assert n.ack_fraction[10] == fractions.Fraction(0)
 
 
 # ---------------------------------------------------------------------------
@@ -380,44 +324,21 @@ class TestEncodeDecodeMessage:
 
 
 class TestAddAckFractionStrEdgeCases:
-    async def test_fraction_exceeds_one_logs_error(self):
+    async def test_fraction_at_one_sets_event(self):
         n = _net()
         n.prepare_function_chain(10)
-        n.add_ack_fraction_str(10, "1/2", [], 0)
-        n.add_ack_fraction_str(10, "3/4", [], 0)
-        # fraction is 1/2 + 3/4 = 5/4 > 1, should log but not crash
+        n.add_ack_fraction_str(10, "0.5", [])
+        assert not n.waited_ack_events[10].is_set()
+        n.add_ack_fraction_str(10, "0.75", [])
+        # 0.5 + 0.75 = 1.25 >= 1.0 - eps, event fires
+        assert n.waited_ack_events[10].is_set()
         assert n.ack_fraction[10] > 1
 
     async def test_fraction_key_error_on_missing_tid(self):
         n = _net()
         # Don't prepare chain — ack_fraction[99] does not exist
-        n.add_ack_fraction_str(99, "1/2", [], 0)
+        n.add_ack_fraction_str(99, "0.5", [])
         # Should not raise; handled internally via KeyError
-
-    async def test_partial_node_count_accumulates(self):
-        n = _net()
-        n.prepare_function_chain(10)
-        n.add_ack_fraction_str(10, "1/4", [1], 2)
-        assert n.ack_cnts[10] == (0, 2)
-        n.add_ack_fraction_str(10, "1/4", [2], 3)
-        assert n.ack_cnts[10] == (0, 5)
-
-
-class TestAddAckCntEdgeCases:
-    async def test_cnt_exceeds_total_logs_error(self):
-        n = _net()
-        n.prepare_function_chain(10)
-        n.ack_cnts[10] = (0, 1)
-        n.add_ack_cnt(10, 1)
-        assert n.waited_ack_events[10].is_set()
-        # Adding more exceeds total
-        n.waited_ack_events[10].clear()
-        n.add_ack_cnt(10, 1)
-        assert n.ack_cnts[10] == (2, 1)  # 2 > 1
-
-    async def test_cnt_key_error_on_missing_tid(self):
-        n = _net()
-        n.add_ack_cnt(99, 1)  # should not raise
 
 
 class TestAddResponseNone:

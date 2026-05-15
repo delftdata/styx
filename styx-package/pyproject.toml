@@ -15,7 +15,7 @@ dependencies = [
     "msgspec>=0.20.0,<1.0.0",
     # Kafka clients (async/sync)
     "aiokafka>=0.12.0,<1.0",
-    "confluent-kafka>=2.13.0,<2.14",
+    "confluent-kafka>=2.14.0,<3.0.0",
     # Hashing
     "cityhash>=0.4.10,<1.0.0",
     # Compression

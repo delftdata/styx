@@ -1,4 +1,4 @@
-FROM python:3.14.3-slim-trixie
+FROM python:3.14.5-slim-trixie
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -32,10 +32,8 @@ EXPOSE 8888
 
 ARG enable_compression=true
 ARG use_composite_keys=true
-ARG use_fallback_cache=true
 
 ENV ENABLE_COMPRESSION=$enable_compression \
-    USE_COMPOSITE_KEYS=$use_composite_keys \
-    USE_FALLBACK_CACHE=$use_fallback_cache
+    USE_COMPOSITE_KEYS=$use_composite_keys
 
 CMD ["/usr/local/bin/start-coordinator.sh"]

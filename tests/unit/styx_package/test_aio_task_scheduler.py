@@ -80,6 +80,66 @@ class TestAIOTaskSchedulerCreateTask:
         assert max_active[0] <= 2
 
 
+class TestAIOTaskSchedulerCreateUnboundedTask:
+    @pytest.mark.asyncio
+    async def test_runs_without_consuming_semaphore_slot(self):
+        """Unbounded tasks must not consume a semaphore slot — otherwise
+        long-suspended unbounded tasks would still starve bounded ones."""
+        s = AIOTaskScheduler(max_concurrency=1)
+        gate = asyncio.Event()
+        ran = []
+
+        async def waiter():
+            ran.append("waiter-start")
+            await gate.wait()
+            ran.append("waiter-end")
+
+        async def bounded():
+            ran.append("bounded")
+
+        s.create_unbounded_task(waiter())
+        s.create_task(bounded())
+        # Bounded task should run even though waiter is suspended,
+        # because waiter is unbounded and didn't take the slot.
+        await asyncio.sleep(0.05)
+        assert "bounded" in ran
+        assert "waiter-start" in ran
+        assert "waiter-end" not in ran
+        gate.set()
+        await s.wait_all()
+        assert "waiter-end" in ran
+
+    @pytest.mark.asyncio
+    async def test_strongly_references_task(self):
+        """Unbounded tasks must be tracked so they don't get GC'd mid-await
+        (Python only weak-refs tasks from `asyncio.create_task`)."""
+        s = AIOTaskScheduler()
+        done = []
+
+        async def worker():
+            await asyncio.sleep(0.01)
+            done.append(1)
+
+        s.create_unbounded_task(worker())
+        assert len(s.background_tasks) == 1
+        await s.wait_all()
+        assert done == [1]
+        assert len(s.background_tasks) == 0
+
+    @pytest.mark.asyncio
+    async def test_closed_scheduler_ignores_unbounded(self):
+        s = AIOTaskScheduler()
+        await s.close()
+        ran = []
+
+        async def worker():
+            ran.append(1)
+
+        s.create_unbounded_task(worker())
+        await asyncio.sleep(0.05)
+        assert ran == []
+
+
 class TestAIOTaskSchedulerClose:
     @pytest.mark.asyncio
     async def test_close_cancels_tasks(self):
