@@ -58,7 +58,7 @@ class MessageSink:
                 (size,) = struct.unpack(">Q", header)
                 await reader.readexactly(size)
                 self.total_received += 1
-        except (asyncio.IncompleteReadError, ConnectionResetError, OSError):
+        except asyncio.IncompleteReadError, ConnectionResetError, OSError:
             pass
         finally:
             with contextlib.suppress(Exception):
