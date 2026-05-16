@@ -57,6 +57,9 @@ class StyxSocketClient:
         self.target_port: int | None = None
         self.lock: asyncio.Lock = asyncio.Lock()
         self.n_retries: int = 3
+        # Number of coroutines currently using or waiting for this connection.
+        # Read by SocketPool.__next__ to pick the least-loaded connection.
+        self.in_flight: int = 0
 
     async def create_connection(self, host: str, port: int) -> bool:
         self.target_host = host
@@ -102,26 +105,30 @@ class StyxSocketClient:
             msg = "Writer is not initialized (connection not established)."
             raise ConnectionError(msg)
         i = 0
-        async with self.lock:
-            while i < self.n_retries:
-                try:
-                    self.writer.write(message)
-                    await self.writer.drain()
-                except OSError, RuntimeError, ConnectionResetError, BrokenPipeError:
-                    logging.warning(
-                        f"Broken connection in rq-rs, close the old ones and retry. "
-                        f"Attempt {i} at {self.target_host}:{self.target_port}",
-                    )
-                    await self.close()
-                    await asyncio.sleep(0.5)
-                    await self.create_connection(self.target_host, self.target_port)
-                except Exception as e:
-                    logging.error(f"Uncaught exception: {e}")
-                    i = self.n_retries
-                    break
-                else:
-                    break
-                i += 1
+        self.in_flight += 1
+        try:
+            async with self.lock:
+                while i < self.n_retries:
+                    try:
+                        self.writer.write(message)
+                        await self.writer.drain()
+                    except OSError, RuntimeError, ConnectionResetError, BrokenPipeError:
+                        logging.warning(
+                            f"Broken connection in rq-rs, close the old ones and retry. "
+                            f"Attempt {i} at {self.target_host}:{self.target_port}",
+                        )
+                        await self.close()
+                        await asyncio.sleep(0.5)
+                        await self.create_connection(self.target_host, self.target_port)
+                    except Exception as e:
+                        logging.error(f"Uncaught exception: {e}")
+                        i = self.n_retries
+                        break
+                    else:
+                        break
+                    i += 1
+        finally:
+            self.in_flight -= 1
         if i == self.n_retries:
             logging.error(
                 f"Cannot send_message_rq_rs to worker {self.target_host}:{self.target_port}",
@@ -133,28 +140,32 @@ class StyxSocketClient:
             raise ConnectionError(msg)
         i = 0
         resp: bytes | None = None
-        async with self.lock:
-            while i < self.n_retries:
-                try:
-                    self.writer.write(message)
-                    await self.writer.drain()
-                    (size,) = unpack(">Q", await self.reader.readexactly(8))
-                    resp = await self.reader.readexactly(size)
-                except OSError, RuntimeError, ConnectionResetError, BrokenPipeError:
-                    logging.warning(
-                        f"Broken connection in rq-rs, close the old ones and retry. "
-                        f"Attempt {i} at {self.target_host}:{self.target_port}",
-                    )
-                    await self.close()
-                    await asyncio.sleep(0.5)
-                    await self.create_connection(self.target_host, self.target_port)
-                except Exception as e:
-                    logging.error(f"Uncaught exception: {e}")
-                    i = self.n_retries
-                    break
-                else:
-                    break
-                i += 1
+        self.in_flight += 1
+        try:
+            async with self.lock:
+                while i < self.n_retries:
+                    try:
+                        self.writer.write(message)
+                        await self.writer.drain()
+                        (size,) = unpack(">Q", await self.reader.readexactly(8))
+                        resp = await self.reader.readexactly(size)
+                    except OSError, RuntimeError, ConnectionResetError, BrokenPipeError:
+                        logging.warning(
+                            f"Broken connection in rq-rs, close the old ones and retry. "
+                            f"Attempt {i} at {self.target_host}:{self.target_port}",
+                        )
+                        await self.close()
+                        await asyncio.sleep(0.5)
+                        await self.create_connection(self.target_host, self.target_port)
+                    except Exception as e:
+                        logging.error(f"Uncaught exception: {e}")
+                        i = self.n_retries
+                        break
+                    else:
+                        break
+                    i += 1
+        finally:
+            self.in_flight -= 1
         if i == self.n_retries:
             logging.error(
                 f"Cannot send_message_rq_rs to worker {self.target_host}:{self.target_port}",
@@ -197,10 +208,26 @@ class SocketPool:
         return self
 
     def __next__(self) -> StyxSocketClient:
-        conn = self.conns[self.index]
-        next_idx = self.index + 1
-        self.index = 0 if next_idx == self.size else next_idx
-        return conn
+        # Load-aware pick: starting from the running round-robin index, scan the
+        # ring and return the least-loaded connection. Falls back to pure
+        # round-robin when all conns are equally loaded (typical idle state).
+        # Early-exits at in_flight == 0 to keep this cheap on the hot path.
+        best_idx = self.index
+        best_load = self.conns[best_idx].in_flight
+        if best_load != 0:
+            for offset in range(1, self.size):
+                idx = self.index + offset
+                if idx >= self.size:
+                    idx -= self.size
+                load = self.conns[idx].in_flight
+                if load < best_load:
+                    best_idx = idx
+                    best_load = load
+                    if load == 0:
+                        break
+        next_start = best_idx + 1
+        self.index = 0 if next_start == self.size else next_start
+        return self.conns[best_idx]
 
     async def create_socket_connections(self) -> None:
         for _ in range(self.size):
