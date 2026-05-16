@@ -26,7 +26,6 @@ from styx.common.serialization import (
 
 USE_COMPRESSION: bool = bool(strtobool(os.getenv("ENABLE_COMPRESSION", "true")))
 COMPRESS_AFTER: int = int(os.getenv("COMPRESS_AFTER", "4096"))
-BATCH_FLUSH_INTERVAL_MS: float = float(os.getenv("BATCH_FLUSH_INTERVAL_MS", "1"))
 
 
 class MessagingMode(IntEnum):
