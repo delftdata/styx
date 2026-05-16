@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 microbench_messaging.py — Styx TCP messaging microbenchmark
 Sequential vs batched sends, modelling Styx's exact wire protocol and pool.
