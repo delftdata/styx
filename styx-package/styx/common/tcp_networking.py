@@ -1,5 +1,6 @@
 import asyncio
 import os
+import socket
 import struct
 from struct import unpack
 from typing import TYPE_CHECKING
@@ -24,6 +25,28 @@ if TYPE_CHECKING:
 
 USE_COMPRESSION: bool = bool(strtobool(os.getenv("ENABLE_COMPRESSION", "true")))
 COMPRESS_AFTER: int = int(os.getenv("COMPRESS_AFTER", "4096"))
+# Per-connection kernel socket buffers. Defaults match the server-side listening
+# sockets (1 MB). Bump via env when bursty workloads stall on backpressure.
+SOCKET_SND_BUF: int = int(os.getenv("SOCKET_SND_BUF", str(1 << 20)))
+SOCKET_RCV_BUF: int = int(os.getenv("SOCKET_RCV_BUF", str(1 << 20)))
+# Connections per (host, port) pool. 4 is fine at low concurrency; under 100+
+# concurrent transactions the per-conn lock becomes the bottleneck.
+SOCKET_POOL_SIZE: int = int(os.getenv("SOCKET_POOL_SIZE", "16"))
+
+# Cache for the 2-byte (msg_type, serializer_id) framing header. Keyspace is
+# bounded by len(MessageType) * 5 serializers (~250 entries max), so the dict
+# can grow once and then it's pure lookups. Saves two struct.pack(">B") calls
+# and a bytes concat per encoded message.
+_HEADER_CACHE: dict[tuple[int, int], bytes] = {}
+
+
+def _msg_header(msg_type: int, ser_id: int) -> bytes:
+    key = (msg_type, ser_id)
+    h = _HEADER_CACHE.get(key)
+    if h is None:
+        h = struct.pack(">BB", msg_type, ser_id)
+        _HEADER_CACHE[key] = h
+    return h
 
 
 class StyxSocketClient:
@@ -34,6 +57,9 @@ class StyxSocketClient:
         self.target_port: int | None = None
         self.lock: asyncio.Lock = asyncio.Lock()
         self.n_retries: int = 3
+        # Number of coroutines currently using or waiting for this connection.
+        # Read by SocketPool.__next__ to pick the least-loaded connection.
+        self.in_flight: int = 0
 
     async def create_connection(self, host: str, port: int) -> bool:
         self.target_host = host
@@ -55,6 +81,15 @@ class StyxSocketClient:
             except Exception as e:
                 logging.error(f"Uncaught exception: {e}")
             else:
+                # Disable Nagle and bump kernel buffers on the accepted client
+                # socket. open_connection() doesn't propagate these from anywhere,
+                # so without this the client side runs with Nagle ON — which can
+                # add up to 40ms of coalescing latency on small writes.
+                sock: socket.socket | None = self.writer.get_extra_info("socket")
+                if sock is not None:
+                    sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                    sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, SOCKET_SND_BUF)
+                    sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, SOCKET_RCV_BUF)
                 logging.info(f"Connection made to {host}:{port}")
                 break
             i += 1
@@ -70,26 +105,30 @@ class StyxSocketClient:
             msg = "Writer is not initialized (connection not established)."
             raise ConnectionError(msg)
         i = 0
-        async with self.lock:
-            while i < self.n_retries:
-                try:
-                    self.writer.write(message)
-                    await self.writer.drain()
-                except OSError, RuntimeError, ConnectionResetError, BrokenPipeError:
-                    logging.warning(
-                        f"Broken connection in rq-rs, close the old ones and retry. "
-                        f"Attempt {i} at {self.target_host}:{self.target_port}",
-                    )
-                    await self.close()
-                    await asyncio.sleep(0.5)
-                    await self.create_connection(self.target_host, self.target_port)
-                except Exception as e:
-                    logging.error(f"Uncaught exception: {e}")
-                    i = self.n_retries
-                    break
-                else:
-                    break
-                i += 1
+        self.in_flight += 1
+        try:
+            async with self.lock:
+                while i < self.n_retries:
+                    try:
+                        self.writer.write(message)
+                        await self.writer.drain()
+                    except OSError, RuntimeError, ConnectionResetError, BrokenPipeError:
+                        logging.warning(
+                            f"Broken connection in rq-rs, close the old ones and retry. "
+                            f"Attempt {i} at {self.target_host}:{self.target_port}",
+                        )
+                        await self.close()
+                        await asyncio.sleep(0.5)
+                        await self.create_connection(self.target_host, self.target_port)
+                    except Exception as e:
+                        logging.error(f"Uncaught exception: {e}")
+                        i = self.n_retries
+                        break
+                    else:
+                        break
+                    i += 1
+        finally:
+            self.in_flight -= 1
         if i == self.n_retries:
             logging.error(
                 f"Cannot send_message_rq_rs to worker {self.target_host}:{self.target_port}",
@@ -101,28 +140,32 @@ class StyxSocketClient:
             raise ConnectionError(msg)
         i = 0
         resp: bytes | None = None
-        async with self.lock:
-            while i < self.n_retries:
-                try:
-                    self.writer.write(message)
-                    await self.writer.drain()
-                    (size,) = unpack(">Q", await self.reader.readexactly(8))
-                    resp = await self.reader.readexactly(size)
-                except OSError, RuntimeError, ConnectionResetError, BrokenPipeError:
-                    logging.warning(
-                        f"Broken connection in rq-rs, close the old ones and retry. "
-                        f"Attempt {i} at {self.target_host}:{self.target_port}",
-                    )
-                    await self.close()
-                    await asyncio.sleep(0.5)
-                    await self.create_connection(self.target_host, self.target_port)
-                except Exception as e:
-                    logging.error(f"Uncaught exception: {e}")
-                    i = self.n_retries
-                    break
-                else:
-                    break
-                i += 1
+        self.in_flight += 1
+        try:
+            async with self.lock:
+                while i < self.n_retries:
+                    try:
+                        self.writer.write(message)
+                        await self.writer.drain()
+                        (size,) = unpack(">Q", await self.reader.readexactly(8))
+                        resp = await self.reader.readexactly(size)
+                    except OSError, RuntimeError, ConnectionResetError, BrokenPipeError:
+                        logging.warning(
+                            f"Broken connection in rq-rs, close the old ones and retry. "
+                            f"Attempt {i} at {self.target_host}:{self.target_port}",
+                        )
+                        await self.close()
+                        await asyncio.sleep(0.5)
+                        await self.create_connection(self.target_host, self.target_port)
+                    except Exception as e:
+                        logging.error(f"Uncaught exception: {e}")
+                        i = self.n_retries
+                        break
+                    else:
+                        break
+                    i += 1
+        finally:
+            self.in_flight -= 1
         if i == self.n_retries:
             logging.error(
                 f"Cannot send_message_rq_rs to worker {self.target_host}:{self.target_port}",
@@ -165,10 +208,26 @@ class SocketPool:
         return self
 
     def __next__(self) -> StyxSocketClient:
-        conn = self.conns[self.index]
-        next_idx = self.index + 1
-        self.index = 0 if next_idx == self.size else next_idx
-        return conn
+        # Load-aware pick: starting from the running round-robin index, scan the
+        # ring and return the least-loaded connection. Falls back to pure
+        # round-robin when all conns are equally loaded (typical idle state).
+        # Early-exits at in_flight == 0 to keep this cheap on the hot path.
+        best_idx = self.index
+        best_load = self.conns[best_idx].in_flight
+        if best_load != 0:
+            for offset in range(1, self.size):
+                idx = self.index + offset
+                if idx >= self.size:
+                    idx -= self.size
+                load = self.conns[idx].in_flight
+                if load < best_load:
+                    best_idx = idx
+                    best_load = load
+                    if load == 0:
+                        break
+        next_start = best_idx + 1
+        self.index = 0 if next_start == self.size else next_start
+        return self.conns[best_idx]
 
     async def create_socket_connections(self) -> None:
         for _ in range(self.size):
@@ -186,13 +245,16 @@ class NetworkingManager(BaseNetworking):
     def __init__(
         self,
         host_port: int | None,
-        size: int = 4,
+        size: int = SOCKET_POOL_SIZE,
         mode: MessagingMode = MessagingMode.WORKER_COR,
     ) -> None:
         super().__init__(host_port, mode)
         self.aio_task_scheduler = AIOTaskScheduler(max_concurrency=1_000)
         self.pools: dict[tuple[str, int], SocketPool] = {}
-        self.get_socket_lock: asyncio.Lock = asyncio.Lock()
+        # Only held during the rare pool-creation path. After a pool is published
+        # to self.pools, all hot-path lookups and round-robin picks are lock-free —
+        # asyncio's single-threaded execution makes dict.get() and __next__() atomic.
+        self._pool_creation_lock: asyncio.Lock = asyncio.Lock()
         self.socket_pool_size: int = size
 
         self.peers: dict[int, tuple[str, int, int]] = {}
@@ -209,13 +271,19 @@ class NetworkingManager(BaseNetworking):
             await pool.close()
 
     async def create_socket_connection(self, host: str, port: int) -> None:
-        self.pools[(host, port)] = SocketPool(
-            host,
-            port,
-            size=self.socket_pool_size,
-            mode=self.messaging_mode,
-        )
-        await self.pools[(host, port)].create_socket_connections()
+        """Idempotent. Builds the pool fully before publishing to self.pools so
+        concurrent callers never see a half-initialised pool."""
+        async with self._pool_creation_lock:
+            if (host, port) in self.pools:
+                return
+            pool = SocketPool(
+                host,
+                port,
+                size=self.socket_pool_size,
+                mode=self.messaging_mode,
+            )
+            await pool.create_socket_connections()
+            self.pools[(host, port)] = pool
 
     async def send_message(
         self,
@@ -226,10 +294,13 @@ class NetworkingManager(BaseNetworking):
         serializer: Serializer = Serializer.CLOUDPICKLE,
     ) -> None:
         msg = self.encode_message(msg=msg, msg_type=msg_type, serializer=serializer)
-        async with self.get_socket_lock:
-            if (host, port) not in self.pools:
-                await self.create_socket_connection(host, port)
-            socket_conn = next(self.pools[(host, port)])
+        # Hot path: lock-free. dict.get and __next__ have no await points, so
+        # asyncio's cooperative scheduling makes them atomic.
+        pool = self.pools.get((host, port))
+        if pool is None:
+            await self.create_socket_connection(host, port)
+            pool = self.pools[(host, port)]
+        socket_conn = next(pool)
         await socket_conn.send_message(msg)
 
     def set_peers(self, peers: dict[int, tuple[str, int, int]]) -> None:
@@ -298,10 +369,11 @@ class NetworkingManager(BaseNetworking):
         serializer: Serializer = Serializer.CLOUDPICKLE,
     ) -> object:
         msg = self.encode_message(msg=msg, msg_type=msg_type, serializer=serializer)
-        async with self.get_socket_lock:
-            if (host, port) not in self.pools:
-                await self.create_socket_connection(host, port)
-            socket_conn = next(self.pools[(host, port)])
+        pool = self.pools.get((host, port))
+        if pool is None:
+            await self.create_socket_connection(host, port)
+            pool = self.pools[(host, port)]
+        socket_conn = next(pool)
 
         raw = await socket_conn.send_message_rq_rs(msg)
         if raw is None:
@@ -317,7 +389,7 @@ class NetworkingManager(BaseNetworking):
         serializer: Serializer,
     ) -> bytes:
         if serializer == Serializer.CLOUDPICKLE:
-            msg = struct.pack(">B", msg_type) + struct.pack(">B", 0) + cloudpickle_serialization(msg)
+            msg = _msg_header(msg_type, 0) + cloudpickle_serialization(msg)
         elif serializer == Serializer.MSGPACK:
             ser_msg: bytes = msgpack_serialization(msg)
             ser_id = 1
@@ -325,13 +397,13 @@ class NetworkingManager(BaseNetworking):
                 # If it's more than 4KB compress
                 ser_msg = zstd_msgpack_serialization(ser_msg, already_ser=True)
                 ser_id = 4
-            msg = struct.pack(">B", msg_type) + struct.pack(">B", ser_id) + ser_msg
+            msg = _msg_header(msg_type, ser_id) + ser_msg
         elif serializer == Serializer.PICKLE:
-            msg = struct.pack(">B", msg_type) + struct.pack(">B", 2) + pickle_serialization(msg)
+            msg = _msg_header(msg_type, 2) + pickle_serialization(msg)
         elif serializer == Serializer.NONE:
-            msg = struct.pack(">B", msg_type) + struct.pack(">B", 3) + msg
+            msg = _msg_header(msg_type, 3) + msg
         elif serializer == Serializer.COMPRESSED_MSGPACK:
-            msg = struct.pack(">B", msg_type) + struct.pack(">B", 4) + zstd_msgpack_serialization(msg)
+            msg = _msg_header(msg_type, 4) + zstd_msgpack_serialization(msg)
         else:
             logging.error(f"Serializer: {serializer} is not supported")
             raise SerializerNotSupportedError
