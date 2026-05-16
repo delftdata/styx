@@ -1,5 +1,6 @@
 import asyncio
 import os
+import socket
 import struct
 from struct import unpack
 from typing import TYPE_CHECKING
@@ -24,6 +25,13 @@ if TYPE_CHECKING:
 
 USE_COMPRESSION: bool = bool(strtobool(os.getenv("ENABLE_COMPRESSION", "true")))
 COMPRESS_AFTER: int = int(os.getenv("COMPRESS_AFTER", "4096"))
+# Per-connection kernel socket buffers. Defaults match the server-side listening
+# sockets (1 MB). Bump via env when bursty workloads stall on backpressure.
+SOCKET_SND_BUF: int = int(os.getenv("SOCKET_SND_BUF", str(1 << 20)))
+SOCKET_RCV_BUF: int = int(os.getenv("SOCKET_RCV_BUF", str(1 << 20)))
+# Connections per (host, port) pool. 4 is fine at low concurrency; under 100+
+# concurrent transactions the per-conn lock becomes the bottleneck.
+SOCKET_POOL_SIZE: int = int(os.getenv("SOCKET_POOL_SIZE", "16"))
 
 
 class StyxSocketClient:
@@ -55,6 +63,15 @@ class StyxSocketClient:
             except Exception as e:
                 logging.error(f"Uncaught exception: {e}")
             else:
+                # Disable Nagle and bump kernel buffers on the accepted client
+                # socket. open_connection() doesn't propagate these from anywhere,
+                # so without this the client side runs with Nagle ON — which can
+                # add up to 40ms of coalescing latency on small writes.
+                sock: socket.socket | None = self.writer.get_extra_info("socket")
+                if sock is not None:
+                    sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                    sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, SOCKET_SND_BUF)
+                    sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, SOCKET_RCV_BUF)
                 logging.info(f"Connection made to {host}:{port}")
                 break
             i += 1
@@ -186,7 +203,7 @@ class NetworkingManager(BaseNetworking):
     def __init__(
         self,
         host_port: int | None,
-        size: int = 4,
+        size: int = SOCKET_POOL_SIZE,
         mode: MessagingMode = MessagingMode.WORKER_COR,
     ) -> None:
         super().__init__(host_port, mode)
