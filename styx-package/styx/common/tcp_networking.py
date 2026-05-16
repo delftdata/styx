@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from setuptools._distutils.util import strtobool
 
-from styx.common.base_networking import BATCH_FLUSH_INTERVAL_MS, BaseNetworking, MessagingMode
+from styx.common.base_networking import BaseNetworking, MessagingMode
 from styx.common.exceptions import SerializerNotSupportedError
 from styx.common.logging import logging
 from styx.common.message_types import MessageType
@@ -248,10 +248,9 @@ class NetworkingManager(BaseNetworking):
         self._flush_task: asyncio.Task | None = None
 
     async def _flush_loop(self) -> None:
-        interval = BATCH_FLUSH_INTERVAL_MS / 1000.0
         try:
             while True:
-                await asyncio.sleep(interval)
+                await asyncio.sleep(0)
                 for pool in self.pools.values():
                     await pool.flush_all()
         except asyncio.CancelledError:
