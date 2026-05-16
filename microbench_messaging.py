@@ -15,18 +15,20 @@ Usage:
     python microbench_messaging.py --concurrent 10 100 500 1000
 """
 
+# ruff: noqa: T201
+
+import argparse
 import asyncio
+from itertools import cycle
 import socket
+import statistics
 import struct
 import time
-import statistics
-import argparse
-from itertools import cycle
-
 
 # ---------------------------------------------------------------------------
 # Wire framing  (matches Styx: 8-byte big-endian size header + payload)
 # ---------------------------------------------------------------------------
+
 
 def make_message(payload_size: int) -> bytes:
     payload = b"x" * payload_size
@@ -36,6 +38,7 @@ def make_message(payload_size: int) -> bytes:
 # ---------------------------------------------------------------------------
 # TCP sink  —  reads and discards messages as fast as possible
 # ---------------------------------------------------------------------------
+
 
 class MessageSink:
     def __init__(self):
@@ -49,7 +52,7 @@ class MessageSink:
                 (size,) = struct.unpack(">Q", header)
                 await reader.readexactly(size)
                 self.total_received += 1
-        except (asyncio.IncompleteReadError, ConnectionResetError, OSError):
+        except asyncio.IncompleteReadError, ConnectionResetError, OSError:
             pass
         finally:
             try:
@@ -70,7 +73,7 @@ class MessageSink:
 # Connection pool  —  mirrors Styx's SocketPool (default 4 connections/remote)
 # ---------------------------------------------------------------------------
 
-POOL_SIZE = 4   # Styx default socket_pool_size
+POOL_SIZE = 4  # Styx default socket_pool_size
 
 
 class Pool:
@@ -131,6 +134,7 @@ class Pool:
 # Benchmark helpers
 # ---------------------------------------------------------------------------
 
+
 async def bench_latency(
     pool: Pool,
     messages: list[bytes],
@@ -189,21 +193,23 @@ def fmt_lat(latencies: list[float]) -> str:
 # N = number of order lines per NewOrder transaction
 # ---------------------------------------------------------------------------
 
+
 def scenarios(N: int) -> list[tuple[str, int]]:
     return [
-        (f"NewOrder phase-1  coordinator → warehouse + district + customer",        3),
+        ("NewOrder phase-1  coordinator → warehouse + district + customer", 3),
         (f"NewOrder phase-2  district → txn_coord + {N} items + order + new_order", N + 3),
-        (f"NewOrder phase-3  {N} items → {N} stocks",                               N),
-        (f"NewOrder phase-4  {N} stocks → txn_coord({N}) + order_line({N})",        2 * N),
-        (f"NewOrder total    all phases combined ({4*N+8} msgs, N={N})",             4 * N + 8),
-        (f"Payment           coordinator → warehouse + district + customer",         3),
-        (f"Payment           3 replies → txn_coord + history insert",               4),
+        (f"NewOrder phase-3  {N} items → {N} stocks", N),
+        (f"NewOrder phase-4  {N} stocks → txn_coord({N}) + order_line({N})", 2 * N),
+        (f"NewOrder total    all phases combined ({4 * N + 8} msgs, N={N})", 4 * N + 8),
+        ("Payment           coordinator → warehouse + district + customer", 3),
+        ("Payment           3 replies → txn_coord + history insert", 4),
     ]
 
 
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 async def run(args: argparse.Namespace):
     N = args.items
@@ -231,12 +237,11 @@ async def run(args: argparse.Namespace):
         await pool.connect(host, port)
 
         print(f"\n── {name}")
-        print(f"   {n_msgs} msg/txn, {payload_size} bytes/msg  "
-              f"= {n_msgs * (payload_size + 8):,} bytes/txn")
+        print(f"   {n_msgs} msg/txn, {payload_size} bytes/msg  = {n_msgs * (payload_size + 8):,} bytes/txn")
 
         # -- Latency ----------------------------------------------------------
         seq_lat = await bench_latency(pool, messages, pool.send_sequential, n_iter, n_warmup)
-        bat_lat = await bench_latency(pool, messages, pool.send_batched,    n_iter, n_warmup)
+        bat_lat = await bench_latency(pool, messages, pool.send_batched, n_iter, n_warmup)
 
         speedup_p50 = _pct(seq_lat, 0.50) / _pct(bat_lat, 0.50)
         speedup_p99 = _pct(seq_lat, 0.99) / _pct(bat_lat, 0.99)
@@ -246,17 +251,12 @@ async def run(args: argparse.Namespace):
         print(f"            speedup    : {speedup_p50:.1f}x (p50)  {speedup_p99:.1f}x (p99)")
 
         # -- Throughput -------------------------------------------------------
-        print(f"   Throughput  [concurrent txns  →  messages / second]")
+        print("   Throughput  [concurrent txns  →  messages / second]")
         print(f"   {'txns':>6}   {'sequential':>14}   {'batched':>14}   speedup")
         for n_conc in concurrent_levels:
             seq_el, seq_tp = await bench_throughput(pool, messages, pool.send_sequential, n_conc)
-            bat_el, bat_tp = await bench_throughput(pool, messages, pool.send_batched,    n_conc)
-            print(
-                f"   {n_conc:>6}   "
-                f"{seq_tp:>11,.0f} msg/s   "
-                f"{bat_tp:>11,.0f} msg/s   "
-                f"{bat_tp / seq_tp:.1f}x"
-            )
+            bat_el, bat_tp = await bench_throughput(pool, messages, pool.send_batched, n_conc)
+            print(f"   {n_conc:>6}   {seq_tp:>11,.0f} msg/s   {bat_tp:>11,.0f} msg/s   {bat_tp / seq_tp:.1f}x")
 
         await pool.close()
         await sink.stop()
@@ -266,14 +266,16 @@ async def run(args: argparse.Namespace):
 
 def main():
     p = argparse.ArgumentParser(description="Styx TCP messaging microbenchmark")
-    p.add_argument("--items",       type=int,   default=15,
-                   help="NewOrder order lines N (default 15, max spec 15)")
-    p.add_argument("--payload",     type=int,   default=256,
-                   help="Bytes per message payload (default 256)")
-    p.add_argument("--iterations",  type=int,   default=1000,
-                   help="Latency iterations per scenario (default 1000)")
-    p.add_argument("--concurrent",  nargs="+",  type=int, default=[10, 100, 500, 1000],
-                   help="Concurrency levels for throughput test (default: 10 100 500 1000)")
+    p.add_argument("--items", type=int, default=15, help="NewOrder order lines N (default 15, max spec 15)")
+    p.add_argument("--payload", type=int, default=256, help="Bytes per message payload (default 256)")
+    p.add_argument("--iterations", type=int, default=1000, help="Latency iterations per scenario (default 1000)")
+    p.add_argument(
+        "--concurrent",
+        nargs="+",
+        type=int,
+        default=[10, 100, 500, 1000],
+        help="Concurrency levels for throughput test (default: 10 100 500 1000)",
+    )
     asyncio.run(run(p.parse_args()))
 
 
