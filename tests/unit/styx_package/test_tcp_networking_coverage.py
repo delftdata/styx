@@ -162,7 +162,6 @@ class TestNetworkingManagerSendMessage:
     async def test_send_creates_pool_if_missing(self):
         nm = _nm()
         mock_socket = MagicMock()
-        mock_socket.send_message = AsyncMock()
 
         mock_pool = MagicMock()
         mock_pool.create_socket_connections = AsyncMock()
@@ -177,20 +176,19 @@ class TestNetworkingManagerSendMessage:
             await nm.send_message("10.0.0.2", 6001, ("data",), MessageType.ClientMsg, Serializer.MSGPACK)
 
         mock_create.assert_called_once_with("10.0.0.2", 6001)
-        mock_socket.send_message.assert_called_once()
+        mock_socket.buffer_message.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_send_reuses_existing_pool(self):
         nm = _nm()
         mock_socket = MagicMock()
-        mock_socket.send_message = AsyncMock()
 
         mock_pool = MagicMock()
         mock_pool.__next__ = MagicMock(return_value=mock_socket)
         nm.pools[("10.0.0.2", 6001)] = mock_pool
 
         await nm.send_message("10.0.0.2", 6001, ("data",), MessageType.ClientMsg, Serializer.MSGPACK)
-        mock_socket.send_message.assert_called_once()
+        mock_socket.buffer_message.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
