@@ -33,6 +33,21 @@ SOCKET_RCV_BUF: int = int(os.getenv("SOCKET_RCV_BUF", str(1 << 20)))
 # concurrent transactions the per-conn lock becomes the bottleneck.
 SOCKET_POOL_SIZE: int = int(os.getenv("SOCKET_POOL_SIZE", "16"))
 
+# Cache for the 2-byte (msg_type, serializer_id) framing header. Keyspace is
+# bounded by len(MessageType) * 5 serializers (~250 entries max), so the dict
+# can grow once and then it's pure lookups. Saves two struct.pack(">B") calls
+# and a bytes concat per encoded message.
+_HEADER_CACHE: dict[tuple[int, int], bytes] = {}
+
+
+def _msg_header(msg_type: int, ser_id: int) -> bytes:
+    key = (msg_type, ser_id)
+    h = _HEADER_CACHE.get(key)
+    if h is None:
+        h = struct.pack(">BB", msg_type, ser_id)
+        _HEADER_CACHE[key] = h
+    return h
+
 
 class StyxSocketClient:
     def __init__(self) -> None:
@@ -347,7 +362,7 @@ class NetworkingManager(BaseNetworking):
         serializer: Serializer,
     ) -> bytes:
         if serializer == Serializer.CLOUDPICKLE:
-            msg = struct.pack(">B", msg_type) + struct.pack(">B", 0) + cloudpickle_serialization(msg)
+            msg = _msg_header(msg_type, 0) + cloudpickle_serialization(msg)
         elif serializer == Serializer.MSGPACK:
             ser_msg: bytes = msgpack_serialization(msg)
             ser_id = 1
@@ -355,13 +370,13 @@ class NetworkingManager(BaseNetworking):
                 # If it's more than 4KB compress
                 ser_msg = zstd_msgpack_serialization(ser_msg, already_ser=True)
                 ser_id = 4
-            msg = struct.pack(">B", msg_type) + struct.pack(">B", ser_id) + ser_msg
+            msg = _msg_header(msg_type, ser_id) + ser_msg
         elif serializer == Serializer.PICKLE:
-            msg = struct.pack(">B", msg_type) + struct.pack(">B", 2) + pickle_serialization(msg)
+            msg = _msg_header(msg_type, 2) + pickle_serialization(msg)
         elif serializer == Serializer.NONE:
-            msg = struct.pack(">B", msg_type) + struct.pack(">B", 3) + msg
+            msg = _msg_header(msg_type, 3) + msg
         elif serializer == Serializer.COMPRESSED_MSGPACK:
-            msg = struct.pack(">B", msg_type) + struct.pack(">B", 4) + zstd_msgpack_serialization(msg)
+            msg = _msg_header(msg_type, 4) + zstd_msgpack_serialization(msg)
         else:
             logging.error(f"Serializer: {serializer} is not supported")
             raise SerializerNotSupportedError
