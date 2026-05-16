@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from setuptools._distutils.util import strtobool
 
-from styx.common.base_networking import BaseNetworking, MessagingMode
+from styx.common.base_networking import BATCH_FLUSH_INTERVAL_MS, BaseNetworking, MessagingMode
 from styx.common.exceptions import SerializerNotSupportedError
 from styx.common.logging import logging
 from styx.common.message_types import MessageType
@@ -34,6 +34,48 @@ class StyxSocketClient:
         self.target_port: int | None = None
         self.lock: asyncio.Lock = asyncio.Lock()
         self.n_retries: int = 3
+        self._send_buffer: list[bytes] = []
+
+    def buffer_message(self, message: bytes) -> None:
+        """Append message to the send buffer without flushing to the socket."""
+        self._send_buffer.append(message)
+
+    async def flush(self) -> None:
+        """Write all buffered messages in one write()+drain() call."""
+        if not self._send_buffer:
+            return
+        async with self.lock:
+            if not self._send_buffer:
+                return
+            if self.writer is None:
+                logging.error("flush called but writer is not initialized — discarding buffer.")
+                self._send_buffer.clear()
+                return
+            data = b"".join(self._send_buffer)
+            self._send_buffer.clear()
+            i = 0
+            while i < self.n_retries:
+                try:
+                    self.writer.write(data)
+                    await self.writer.drain()
+                    break
+                except (OSError, RuntimeError, ConnectionResetError, BrokenPipeError):
+                    logging.warning(
+                        f"Broken connection during flush, reconnecting. "
+                        f"Attempt {i} at {self.target_host}:{self.target_port}",
+                    )
+                    await self.close()
+                    await asyncio.sleep(0.5)
+                    await self.create_connection(self.target_host, self.target_port)
+                except Exception as e:
+                    logging.error(f"Uncaught exception during flush: {e}")
+                    i = self.n_retries
+                    break
+                i += 1
+            if i == self.n_retries:
+                logging.error(
+                    f"Cannot flush to {self.target_host}:{self.target_port} after {self.n_retries} attempts.",
+                )
 
     async def create_connection(self, host: str, port: int) -> bool:
         self.target_host = host
@@ -130,6 +172,7 @@ class StyxSocketClient:
         return resp
 
     async def close(self) -> None:
+        self._send_buffer.clear()
         try:
             if self.writer is not None:
                 self.writer.close()
@@ -176,6 +219,10 @@ class SocketPool:
             await client.create_connection(self.host, self.port)
             self.conns.append(client)
 
+    async def flush_all(self) -> None:
+        for conn in self.conns:
+            await conn.flush()
+
     async def close(self) -> None:
         for conn in self.conns:
             await conn.close()
@@ -197,8 +244,28 @@ class NetworkingManager(BaseNetworking):
 
         self.peers: dict[int, tuple[str, int, int]] = {}
         self.wait_remote_key_event: dict[OperatorPartition, dict[K, asyncio.Event]] = {}
+        self._flush_task: asyncio.Task | None = None
+
+    async def _flush_loop(self) -> None:
+        interval = BATCH_FLUSH_INTERVAL_MS / 1000.0
+        try:
+            while True:
+                await asyncio.sleep(interval)
+                for pool in self.pools.values():
+                    await pool.flush_all()
+        except asyncio.CancelledError:
+            # Final flush before exit so in-flight messages are not dropped.
+            for pool in self.pools.values():
+                await pool.flush_all()
 
     async def close_all_connections(self) -> None:
+        if self._flush_task is not None:
+            self._flush_task.cancel()
+            try:
+                await self._flush_task
+            except asyncio.CancelledError:
+                pass
+            self._flush_task = None
         for pool in self.pools.values():
             await pool.close()
         self.pools = {}
@@ -216,6 +283,8 @@ class NetworkingManager(BaseNetworking):
             mode=self.messaging_mode,
         )
         await self.pools[(host, port)].create_socket_connections()
+        if self._flush_task is None:
+            self._flush_task = asyncio.create_task(self._flush_loop())
 
     async def send_message(
         self,
@@ -230,7 +299,7 @@ class NetworkingManager(BaseNetworking):
             if (host, port) not in self.pools:
                 await self.create_socket_connection(host, port)
             socket_conn = next(self.pools[(host, port)])
-        await socket_conn.send_message(msg)
+        socket_conn.buffer_message(msg)
 
     def set_peers(self, peers: dict[int, tuple[str, int, int]]) -> None:
         self.peers = peers
