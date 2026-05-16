@@ -240,7 +240,10 @@ class NetworkingManager(BaseNetworking):
         super().__init__(host_port, mode)
         self.aio_task_scheduler = AIOTaskScheduler(max_concurrency=1_000)
         self.pools: dict[tuple[str, int], SocketPool] = {}
-        self.get_socket_lock: asyncio.Lock = asyncio.Lock()
+        # Only held during the rare pool-creation path. After a pool is published
+        # to self.pools, all hot-path lookups and round-robin picks are lock-free —
+        # asyncio's single-threaded execution makes dict.get() and __next__() atomic.
+        self._pool_creation_lock: asyncio.Lock = asyncio.Lock()
         self.socket_pool_size: int = size
 
         self.peers: dict[int, tuple[str, int, int]] = {}
@@ -274,15 +277,21 @@ class NetworkingManager(BaseNetworking):
             await pool.close()
 
     async def create_socket_connection(self, host: str, port: int) -> None:
-        self.pools[(host, port)] = SocketPool(
-            host,
-            port,
-            size=self.socket_pool_size,
-            mode=self.messaging_mode,
-        )
-        await self.pools[(host, port)].create_socket_connections()
-        if self._flush_task is None:
-            self._flush_task = asyncio.create_task(self._flush_loop())
+        """Idempotent. Builds the pool fully before publishing to self.pools so
+        concurrent callers never see a half-initialised pool."""
+        async with self._pool_creation_lock:
+            if (host, port) in self.pools:
+                return
+            pool = SocketPool(
+                host,
+                port,
+                size=self.socket_pool_size,
+                mode=self.messaging_mode,
+            )
+            await pool.create_socket_connections()
+            self.pools[(host, port)] = pool
+            if self._flush_task is None:
+                self._flush_task = asyncio.create_task(self._flush_loop())
 
     async def send_message(
         self,
@@ -293,10 +302,13 @@ class NetworkingManager(BaseNetworking):
         serializer: Serializer = Serializer.CLOUDPICKLE,
     ) -> None:
         msg = self.encode_message(msg=msg, msg_type=msg_type, serializer=serializer)
-        async with self.get_socket_lock:
-            if (host, port) not in self.pools:
-                await self.create_socket_connection(host, port)
-            socket_conn = next(self.pools[(host, port)])
+        # Hot path: lock-free. dict.get and __next__ have no await points, so
+        # asyncio's cooperative scheduling makes them atomic.
+        pool = self.pools.get((host, port))
+        if pool is None:
+            await self.create_socket_connection(host, port)
+            pool = self.pools[(host, port)]
+        socket_conn = next(pool)
         socket_conn.buffer_message(msg)
 
     def set_peers(self, peers: dict[int, tuple[str, int, int]]) -> None:
@@ -365,10 +377,11 @@ class NetworkingManager(BaseNetworking):
         serializer: Serializer = Serializer.CLOUDPICKLE,
     ) -> object:
         msg = self.encode_message(msg=msg, msg_type=msg_type, serializer=serializer)
-        async with self.get_socket_lock:
-            if (host, port) not in self.pools:
-                await self.create_socket_connection(host, port)
-            socket_conn = next(self.pools[(host, port)])
+        pool = self.pools.get((host, port))
+        if pool is None:
+            await self.create_socket_connection(host, port)
+            pool = self.pools[(host, port)]
+        socket_conn = next(pool)
 
         raw = await socket_conn.send_message_rq_rs(msg)
         if raw is None:
