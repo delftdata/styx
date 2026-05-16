@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import os
 import struct
 from struct import unpack
@@ -59,7 +60,7 @@ class StyxSocketClient:
                     self.writer.write(data)
                     await self.writer.drain()
                     break
-                except (OSError, RuntimeError, ConnectionResetError, BrokenPipeError):
+                except OSError, RuntimeError, ConnectionResetError, BrokenPipeError:
                     logging.warning(
                         f"Broken connection during flush, reconnecting. "
                         f"Attempt {i} at {self.target_host}:{self.target_port}",
@@ -261,10 +262,8 @@ class NetworkingManager(BaseNetworking):
     async def close_all_connections(self) -> None:
         if self._flush_task is not None:
             self._flush_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._flush_task
-            except asyncio.CancelledError:
-                pass
             self._flush_task = None
         for pool in self.pools.values():
             await pool.close()

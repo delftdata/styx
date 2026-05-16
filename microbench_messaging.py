@@ -15,15 +15,21 @@ Usage:
     python microbench_messaging.py --concurrent 10 100 500 1000
 """
 
-# ruff: noqa: T201
+from __future__ import annotations
 
+# ruff: noqa: T201
 import argparse
 import asyncio
+import contextlib
 from itertools import cycle
 import socket
 import statistics
 import struct
 import time
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
 
 # ---------------------------------------------------------------------------
 # Wire framing  (matches Styx: 8-byte big-endian size header + payload)
@@ -41,30 +47,28 @@ def make_message(payload_size: int) -> bytes:
 
 
 class MessageSink:
-    def __init__(self):
+    def __init__(self) -> None:
         self._server = None
         self.total_received = 0
 
-    async def _handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+    async def _handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         try:
             while True:
                 header = await reader.readexactly(8)
                 (size,) = struct.unpack(">Q", header)
                 await reader.readexactly(size)
                 self.total_received += 1
-        except asyncio.IncompleteReadError, ConnectionResetError, OSError:
+        except (asyncio.IncompleteReadError, ConnectionResetError, OSError):
             pass
         finally:
-            try:
+            with contextlib.suppress(Exception):
                 writer.close()
-            except Exception:
-                pass
 
     async def start(self, host: str = "127.0.0.1") -> tuple[str, int]:
         self._server = await asyncio.start_server(self._handle, host, 0)
         return self._server.sockets[0].getsockname()
 
-    async def stop(self):
+    async def stop(self) -> None:
         self._server.close()
         await self._server.wait_closed()
 
@@ -77,12 +81,12 @@ POOL_SIZE = 4  # Styx default socket_pool_size
 
 
 class Pool:
-    def __init__(self):
+    def __init__(self) -> None:
         self._writers: list[asyncio.StreamWriter] = []
         self._locks: list[asyncio.Lock] = []
         self._cycle = None
 
-    async def connect(self, host: str, port: int):
+    async def connect(self, host: str, port: int) -> None:
         for _ in range(POOL_SIZE):
             _, writer = await asyncio.open_connection(host, port)
             sock: socket.socket = writer.get_extra_info("socket")
@@ -97,7 +101,7 @@ class Pool:
         idx = next(self._cycle)
         return self._writers[idx], self._locks[idx]
 
-    async def send_sequential(self, messages: list[bytes]):
+    async def send_sequential(self, messages: list[bytes]) -> None:
         """
         Current Styx behaviour: every call_remote_async triggers one
         send_message() call which acquires the connection lock, writes the
@@ -109,7 +113,7 @@ class Pool:
                 writer.write(msg)
                 await writer.drain()
 
-    async def send_batched(self, messages: list[bytes]):
+    async def send_batched(self, messages: list[bytes]) -> None:
         """
         Proposed optimisation: accumulate all messages for this phase into a
         single bytes object, acquire the lock once, write once, drain once.
@@ -121,13 +125,11 @@ class Pool:
             writer.write(b"".join(messages))
             await writer.drain()
 
-    async def close(self):
+    async def close(self) -> None:
         for w in self._writers:
-            try:
+            with contextlib.suppress(Exception):
                 w.close()
                 await w.wait_closed()
-            except Exception:
-                pass
 
 
 # ---------------------------------------------------------------------------
@@ -136,9 +138,8 @@ class Pool:
 
 
 async def bench_latency(
-    pool: Pool,
     messages: list[bytes],
-    send_fn,
+    send_fn: Callable[[list[bytes]], Awaitable[None]],
     n_iter: int,
     n_warmup: int,
 ) -> list[float]:
@@ -154,9 +155,8 @@ async def bench_latency(
 
 
 async def bench_throughput(
-    pool: Pool,
     messages: list[bytes],
-    send_fn,
+    send_fn: Callable[[list[bytes]], Awaitable[None]],
     n_concurrent: int,
     n_warmup_frac: float = 0.1,
 ) -> tuple[float, float]:
@@ -190,17 +190,17 @@ def fmt_lat(latencies: list[float]) -> str:
 
 # ---------------------------------------------------------------------------
 # TPC-C scenarios derived from the message trace
-# N = number of order lines per NewOrder transaction
+# n = number of order lines per NewOrder transaction
 # ---------------------------------------------------------------------------
 
 
-def scenarios(N: int) -> list[tuple[str, int]]:
+def scenarios(n: int) -> list[tuple[str, int]]:
     return [
         ("NewOrder phase-1  coordinator → warehouse + district + customer", 3),
-        (f"NewOrder phase-2  district → txn_coord + {N} items + order + new_order", N + 3),
-        (f"NewOrder phase-3  {N} items → {N} stocks", N),
-        (f"NewOrder phase-4  {N} stocks → txn_coord({N}) + order_line({N})", 2 * N),
-        (f"NewOrder total    all phases combined ({4 * N + 8} msgs, N={N})", 4 * N + 8),
+        (f"NewOrder phase-2  district → txn_coord + {n} items + order + new_order", n + 3),
+        (f"NewOrder phase-3  {n} items → {n} stocks", n),
+        (f"NewOrder phase-4  {n} stocks → txn_coord({n}) + order_line({n})", 2 * n),
+        (f"NewOrder total    all phases combined ({4 * n + 8} msgs, N={n})", 4 * n + 8),
         ("Payment           coordinator → warehouse + district + customer", 3),
         ("Payment           3 replies → txn_coord + history insert", 4),
     ]
@@ -211,8 +211,8 @@ def scenarios(N: int) -> list[tuple[str, int]]:
 # ---------------------------------------------------------------------------
 
 
-async def run(args: argparse.Namespace):
-    N = args.items
+async def run(args: argparse.Namespace) -> None:
+    n_items = args.items
     payload_size = args.payload
     n_iter = args.iterations
     n_warmup = max(10, n_iter // 20)
@@ -223,12 +223,12 @@ async def run(args: argparse.Namespace):
     print("STYX TCP MESSAGING MICROBENCHMARK  —  sequential vs batched")
     print(f"  Payload per message : {payload_size} bytes")
     print(f"  Pool size           : {POOL_SIZE} connections / remote  (Styx default)")
-    print(f"  NewOrder items (N)  : {N}")
+    print(f"  NewOrder items (N)  : {n_items}")
     print(f"  Latency iterations  : {n_iter}")
     print(f"  Concurrency levels  : {concurrent_levels}")
     print(sep)
 
-    for name, n_msgs in scenarios(N):
+    for name, n_msgs in scenarios(n_items):
         messages = [make_message(payload_size)] * n_msgs
 
         sink = MessageSink()
@@ -240,8 +240,8 @@ async def run(args: argparse.Namespace):
         print(f"   {n_msgs} msg/txn, {payload_size} bytes/msg  = {n_msgs * (payload_size + 8):,} bytes/txn")
 
         # -- Latency ----------------------------------------------------------
-        seq_lat = await bench_latency(pool, messages, pool.send_sequential, n_iter, n_warmup)
-        bat_lat = await bench_latency(pool, messages, pool.send_batched, n_iter, n_warmup)
+        seq_lat = await bench_latency(messages, pool.send_sequential, n_iter, n_warmup)
+        bat_lat = await bench_latency(messages, pool.send_batched, n_iter, n_warmup)
 
         speedup_p50 = _pct(seq_lat, 0.50) / _pct(bat_lat, 0.50)
         speedup_p99 = _pct(seq_lat, 0.99) / _pct(bat_lat, 0.99)
@@ -254,8 +254,8 @@ async def run(args: argparse.Namespace):
         print("   Throughput  [concurrent txns  →  messages / second]")
         print(f"   {'txns':>6}   {'sequential':>14}   {'batched':>14}   speedup")
         for n_conc in concurrent_levels:
-            seq_el, seq_tp = await bench_throughput(pool, messages, pool.send_sequential, n_conc)
-            bat_el, bat_tp = await bench_throughput(pool, messages, pool.send_batched, n_conc)
+            _seq_el, seq_tp = await bench_throughput(messages, pool.send_sequential, n_conc)
+            _bat_el, bat_tp = await bench_throughput(messages, pool.send_batched, n_conc)
             print(f"   {n_conc:>6}   {seq_tp:>11,.0f} msg/s   {bat_tp:>11,.0f} msg/s   {bat_tp / seq_tp:.1f}x")
 
         await pool.close()
@@ -264,7 +264,7 @@ async def run(args: argparse.Namespace):
     print(f"\n{sep}\nDone.")
 
 
-def main():
+def main() -> None:
     p = argparse.ArgumentParser(description="Styx TCP messaging microbenchmark")
     p.add_argument("--items", type=int, default=15, help="NewOrder order lines N (default 15, max spec 15)")
     p.add_argument("--payload", type=int, default=256, help="Bytes per message payload (default 256)")
