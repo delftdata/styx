@@ -149,7 +149,9 @@ class Operator(BaseOperator):
                 await self._send_chain_abort(str(resp), ack_host, ack_port, ack_id)
                 success = False
             elif n_remote_calls == 0:
-                await self.__send_ack(
+                # Non-awaiting: buffers the ack; flush happens automatically
+                # at the next event-loop tick (`NetworkingManager.enqueue_ack`).
+                self.__send_ack(
                     ack_host,
                     ack_port,
                     ack_id,
@@ -214,7 +216,7 @@ class Operator(BaseOperator):
                 serializer=Serializer.MSGPACK,
             )
 
-    async def __send_ack(
+    def __send_ack(
         self,
         ack_host: str,
         ack_port: int,
@@ -222,17 +224,20 @@ class Operator(BaseOperator):
         fraction_str: str,
         chain_participants: list[int],
     ) -> None:
-        """Sends an acknowledgement to the worker that holds the root of a distributed chain during normal operation.
+        """Records an acknowledgement for the root of a distributed chain.
+
+        Same-network: updates the local fraction map directly. Cross-network:
+        buffers the ack for the next event-loop tick; the networking layer
+        coalesces all acks for the same peer into a single `AckBatch` send.
 
         Args:
-            ack_host: Hostname or IP of the next worker.
-            ack_port: Port number of the next worker.
+            ack_host: Hostname or IP of the chain root's worker.
+            ack_port: Port number of the chain root's worker.
             ack_id: Acknowledgement ID for the chain.
             fraction_str: Fraction of chain progress.
             chain_participants: List of worker IDs that participated in the chain.
         """
         if self.__networking.in_the_same_network(ack_host, ack_port):
-            # case when the ack host is the same worker
             self.__networking.add_ack_fraction_str(
                 ack_id,
                 fraction_str,
@@ -241,12 +246,12 @@ class Operator(BaseOperator):
         else:
             if self.__networking.worker_id not in chain_participants:
                 chain_participants.append(self.__networking.worker_id)
-            await self.__networking.send_message(
+            self.__networking.enqueue_ack(
                 ack_host,
                 ack_port,
-                msg=(ack_id, fraction_str, chain_participants),
-                msg_type=MessageType.Ack,
-                serializer=Serializer.MSGPACK,
+                ack_id,
+                fraction_str,
+                chain_participants,
             )
 
     def __materialize_function(

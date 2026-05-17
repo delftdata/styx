@@ -267,7 +267,11 @@ class StatefulFunction(Function):
             self.__networking.prepare_function_chain(self.__t_id)
         elif not self.__networking.in_the_same_network(ack_host, ack_port):
             chain_participants.append(self.__networking.worker_id)
+        # Bucket remote (off-worker) calls by peer so we can send one
+        # RunFunRemoteBatch per peer instead of one RunFunRemote per call.
+        # Local calls still dispatch directly into the in-process protocol.
         remote_calls: list[Awaitable] = []
+        remote_batches: dict[tuple[str, int], list[tuple]] = {}
         for entry in self.__async_remote_calls:
             operator_name, function_name, partition, key, params, is_local = entry
             ack_payload: tuple[str, int, int, str, list[int]] = (
@@ -306,16 +310,25 @@ class StatefulFunction(Function):
                         self.__protocol.run_function(t_id=self.__t_id, payload=payload),
                     )
             else:
-                remote_calls.append(
-                    self.__call_remote_function_no_response(
-                        operator_name=operator_name,
-                        function_name=function_name,
-                        key=key,
-                        partition=partition,
-                        params=params,
-                        ack_payload=ack_payload,
-                    ),
+                wire_payload, peer_host, peer_port = self.__prepare_message_transmission(
+                    operator_name,
+                    key,
+                    function_name,
+                    partition,
+                    params,
+                    ack_payload,
                 )
+                remote_batches.setdefault((peer_host, peer_port), []).append(wire_payload)
+        for (peer_host, peer_port), batch in remote_batches.items():
+            remote_calls.append(
+                self.__networking.send_message(
+                    peer_host,
+                    peer_port,
+                    msg=batch,
+                    msg_type=MessageType.RunFunRemoteBatch,
+                    serializer=Serializer.MSGPACK,
+                ),
+            )
         await asyncio.gather(*remote_calls)
         return n_remote_calls
 

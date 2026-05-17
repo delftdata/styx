@@ -256,10 +256,66 @@ class NetworkingManager(BaseNetworking):
         self.peers: dict[int, tuple[str, int, int]] = {}
         self.wait_remote_key_event: dict[OperatorPartition, dict[K, asyncio.Event]] = {}
 
+        # ACK batching: per-peer buffer flushed on the next event-loop tick.
+        # Coalesces many tiny `send_message(Ack)` calls (one per leaf txn)
+        # into one `send_message(AckBatch)` per peer. The flush is scheduled
+        # via `call_soon`, so all acks enqueued in the current tick batch
+        # together — typical for an epoch where leaves run via `gather`.
+        self._pending_acks: dict[tuple[str, int], list[tuple[int, str, list[int]]]] = {}
+        self._ack_flush_scheduled: bool = False
+
     async def close_all_connections(self) -> None:
         for pool in self.pools.values():
             await pool.close()
         self.pools = {}
+
+    def enqueue_ack(
+        self,
+        host: str,
+        port: int,
+        ack_id: int,
+        fraction_str: str,
+        chain_participants: list[int],
+    ) -> None:
+        """Buffer a cross-network ack; flush is auto-scheduled for the next
+        event-loop tick. Acks enqueued in the same tick coalesce into a
+        single `AckBatch` per peer.
+        """
+        peer = (host, port)
+        pending = self._pending_acks.get(peer)
+        if pending is None:
+            self._pending_acks[peer] = [(ack_id, fraction_str, chain_participants)]
+        else:
+            pending.append((ack_id, fraction_str, chain_participants))
+        if not self._ack_flush_scheduled:
+            self._ack_flush_scheduled = True
+            asyncio.get_event_loop().call_soon(self._kick_ack_flush)
+
+    def _kick_ack_flush(self) -> None:
+        # `call_soon` wants a sync callable; the actual flush is async.
+        # Schedule via `create_task` and let any exception propagate to
+        # the task scheduler's exception logger.
+        self.aio_task_scheduler.create_unbounded_task(self._flush_acks())
+
+    async def _flush_acks(self) -> None:
+        pending = self._pending_acks
+        self._pending_acks = {}
+        # Reset the flag BEFORE awaiting send_message so that any acks
+        # enqueued during the send schedule a fresh flush.
+        self._ack_flush_scheduled = False
+        if not pending:
+            return
+        sends = [
+            self.send_message(
+                host,
+                port,
+                msg=batch,
+                msg_type=MessageType.AckBatch,
+                serializer=Serializer.MSGPACK,
+            )
+            for (host, port), batch in pending.items()
+        ]
+        await asyncio.gather(*sends)
 
     async def close_worker_connections(self, host: str, port: int) -> None:
         pool = self.pools.pop((host, port), None)

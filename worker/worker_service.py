@@ -127,7 +127,6 @@ class Worker:
         self.function_execution_protocol: AriaProtocol | None = None
 
         self.aio_task_scheduler = AIOTaskScheduler()
-        self.protocol_task_scheduler = AIOTaskScheduler()
 
         self.async_snapshots: AsyncSnapshotsS3 | None = None
         self.protocol_task: asyncio.Task | None = None
@@ -869,18 +868,23 @@ class Worker:
 
     async def protocol_queue_worker(self) -> None:
         """
-        Worker that pulls protocol messages from the bounded queue and
-        hands them to the function_execution_protocol. This is where
-        backpressure terminates for the protocol path.
+        Worker that pulls protocol messages from the bounded queue and runs the
+        protocol dispatcher inline.
+
+        Concurrency is bounded by `PROTOCOL_WORKERS`: each worker handles one
+        message at a time. Awaiting `protocol_tcp_controller` directly (instead
+        of `create_task`-ing it) avoids the per-message asyncio Task allocation
+        plus the `AIOTaskScheduler` semaphore round-trip. Handlers that have no
+        internal awaits finish in a single scheduler turn anyway; handlers
+        with awaits (e.g. `_handle_unlock`) get drained by the other 99
+        workers in the pool.
         """
         while True:
             message: bytes = await self.protocol_queue.get()
             try:
                 if self.function_execution_protocol is not None:
-                    self.protocol_task_scheduler.create_task(
-                        self.function_execution_protocol.protocol_tcp_controller(
-                            message,
-                        ),
+                    await self.function_execution_protocol.protocol_tcp_controller(
+                        message,
                     )
                 else:
                     msg_type = self.protocol_networking.get_msg_type(message)

@@ -43,3 +43,5 @@ class MessageType(IntEnum):
     MigrationInitDone = 39
     InitDataComplete = 40
     UpdateExecutionGraph = 41
+    RunFunRemoteBatch = 42
+    AckBatch = 43

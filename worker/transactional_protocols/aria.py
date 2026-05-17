@@ -158,6 +158,7 @@ class AriaProtocol(BaseTransactionalProtocol):
 
         self._protocol_handlers_map: dict[MessageType, Callable[[bytes], Awaitable[None]]] = {
             MessageType.RunFunRemote: self._handle_run_fun_remote,
+            MessageType.RunFunRemoteBatch: self._handle_run_fun_remote_batch,
             MessageType.WrongPartitionRequest: self._handle_wrong_partition_request,
             MessageType.RunFunRqRsRemote: self._handle_deprecated_rqrs,
             MessageType.AriaCommit: self._handle_aria_commit,
@@ -166,6 +167,7 @@ class AriaProtocol(BaseTransactionalProtocol):
             MessageType.SyncCleanup: self._handle_sync_cleanup,
             MessageType.AriaProcessingDone: self._handle_aria_processing_done,
             MessageType.Ack: self._handle_ack,
+            MessageType.AckBatch: self._handle_ack_batch,
             MessageType.ChainAbort: self._handle_chain_abort,
             MessageType.ResponseToRoot: self._handle_response_to_root,
             MessageType.Unlock: self._handle_unlock,
@@ -308,6 +310,38 @@ class AriaProtocol(BaseTransactionalProtocol):
 
         self.background_functions.create_task(self.run_function(t_id, payload))
 
+    async def _handle_run_fun_remote_batch(self, data: bytes) -> None:
+        # Lock-free: no awaits. Decodes a batch of remote-call payloads and
+        # schedules each as a task, mirroring _handle_run_fun_remote per entry.
+        batch = self.networking.decode_message(data)
+        for entry in batch:
+            (
+                t_id,
+                request_id,
+                operator_name,
+                function_name,
+                key,
+                partition,
+                fallback_enabled,
+                params,
+                ack,
+            ) = entry
+            payload = RunFuncPayload(
+                request_id=request_id,
+                key=key,
+                operator_name=operator_name,
+                partition=partition,
+                function_name=function_name,
+                params=params,
+                ack_payload=ack,
+            )
+            if fallback_enabled:
+                self.background_functions.create_unbounded_task(
+                    self.run_fallback_function(t_id, payload, internal=True),
+                )
+            else:
+                self.background_functions.create_task(self.run_function(t_id, payload))
+
     async def _handle_wrong_partition_request(self, data: bytes) -> None:
         # Lock-free: no awaits.
         (
@@ -378,6 +412,14 @@ class AriaProtocol(BaseTransactionalProtocol):
             fraction_str,
             chain_participants,
         )
+
+    async def _handle_ack_batch(self, data: bytes) -> None:
+        # Lock-free: no awaits. Decodes a coalesced batch from a peer and
+        # applies each entry through the same single-entry codepath.
+        batch = self.networking.decode_message(data)
+        add = self.networking.add_ack_fraction_str
+        for ack_id, fraction_str, chain_participants in batch:
+            add(ack_id, fraction_str, chain_participants)
 
     async def _handle_chain_abort(self, data: bytes) -> None:
         # Lock-free: no awaits.
