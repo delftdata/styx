@@ -18,6 +18,7 @@ import boto3
 import botocore
 from coordinator_metadata import Coordinator
 from prometheus_client import Gauge, start_http_server
+from styx.common.base_networking import SOCKET_RCV_BUF, SOCKET_SND_BUF
 from styx.common.logging import logging
 from styx.common.message_types import MessageType
 from styx.common.protocols import Protocols
@@ -87,8 +88,8 @@ class CoordinatorService:
             struct.pack("ii", 1, 0),
         )  # Enable LINGER, timeout 0
         self.coor_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-        self.coor_socket.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 1024 * 1024)
-        self.coor_socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1024 * 1024)
+        self.coor_socket.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, SOCKET_SND_BUF)
+        self.coor_socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, SOCKET_RCV_BUF)
         self.coor_socket.bind(("0.0.0.0", SERVER_PORT))  # noqa: S104
         self.coor_socket.setblocking(False)
 
@@ -99,16 +100,8 @@ class CoordinatorService:
             struct.pack("ii", 1, 0),
         )  # Enable LINGER, timeout 0
         self.protocol_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-        self.protocol_socket.setsockopt(
-            socket.SOL_SOCKET,
-            socket.SO_SNDBUF,
-            1024 * 1024,
-        )
-        self.protocol_socket.setsockopt(
-            socket.SOL_SOCKET,
-            socket.SO_RCVBUF,
-            1024 * 1024,
-        )
+        self.protocol_socket.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, SOCKET_SND_BUF)
+        self.protocol_socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, SOCKET_RCV_BUF)
         self.protocol_socket.bind(("0.0.0.0", SERVER_PORT + 1))  # noqa: S104
         self.protocol_socket.setblocking(False)
 

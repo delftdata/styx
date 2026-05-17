@@ -30,6 +30,7 @@ import contextlib
 
 from aiokafka import AIOKafkaConsumer, TopicPartition
 from aiokafka.errors import KafkaConnectionError, UnknownTopicOrPartitionError
+from styx.common.base_networking import SOCKET_RCV_BUF, SOCKET_SND_BUF
 from styx.common.local_state_backends import LocalStateBackend
 from styx.common.logging import logging
 from styx.common.message_types import MessageType
@@ -87,8 +88,8 @@ class Worker:
             struct.pack("ii", 1, 0),
         )  # Enable LINGER, timeout 0
         self.worker_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-        self.worker_socket.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 1024 * 1024)
-        self.worker_socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1024 * 1024)
+        self.worker_socket.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, SOCKET_SND_BUF)
+        self.worker_socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, SOCKET_RCV_BUF)
         self.worker_socket.bind(("0.0.0.0", self.server_port))  # noqa: S104
         self.worker_socket.setblocking(False)
 
@@ -99,16 +100,8 @@ class Worker:
             struct.pack("ii", 1, 0),
         )  # Enable LINGER, timeout 0
         self.protocol_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-        self.protocol_socket.setsockopt(
-            socket.SOL_SOCKET,
-            socket.SO_SNDBUF,
-            1024 * 1024,
-        )
-        self.protocol_socket.setsockopt(
-            socket.SOL_SOCKET,
-            socket.SO_RCVBUF,
-            1024 * 1024,
-        )
+        self.protocol_socket.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, SOCKET_SND_BUF)
+        self.protocol_socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, SOCKET_RCV_BUF)
         self.protocol_socket.bind(("0.0.0.0", self.protocol_port))  # noqa: S104
         self.protocol_socket.setblocking(False)
 

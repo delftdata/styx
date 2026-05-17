@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from setuptools._distutils.util import strtobool
 
-from styx.common.base_networking import BaseNetworking, MessagingMode
+from styx.common.base_networking import SOCKET_RCV_BUF, SOCKET_SND_BUF, BaseNetworking, MessagingMode
 from styx.common.exceptions import SerializerNotSupportedError
 from styx.common.logging import logging
 from styx.common.message_types import MessageType
@@ -25,10 +25,6 @@ if TYPE_CHECKING:
 
 USE_COMPRESSION: bool = bool(strtobool(os.getenv("ENABLE_COMPRESSION", "true")))
 COMPRESS_AFTER: int = int(os.getenv("COMPRESS_AFTER", "4096"))
-# Per-connection kernel socket buffers. Defaults match the server-side listening
-# sockets (1 MB). Bump via env when bursty workloads stall on backpressure.
-SOCKET_SND_BUF: int = int(os.getenv("SOCKET_SND_BUF", str(1 << 20)))
-SOCKET_RCV_BUF: int = int(os.getenv("SOCKET_RCV_BUF", str(1 << 20)))
 # Connections per (host, port) pool. 4 is fine at low concurrency; under 100+
 # concurrent transactions the per-conn lock becomes the bottleneck.
 SOCKET_POOL_SIZE: int = int(os.getenv("SOCKET_POOL_SIZE", "16"))

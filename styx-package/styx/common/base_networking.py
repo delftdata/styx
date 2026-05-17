@@ -27,6 +27,18 @@ from styx.common.serialization import (
 USE_COMPRESSION: bool = bool(strtobool(os.getenv("ENABLE_COMPRESSION", "true")))
 COMPRESS_AFTER: int = int(os.getenv("COMPRESS_AFTER", "4096"))
 
+# Per-socket kernel buffer sizes. Applied on both client-side accepted sockets
+# (StyxSocketClient) and server-side listening sockets (inherited to accepted).
+# A TCP connection's in-flight window = min(sender.SNDBUF, receiver.RCVBUF), so
+# both sides must agree or the smaller wins.
+#
+# Default 4 MB matches what Linux auto-tuning would settle on for typical
+# datacenter BDPs (10-25 Gbps at 0.5-1 ms RTT). Note: setting these explicitly
+# *disables* Linux kernel auto-tuning for the socket, so we trade dynamic
+# growth for a known cap.
+SOCKET_SND_BUF: int = int(os.getenv("SOCKET_SND_BUF", str(4 << 20)))
+SOCKET_RCV_BUF: int = int(os.getenv("SOCKET_RCV_BUF", str(4 << 20)))
+
 
 class MessagingMode(IntEnum):
     WORKER_COR = 0

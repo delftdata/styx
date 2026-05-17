@@ -5,6 +5,7 @@ import socket
 import struct
 from typing import TYPE_CHECKING
 
+from styx.common.base_networking import SOCKET_RCV_BUF, SOCKET_SND_BUF
 from styx.common.logging import logging
 from styx.common.message_types import MessageType
 from styx.common.serialization import zstd_msgpack_serialization
@@ -27,16 +28,8 @@ class AsyncSnapshottingProcess:
             struct.pack("ii", 1, 0),
         )  # Enable LINGER, timeout 0
         self.snapshotting_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-        self.snapshotting_socket.setsockopt(
-            socket.SOL_SOCKET,
-            socket.SO_SNDBUF,
-            1024 * 1024,
-        )
-        self.snapshotting_socket.setsockopt(
-            socket.SOL_SOCKET,
-            socket.SO_RCVBUF,
-            1024 * 1024,
-        )
+        self.snapshotting_socket.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, SOCKET_SND_BUF)
+        self.snapshotting_socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, SOCKET_RCV_BUF)
         self.snapshotting_socket.bind(("0.0.0.0", snapshotting_port))  # noqa: S104
         self.snapshotting_socket.setblocking(False)
 
