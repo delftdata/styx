@@ -267,6 +267,15 @@ class StatefulFunction(Function):
             self.__networking.prepare_function_chain(self.__t_id)
         elif not self.__networking.in_the_same_network(ack_host, ack_port):
             chain_participants.append(self.__networking.worker_id)
+        # Every call in this chain step shares the same ack metadata; build
+        # the tuple once instead of allocating one per entry.
+        ack_payload: tuple[str, int, int, str, list[int]] = (
+            ack_host,
+            ack_port,
+            self.__t_id,
+            new_share_fraction,
+            chain_participants,
+        )
         # Bucket remote (off-worker) calls by peer so we can send one
         # RunFunRemoteBatch per peer instead of one RunFunRemote per call.
         # Local calls still dispatch directly into the in-process protocol.
@@ -274,13 +283,6 @@ class StatefulFunction(Function):
         remote_batches: dict[tuple[str, int], list[tuple]] = {}
         for entry in self.__async_remote_calls:
             operator_name, function_name, partition, key, params, is_local = entry
-            ack_payload: tuple[str, int, int, str, list[int]] = (
-                ack_host,
-                ack_port,
-                self.__t_id,
-                new_share_fraction,
-                chain_participants,
-            )
             if is_local:
                 payload = RunFuncPayload(
                     request_id=self.__request_id,
@@ -329,7 +331,12 @@ class StatefulFunction(Function):
                     serializer=Serializer.MSGPACK,
                 ),
             )
-        await asyncio.gather(*remote_calls)
+        # Many chain stages have exactly one downstream call (e.g. NewOrder's
+        # warehouse → district hop). Skip the `gather` machinery in that case.
+        if len(remote_calls) == 1:
+            await remote_calls[0]
+        else:
+            await asyncio.gather(*remote_calls)
         return n_remote_calls
 
     def __get_partition(self, operator_name: str, key: K) -> int:
@@ -421,18 +428,31 @@ class StatefulFunction(Function):
             tuple: (payload, operator_host, operator_port)
         """
         try:
-            payload = (
-                self.__t_id,  # __T_ID__
-                self.__request_id,  # __RQ_ID__
-                operator_name,  # __OP_NAME__
-                function_name,  # __FUN_NAME__
-                key,  # __KEY__
-                partition,  # __PARTITION__
-                self.__fallback_enabled,
-                params,
-            )  # __PARAMS__
-            if ack_payload is not None:
-                payload += (ack_payload,)
+            # Single-shot tuple build: avoids the `payload += (ack_payload,)`
+            # re-allocation on every remote call.
+            if ack_payload is None:
+                payload = (
+                    self.__t_id,            # __T_ID__
+                    self.__request_id,      # __RQ_ID__
+                    operator_name,          # __OP_NAME__
+                    function_name,          # __FUN_NAME__
+                    key,                    # __KEY__
+                    partition,              # __PARTITION__
+                    self.__fallback_enabled,
+                    params,                 # __PARAMS__
+                )
+            else:
+                payload = (
+                    self.__t_id,
+                    self.__request_id,
+                    operator_name,
+                    function_name,
+                    key,
+                    partition,
+                    self.__fallback_enabled,
+                    params,
+                    ack_payload,
+                )
             operator_host = self.__dns[operator_name][partition][0]
             operator_port = self.__dns[operator_name][partition][2]
         except KeyError:

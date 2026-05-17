@@ -868,24 +868,29 @@ class Worker:
 
     async def protocol_queue_worker(self) -> None:
         """
-        Worker that pulls protocol messages from the bounded queue and runs the
-        protocol dispatcher inline.
+        Worker that pulls protocol messages from the bounded queue and looks
+        up the matching handler inline.
 
         Concurrency is bounded by `PROTOCOL_WORKERS`: each worker handles one
-        message at a time. Awaiting `protocol_tcp_controller` directly (instead
-        of `create_task`-ing it) avoids the per-message asyncio Task allocation
-        plus the `AIOTaskScheduler` semaphore round-trip. Handlers that have no
-        internal awaits finish in a single scheduler turn anyway; handlers
-        with awaits (e.g. `_handle_unlock`) get drained by the other 99
-        workers in the pool.
+        message at a time. Compared to dispatching through
+        `protocol_tcp_controller`, inlining the lookup saves one coroutine
+        allocation per message — measurable in py-spy at high tx/s.
+        Handlers with internal awaits (e.g. `_handle_unlock`) still get
+        drained by the other workers in the pool.
         """
         while True:
             message: bytes = await self.protocol_queue.get()
             try:
-                if self.function_execution_protocol is not None:
-                    await self.function_execution_protocol.protocol_tcp_controller(
-                        message,
-                    )
+                proto = self.function_execution_protocol
+                if proto is not None:
+                    msg_type = proto.networking.get_msg_type(message)
+                    handler = proto.protocol_handlers_map.get(msg_type)
+                    if handler is None:
+                        logging.error(
+                            f"Aria protocol: Non supported command message type: {msg_type}",
+                        )
+                    else:
+                        await handler(message)
                 else:
                     msg_type = self.protocol_networking.get_msg_type(message)
                     logging.debug(

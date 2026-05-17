@@ -156,7 +156,7 @@ class AriaProtocol(BaseTransactionalProtocol):
 
         self.migrating_state: bool = restart_after_migration
 
-        self._protocol_handlers_map: dict[MessageType, Callable[[bytes], Awaitable[None]]] = {
+        self.protocol_handlers_map: dict[MessageType, Callable[[bytes], Awaitable[None]]] = {
             MessageType.RunFunRemote: self._handle_run_fun_remote,
             MessageType.RunFunRemoteBatch: self._handle_run_fun_remote_batch,
             MessageType.WrongPartitionRequest: self._handle_wrong_partition_request,
@@ -260,8 +260,14 @@ class AriaProtocol(BaseTransactionalProtocol):
         await self.started.wait()
 
     async def protocol_tcp_controller(self, data: bytes) -> None:
+        """Legacy entry point retained for symmetry with the rest of the codebase.
+
+        The hot path now dispatches inline in `worker_service.protocol_queue_worker`
+        (one fewer coroutine frame per message). Kept here so direct callers
+        (tests, recovery, snapshotting) still work without changes.
+        """
         message_type: MessageType = self.networking.get_msg_type(data)
-        handler = self._protocol_handlers_map.get(message_type)
+        handler = self.protocol_handlers_map.get(message_type)
         if handler is None:
             logging.error(
                 f"Aria protocol: Non supported command message type: {message_type}",
