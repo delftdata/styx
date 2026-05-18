@@ -432,14 +432,14 @@ class StatefulFunction(Function):
             # re-allocation on every remote call.
             if ack_payload is None:
                 payload = (
-                    self.__t_id,            # __T_ID__
-                    self.__request_id,      # __RQ_ID__
-                    operator_name,          # __OP_NAME__
-                    function_name,          # __FUN_NAME__
-                    key,                    # __KEY__
-                    partition,              # __PARTITION__
+                    self.__t_id,  # __T_ID__
+                    self.__request_id,  # __RQ_ID__
+                    operator_name,  # __OP_NAME__
+                    function_name,  # __FUN_NAME__
+                    key,  # __KEY__
+                    partition,  # __PARTITION__
                     self.__fallback_enabled,
-                    params,                 # __PARAMS__
+                    params,  # __PARAMS__
                 )
             else:
                 payload = (
