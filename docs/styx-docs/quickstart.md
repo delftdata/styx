@@ -30,7 +30,11 @@ Next start a Styx cluster by calling:
 ./scripts/start_styx_cluster.sh [scale_factor] [epoch_size] [threads_per_worker] [enable_compression] [use_composite_keys]
 ```
 
-`scale_factor` is how many Styx workers you want deployed, `epoch_size` is the size of a transactional epoch in terms of number of transactions, `threads_per_worker` controls how many threads run inside each worker container, and `enable_compression` / `use_composite_keys` are boolean feature flags.
+`scale_factor` is how many Styx workers you want deployed, `epoch_size` is the size of a transactional epoch in terms of number of transactions, and `threads_per_worker` controls how many threads run inside each worker container.
+
+`enable_compression` controls whether Styx compresses large MessagePack-serialized internal TCP messages with Zstandard. Compression is enabled only for messages larger than the `COMPRESS_AFTER` threshold, which defaults to 4096 bytes. Leave this enabled unless you are explicitly comparing compression overhead.
+
+`use_composite_keys` controls whether operators honor `composite_key_hash_params` during partitioning. When enabled, an operator can route a string key by one selected field, for example the first field in `warehouse:district:customer`; when disabled, Styx hashes the full key string. Leave this enabled for workloads such as TPC-C that define composite-key partitioning.
 
 For example, to start four workers with epochs of 1000 transactions, one worker thread per container, compression enabled, and composite keys enabled:
 

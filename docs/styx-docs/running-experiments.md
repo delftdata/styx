@@ -123,8 +123,8 @@ sudo kubefwd --version
 | 9 | `warmup_seconds` | Seconds excluded from metrics |
 | 10 | `epoch_size` | Max transactions per Aria epoch (e.g. `1000`) |
 | 11 _(optional)_ | `styx_threads_per_worker` | Worker threads per container (default: `1`) |
-| 12 _(optional)_ | `enable_compression` | `true`/`false` — ZSTD snapshot compression (default: `true`) |
-| 13 _(optional)_ | `use_composite_keys` | `true`/`false` — composite key hashing (default: `true`) |
+| 12 _(optional)_ | `enable_compression` | `true`/`false` — compress large MessagePack-serialized internal TCP messages with Zstandard (default: `true`) |
+| 13 _(optional)_ | `use_composite_keys` | `true`/`false` — honor operator `composite_key_hash_params` when partitioning keys (default: `true`) |
 | 14 _(optional)_ | `regenerate_tpcc_data` | `true`/`false` — force TPC-C data regeneration (default: `false`) |
 
 ### Environment variables
