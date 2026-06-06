@@ -7,7 +7,7 @@ local runner so that you don't have to deploy a Styx cluster for debugging and s
 
 Requirements: 
 
- - A `Python 3.13` environment
+ - A `Python 3.14` environment
  - `Docker`
  - `Docker Compose`
 
@@ -27,9 +27,15 @@ Next start a Styx cluster by calling:
 
 
 ```shell
-./scripts/start_styx_cluster.sh [scale_factor] [epoch_size]
+./scripts/start_styx_cluster.sh [scale_factor] [epoch_size] [threads_per_worker] [enable_compression] [use_composite_keys]
 ```
 
-`scale_factor` is how many Styx workers you want deployed and `epoch_size` the size of a transactional epoch in terms of number of transactions.
+`scale_factor` is how many Styx workers you want deployed, `epoch_size` is the size of a transactional epoch in terms of number of transactions, `threads_per_worker` controls how many threads run inside each worker container, and `enable_compression` / `use_composite_keys` are boolean feature flags.
+
+For example, to start four workers with epochs of 1000 transactions, one worker thread per container, compression enabled, and composite keys enabled:
+
+```shell
+./scripts/start_styx_cluster.sh 4 1000 1 true true
+```
 
 Now you are ready to submit your first stateful dataflow graph to the Styx cluster for processing!

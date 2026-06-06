@@ -12,9 +12,9 @@ The following environment variables configure the behavior of the **Styx Coordin
 |---------------------------|-------------------------|---------------------------------------------|
 | `KAFKA_URL`              | `KAFKA_HOST:KAFKA_PORT` | Kafka bootstrap server for messaging        |
 | `HEARTBEAT_LIMIT`        | `5000` (ms)             | Max time before a worker is considered dead |
-| `HEARTBEAT_CHECK_INTERVAL` | `500` (ms)              | How often to check worker heartbeats        |
-| `MAX_OPERATOR_PARALLELISM` | `10`                    | Max number of operator partitions           |
+| `HEARTBEAT_CHECK_INTERVAL` | `1000` (ms)             | How often to check worker heartbeats        |
 | `PROTOCOL`               | `Protocols.Aria`        | Transaction execution protocol used by Styx |
+| `KAFKA_REPLICATION_FACTOR` | `3`                    | Kafka replication factor for Styx topics    |
 
 ---
 
@@ -23,12 +23,12 @@ The following environment variables configure the behavior of the **Styx Coordin
 | Variable                           | Default Value         | Description                                  |
 |------------------------------------|------------------------|----------------------------------------------|
 | `SNAPSHOT_BUCKET_NAME`            | `styx-snapshots`      | S3/MinIO bucket for storing snapshots        |
-| `SNAPSHOT_FREQUENCY_SEC`          | `10` (seconds)        | How often to take a snapshot                 |
-| `SNAPSHOT_COMPACTION_INTERVAL_SEC`| `10` (seconds)        | Interval for compacting snapshots            |
+| `SNAPSHOT_FREQUENCY_SEC`          | `30` (seconds)        | How often to take a snapshot                 |
+| `COMPACT_SNAPSHOTS`               | `false`               | Whether to compact snapshots after upload    |
 
 ---
 
-### ⚙️ MinIO / Object Storage
+### ⚙️ S3-compatible Object Storage
 
 | Variable              | Source         | Description                        |
 |-----------------------|----------------|------------------------------------|
@@ -86,17 +86,17 @@ These environment variables configure the **Styx Worker**, including discovery, 
 | Variable              | Default Value     | Description                                 |
 |------------------------|--------------------|---------------------------------------------|
 | `SNAPSHOT_BUCKET_NAME` | `styx-snapshots`  | Bucket where snapshots are stored           |
-| `SNAPSHOT_FREQUENCY`  | `10` (seconds)     | Snapshot frequency in epochs                |
 
 ---
 
-### 📦 Object Storage (MinIO)
+### 📦 S3-compatible Object Storage
 
 | Variable            | Source         | Description                        |
 |---------------------|----------------|------------------------------------|
-| `MINIO_URL`         | `MINIO_HOST:MINIO_PORT` | Address of the MinIO server     |
-| `MINIO_ACCESS_KEY`  | Required        | MinIO access key                  |
-| `MINIO_SECRET_KEY`  | Required        | MinIO secret key                  |
+| `S3_ENDPOINT`       | Required       | Full URL to connect to S3    |
+| `S3_ACCESS_KEY`     | Required       | Access key for the S3 user   |
+| `S3_SECRET_KEY`     | Required       | Secret key for the S3 user   |
+| `S3_REGION`         | `us-east-1`    | S3 region for the client           |
 
 ---
 

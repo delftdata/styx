@@ -38,11 +38,11 @@ pip install -r requirements.txt
 *   [`coordinator`](https://github.com/delftdata/styx/tree/main/coordinator) 
     Styx coordinator.
 
-*   [`demo`](https://github.com/delftdata/styx/tree/main/benchmark) 
+*   [`demo`](https://github.com/delftdata/styx/tree/main/demo) 
     The YCSB-T, Deathstar, TPC-C and scalability benchmarks we used for the experiments.
 
 *   [`grafana`](https://github.com/delftdata/styx/tree/main/grafana)
-    The confinguration files for the deployment of our visualization dashboards.
+    The configuration files for the deployment of our visualization dashboards.
 
 *   [`styx-package`](https://github.com/delftdata/styx/tree/main/styx-package)
     The Styx framework Python package.
@@ -50,7 +50,7 @@ pip install -r requirements.txt
 *   [`tests`](https://github.com/delftdata/styx/tree/main/tests)
     Tests for the worker components of Styx.
 
-*   [`worker`](https://github.com/delftdata/styx/tree/main/styx-package)
+*   [`worker`](https://github.com/delftdata/styx/tree/main/worker)
     Styx worker.
 
 ## Container images
@@ -162,9 +162,9 @@ To clear kafka: `docker compose -f docker-compose-kafka.yml down --volumes`
 
 ### S3 (Rustfs)
 
-To run self-hosted S3: `docker-compose up -f docker-compose-s3.yml up`
+To run self-hosted S3: `docker compose -f docker-compose-s3.yml up`
 
-To clear self-hosted S3: `docker-compose -f docker-compose-s3.yml down --volumes`
+To clear self-hosted S3: `docker compose -f docker-compose-s3.yml down --volumes`
 
 ---
   
@@ -172,9 +172,9 @@ Then, you can start the Styx engine and specify the desired scale.
 
 ### Styx Engine
 
-To run the SE: `docker-compose up --build --scale worker=4`
+To run the SE: `docker compose up --build --scale worker=4`
 
-To clear the SE: `docker-compose down --volumes`
+To clear the SE: `docker compose down --volumes`
 
 ##### Cite Styx
 
