@@ -174,6 +174,10 @@ Then, you can start the Styx engine and specify the desired scale.
 
 To run the SE: `docker compose up --build --scale worker=4`
 
+The worker service in `docker-compose.yml` sets `INGRESS_TYPE=KAFKA`. If you
+start workers manually outside Docker Compose, set `INGRESS_TYPE=KAFKA` together
+with the Kafka, coordinator, and S3-compatible storage environment variables.
+
 To clear the SE: `docker compose down --volumes`
 
 ##### Cite Styx

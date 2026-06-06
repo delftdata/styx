@@ -23,6 +23,11 @@ Install the styx-package:
 pip install ./styx-package/
 ```
 
+The local cluster script starts Kafka, RustFS, the coordinator, and workers with
+Docker Compose. It also runs `docker system prune -f --volumes` before starting
+the cluster, which removes unused Docker objects and volumes from your Docker
+host.
+
 Next start a Styx cluster by calling:
 
 

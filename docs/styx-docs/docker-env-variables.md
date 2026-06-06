@@ -67,7 +67,7 @@ These variables configure worker processes and the Aria execution protocol.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `INGRESS_TYPE` | None | Ingress backend. Set to `KAFKA` for Kafka topic assignment. |
+| `INGRESS_TYPE` | None | Ingress backend. Set to `KAFKA` for Kafka topic assignment. The local Docker Compose deployment already sets this for workers. |
 | `HEARTBEAT_INTERVAL` | `500` | Time in milliseconds between worker heartbeats. |
 | `WORKER_THREADS` | `1` | Number of Styx worker processes started inside a worker container. |
 
