@@ -43,6 +43,7 @@ jobs:
           flags: coordinator
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: true
+          disable_gpg_verification: true
 
   unit-tests-worker:
     name: Unit tests (worker)
@@ -78,6 +79,7 @@ jobs:
           flags: worker
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: true
+          disable_gpg_verification: true
 
   unit-tests-styx-package:
     name: Unit tests (styx-package)
@@ -110,6 +112,7 @@ jobs:
           flags: styx-package
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: true
+          disable_gpg_verification: true
 
   integration-tests:
     name: Integration tests
@@ -144,3 +147,4 @@ jobs:
           flags: integration
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: true
+          disable_gpg_verification: true
