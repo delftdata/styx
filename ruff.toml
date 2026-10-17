@@ -59,7 +59,10 @@ ignore = [
   # --- In the future we should fix the logging within the project
   "LOG015",
 
-  "INP001"
+  "INP001",
+
+  # --- No per-file copyright headers in this project
+  "CPY001"
 ]
 
 fixable = ["ALL"]
@@ -111,6 +114,8 @@ max-locals = 25
 max-nested-blocks = 6
 
 [format]
+# Leave hand-formatted code blocks in Markdown docs alone
+exclude = ["*.md"]
 quote-style = "double"
 indent-style = "space"
 line-ending = "auto"

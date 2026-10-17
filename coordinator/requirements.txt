@@ -1,15 +1,15 @@
-setuptools==82.0.1
+setuptools==84.0.0
 # networking service
-uvloop==0.22.1
-msgspec==0.21.1
+uvloop==0.23.0
+msgspec==0.22.0
 cloudpickle==3.1.2
 cityhash==0.4.10
 zstandard==0.25.0
 # monitoring service
-prometheus-client==0.25.0
+prometheus-client==0.26.0
 # kafka
-confluent-kafka==2.14.0
+confluent-kafka==2.16.0
 # snapshots
-boto3==1.43.7
+boto3==1.43.114
 # deathstar
 geopy
