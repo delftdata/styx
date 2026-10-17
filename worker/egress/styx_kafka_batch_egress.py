@@ -46,10 +46,13 @@ class StyxKafkaBatchEgress(BaseEgress):
             await self.get_messages_sent_before_recovery()
             logging.warning("Got messages sent before recovery")
         self.worker_id = worker_id
+        # Idempotent (implies acks="all"): this producer writes client responses and
+        # the sequencer WAL, which recovery relies on. With acks=1 a leader failover
+        # can truncate acked records, and retries can duplicate responses.
         self.kafka_egress_producer = AIOKafkaProducer(
             bootstrap_servers=[KAFKA_URL],
             client_id=f"W{worker_id}_{uuid.uuid4()}",
-            acks=1,
+            enable_idempotence=True,
         )
         while True:
             try:

@@ -29,6 +29,10 @@ if TYPE_CHECKING:
     from styx.common.types import OperatorPartition
 
 KAFKA_REPLICATION_FACTOR = int(os.getenv("KAFKA_REPLICATION_FACTOR", "3"))
+# acks=all is only as strong as min.insync.replicas: tolerate one broker loss without
+# acknowledging writes held by the leader alone. Set per topic so it holds whatever the
+# broker default is.
+KAFKA_MIN_INSYNC_REPLICAS = int(os.getenv("KAFKA_MIN_INSYNC_REPLICAS", str(max(1, KAFKA_REPLICATION_FACTOR - 1))))
 SNAPSHOT_BUCKET_NAME: str = os.getenv("SNAPSHOT_BUCKET_NAME", "styx-snapshots")
 COMPACT_SNAPSHOTS: bool = bool(strtobool(os.getenv("COMPACT_SNAPSHOTS", "false")))
 KAFKA_URL: str = os.getenv("KAFKA_URL", None)
@@ -334,12 +338,14 @@ class Coordinator:
                     f"Kafka at {KAFKA_URL} not ready yet, sleeping for 1 second",
                 )
                 await asyncio.sleep(1)
+        topic_config = {"min.insync.replicas": str(KAFKA_MIN_INSYNC_REPLICAS)}
         topics = (
             [
                 NewTopic(
                     topic="styx-metadata",
                     num_partitions=1,
                     replication_factor=KAFKA_REPLICATION_FACTOR,
+                    config=topic_config,
                 ),
             ]
             + [
@@ -347,6 +353,7 @@ class Coordinator:
                     topic="sequencer-wal",
                     num_partitions=1,
                     replication_factor=KAFKA_REPLICATION_FACTOR,
+                    config=topic_config,
                 ),
             ]
             + [
@@ -354,6 +361,7 @@ class Coordinator:
                     topic=operator.name,
                     num_partitions=self.max_operator_parallelism,
                     replication_factor=KAFKA_REPLICATION_FACTOR,
+                    config=topic_config,
                 )
                 for operator in stateflow_graph.nodes.values()
             ]
@@ -362,6 +370,7 @@ class Coordinator:
                     topic=operator.name + "--OUT",
                     num_partitions=self.max_operator_parallelism,
                     replication_factor=KAFKA_REPLICATION_FACTOR,
+                    config=topic_config,
                 )
                 for operator in stateflow_graph.nodes.values()
             ]
@@ -373,7 +382,8 @@ class Coordinator:
                 future.result()
                 logging.warning(
                     f"Topic {topic} created with {self.max_operator_parallelism} partitions "
-                    f"and replication factor of {KAFKA_REPLICATION_FACTOR}",
+                    f"and replication factor of {KAFKA_REPLICATION_FACTOR} "
+                    f"(min.insync.replicas={KAFKA_MIN_INSYNC_REPLICAS})",
                 )
             except KafkaException as e:
                 logging.warning(f"Failed to create topic {topic}: {e}")
