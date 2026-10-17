@@ -1,4 +1,4 @@
-"""Integration tests for AsyncSnapshotsS3 against a real MinIO container."""
+"""Integration tests for AsyncSnapshotsS3 against a real S3 (RustFS) container."""
 
 import pytest
 from styx.common.serialization import zstd_msgpack_serialization
@@ -7,7 +7,7 @@ pytestmark = pytest.mark.integration
 
 
 class TestStoreSnapshot:
-    def test_store_snapshot_writes_to_s3(self, minio_bucket):
+    def test_store_snapshot_writes_to_s3(self, s3_bucket):
         """store_snapshot() should write data retrievable via boto3."""
         from worker.fault_tolerance.async_snapshots import AsyncSnapshotsS3
 
@@ -16,10 +16,10 @@ class TestStoreSnapshot:
         result = AsyncSnapshotsS3.store_snapshot(snapshot_name, data)
         assert result is True
 
-        resp = minio_bucket.get_object(Bucket="styx-snapshots", Key=snapshot_name)
+        resp = s3_bucket.get_object(Bucket="styx-snapshots", Key=snapshot_name)
         assert resp["Body"].read() == data
 
-    def test_store_multiple_snapshots(self, minio_bucket):
+    def test_store_multiple_snapshots(self, s3_bucket):
         """Multiple snapshots can be stored under different keys."""
         from worker.fault_tolerance.async_snapshots import AsyncSnapshotsS3
 
@@ -28,12 +28,12 @@ class TestStoreSnapshot:
             AsyncSnapshotsS3.store_snapshot(f"data/multi_op/0/{sid}.bin", data)
 
         for sid in range(1, 4):
-            resp = minio_bucket.get_object(Bucket="styx-snapshots", Key=f"data/multi_op/0/{sid}.bin")
+            resp = s3_bucket.get_object(Bucket="styx-snapshots", Key=f"data/multi_op/0/{sid}.bin")
             assert resp["Body"].read() is not None
 
 
 class TestRetrieveSnapshot:
-    def test_retrieve_snapshot_negative_id_returns_empty(self, minio_bucket):
+    def test_retrieve_snapshot_negative_id_returns_empty(self, s3_bucket):
         """retrieve_snapshot(-1) should return empty data."""
         from worker.fault_tolerance.async_snapshots import AsyncSnapshotsS3
 
@@ -45,7 +45,7 @@ class TestRetrieveSnapshot:
         assert ep == 0
         assert tc == 0
 
-    def test_store_and_retrieve_round_trip(self, minio_bucket):
+    def test_store_and_retrieve_round_trip(self, s3_bucket):
         """store_snapshot + retrieve_snapshot should round-trip operator and sequencer state."""
         from worker.fault_tolerance.async_snapshots import AsyncSnapshotsS3
 
@@ -73,7 +73,7 @@ class TestRetrieveSnapshot:
         assert ep == epoch
         assert tc == t_counter
 
-    def test_retrieve_merges_incremental_snapshots(self, minio_bucket):
+    def test_retrieve_merges_incremental_snapshots(self, s3_bucket):
         """Incremental snapshots (same prefix, increasing IDs) should be merged."""
         from worker.fault_tolerance.async_snapshots import AsyncSnapshotsS3
 
@@ -113,7 +113,7 @@ class TestRetrieveSnapshot:
 
 
 class TestIterSnapshotFiles:
-    def test_filters_by_max_snapshot_id(self, minio_bucket):
+    def test_filters_by_max_snapshot_id(self, s3_bucket):
         """_iter_snapshot_files should only return files up to max_snapshot_id."""
         from worker.fault_tolerance.async_snapshots import (
             AsyncSnapshotsS3,
@@ -123,7 +123,7 @@ class TestIterSnapshotFiles:
         prefix = "data/iter_op/0/"
         for sid in [1, 2, 3, 5]:
             data = zstd_msgpack_serialization({"k": f"v{sid}"})
-            minio_bucket.put_object(Bucket="styx-snapshots", Key=f"{prefix}{sid}.bin", Body=data)
+            s3_bucket.put_object(Bucket="styx-snapshots", Key=f"{prefix}{sid}.bin", Body=data)
 
         snap = AsyncSnapshotsS3(worker_id=0)
         s3 = _get_s3_client()
@@ -133,7 +133,7 @@ class TestIterSnapshotFiles:
         ids = [pair[0] for pair in result]
         assert ids == [1, 2, 3]
 
-    def test_returns_sorted(self, minio_bucket):
+    def test_returns_sorted(self, s3_bucket):
         """Results should be sorted by snapshot ID ascending."""
         from worker.fault_tolerance.async_snapshots import (
             AsyncSnapshotsS3,
@@ -142,7 +142,7 @@ class TestIterSnapshotFiles:
 
         prefix = "data/sort_op/0/"
         for sid in [5, 1, 3]:
-            minio_bucket.put_object(
+            s3_bucket.put_object(
                 Bucket="styx-snapshots",
                 Key=f"{prefix}{sid}.bin",
                 Body=zstd_msgpack_serialization({"s": sid}),
@@ -156,7 +156,7 @@ class TestIterSnapshotFiles:
 
 
 class TestListBinKeys:
-    def test_only_returns_bin_files(self, minio_bucket):
+    def test_only_returns_bin_files(self, s3_bucket):
         """_list_bin_keys should filter out non-.bin files."""
         from worker.fault_tolerance.async_snapshots import (
             AsyncSnapshotsS3,
@@ -164,9 +164,9 @@ class TestListBinKeys:
         )
 
         prefix = "data/binfilter_op/0/"
-        minio_bucket.put_object(Bucket="styx-snapshots", Key=f"{prefix}1.bin", Body=b"data")
-        minio_bucket.put_object(Bucket="styx-snapshots", Key=f"{prefix}2.txt", Body=b"text")
-        minio_bucket.put_object(Bucket="styx-snapshots", Key=f"{prefix}3.bin", Body=b"data")
+        s3_bucket.put_object(Bucket="styx-snapshots", Key=f"{prefix}1.bin", Body=b"data")
+        s3_bucket.put_object(Bucket="styx-snapshots", Key=f"{prefix}2.txt", Body=b"text")
+        s3_bucket.put_object(Bucket="styx-snapshots", Key=f"{prefix}3.bin", Body=b"data")
 
         snap = AsyncSnapshotsS3(worker_id=0)
         s3 = _get_s3_client()
@@ -175,7 +175,7 @@ class TestListBinKeys:
         assert len(keys) == 2
         assert all(k.endswith(".bin") for k in keys)
 
-    def test_empty_prefix_returns_empty(self, minio_bucket):
+    def test_empty_prefix_returns_empty(self, s3_bucket):
         """Listing a non-existent prefix should return empty."""
         from worker.fault_tolerance.async_snapshots import (
             AsyncSnapshotsS3,

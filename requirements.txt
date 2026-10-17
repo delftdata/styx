@@ -32,6 +32,6 @@ mkdocs-material==9.7.7
 # tests
 pytest==9.1.1
 pytest-asyncio==1.4.0
-testcontainers[kafka,minio]>=4.15.0
+testcontainers[kafka]>=4.15.0
 # make sure to have the same ruff version as in .github/workflows/ruff.yml line 30
 ruff==0.17.1

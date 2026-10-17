@@ -135,7 +135,7 @@ jobs:
           cd styx-package && python setup.py build_ext --inplace && cd ..
           python -m pip install styx-package/
           python worker/setup.py build_ext --inplace
-          python -m pip install pytest==9.1.1 pytest-asyncio pytest-cov "testcontainers[kafka,minio]>=4.15.0"
+          python -m pip install pytest==9.1.1 pytest-asyncio pytest-cov "testcontainers[kafka]>=4.15.0"
 
       - name: Run integration tests
         run: pytest tests/integration/ -v --cov=styx-package/styx --cov=coordinator --cov=worker --cov-report=xml:coverage-integration.xml
