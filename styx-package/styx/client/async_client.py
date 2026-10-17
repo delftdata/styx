@@ -101,7 +101,9 @@ class AsyncStyxClient(BaseStyxClient):
             bootstrap_servers=[self._kafka_url],
             enable_auto_commit=False,
             fetch_min_bytes=1,
-            group_id=str(uuid.uuid4()),
+            # No consumer group: subscribe() then assigns every partition directly instead of
+            # joining a fresh group, which costs group.initial.rebalance.delay.ms (3 s by default).
+            group_id=None,
         )
         await self._result_consumer.start()
         egress_topic_names: list[str] = self._current_active_graph.get_egress_topic_names()
@@ -141,7 +143,9 @@ class AsyncStyxClient(BaseStyxClient):
             bootstrap_servers=[self._kafka_url],
             enable_auto_commit=False,
             fetch_min_bytes=1,
-            group_id=str(uuid.uuid4()),
+            # No consumer group: subscribe() then assigns every partition directly instead of
+            # joining a fresh group, which costs group.initial.rebalance.delay.ms (3 s by default).
+            group_id=None,
         )
         await self._metadata_consumer.start()
         topics = await self._metadata_consumer.topics()

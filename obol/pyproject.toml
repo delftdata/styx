@@ -77,6 +77,7 @@ line-length = 120  # how long you want lines to be
 
 [tool.ruff.format]
 docstring-code-format = true  # code snippets in docstrings will be formatted
+exclude = ["*.md"]  # leave hand-formatted code blocks in Markdown docs alone
 
 [tool.ruff.lint]
 # For more strict linting and code simplifications, replace this with

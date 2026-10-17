@@ -10,9 +10,9 @@ class AriaSyncMetadata:
         self.concurrency_aborts_everywhere: set[int] = set()
         self.processed_seq_size: int = 0
         self.max_t_counter: int = -1
-        self.global_read_reservations: None | dict = None
-        self.global_write_set: None | dict = None
-        self.global_read_set: None | dict = None
+        self.global_read_reservations: dict | None = None
+        self.global_write_set: dict | None = None
+        self.global_read_set: dict | None = None
         self.stop_next_epoch: bool = False
         self.take_snapshot: bool = False
 
@@ -128,9 +128,9 @@ class AriaSyncMetadata:
         self.concurrency_aborts_everywhere: set[int] = set()
         self.processed_seq_size: int = 0
         self.max_t_counter: int = -1
-        self.global_read_reservations: None | dict = None
-        self.global_write_set: None | dict = None
-        self.global_read_set: None | dict = None
+        self.global_read_reservations: dict | None = None
+        self.global_write_set: dict | None = None
+        self.global_read_set: dict | None = None
         if epoch_end:
             self.stop_next_epoch = False
         if take_snapshot:

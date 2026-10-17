@@ -5,7 +5,7 @@ This directory contains all tests for the Styx project, organized into three tie
 ```
 tests/
 ├── e2e/                    # Full-stack end-to-end tests
-├── integration/            # Component tests with real containers (Kafka, MinIO)
+├── integration/            # Component tests with real containers (Kafka, RustFS)
 └── unit/                   # Fast, isolated unit tests
     ├── styx_package/       # Client library & common modules
     ├── coordinator/        # Coordinator service
@@ -44,7 +44,7 @@ pytest tests/unit/worker/ -q
 
 ## Integration Tests (`tests/integration/`)
 
-Component-level tests that use [testcontainers](https://testcontainers-python.readthedocs.io/) to spin up real Kafka (KRaft mode) and MinIO containers. These verify that Styx components interact correctly with real infrastructure — no mocks for Kafka or S3.
+Component-level tests that use [testcontainers](https://testcontainers-python.readthedocs.io/) to spin up real Kafka (KRaft mode) and RustFS (S3-compatible) containers. These verify that Styx components interact correctly with real infrastructure — no mocks for Kafka or S3.
 
 | File | What it tests |
 |------|---------------|
@@ -52,7 +52,7 @@ Component-level tests that use [testcontainers](https://testcontainers-python.re
 | `test_sync_client_kafka.py` | `SyncStyxClient` producing messages to Kafka |
 | `test_kafka_ingress.py` | Worker consuming messages from Kafka ingress topics |
 | `test_kafka_egress.py` | Worker publishing results to Kafka egress topics |
-| `test_s3_snapshots.py` | Snapshot upload/download round-trips to S3 (MinIO) |
+| `test_s3_snapshots.py` | Snapshot upload/download round-trips to S3 (RustFS) |
 
 Containers are started once per session (via `conftest.py` fixtures) and shared across tests.
 

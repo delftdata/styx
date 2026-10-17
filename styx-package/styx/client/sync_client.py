@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 import uuid
 import warnings
 
-from confluent_kafka import Consumer, KafkaException, Message, Producer
+from confluent_kafka import OFFSET_BEGINNING, Consumer, KafkaException, Message, Producer, TopicPartition
 
 from styx.client.base_client import BaseStyxClient
 from styx.client.styx_future import StyxFuture
@@ -132,6 +132,19 @@ class SyncStyxClient(BaseStyxClient):
         self.flush()
         del self._kafka_producer
 
+    @staticmethod
+    def _all_partitions_from_beginning(md: ClusterMetadata, topics: list[str]) -> list[TopicPartition]:
+        """Every partition of `topics`, positioned at the earliest offset.
+
+        The client's consumers use manual assignment instead of subscribe():
+        each client reads every partition and never commits offsets, so a
+        consumer group buys nothing, while joining a fresh group costs the
+        broker's group.initial.rebalance.delay.ms (3 s by default) before
+        the first record arrives. Partition counts are fixed when the
+        coordinator creates the topics, so a one-off assignment is complete.
+        """
+        return [TopicPartition(topic, p, OFFSET_BEGINNING) for topic in topics for p in md.topics[topic].partitions]
+
     def start_consuming_results(self) -> None:
         """Consumes results from Kafka and fulfills corresponding futures.
 
@@ -160,7 +173,7 @@ class SyncStyxClient(BaseStyxClient):
             md: ClusterMetadata = function_results_consumer.list_topics()
         topics_to_subscribe = [topic for topic in md.topics if topic.endswith("--OUT")]
         logging.warning("Subscribed to topics: %s", topics_to_subscribe)
-        function_results_consumer.subscribe(topics_to_subscribe)
+        function_results_consumer.assign(self._all_partitions_from_beginning(md, topics_to_subscribe))
         while self.running_result_consumer:
             # poll every 10ms (this will add at least 10 ms latency to the futures, but it makes the client lightweight)
             msg: Message = function_results_consumer.poll(0.01)
@@ -190,7 +203,7 @@ class SyncStyxClient(BaseStyxClient):
             )
             time.sleep(1)
             md: ClusterMetadata = metadata_consumer.list_topics()
-        metadata_consumer.subscribe(["styx-metadata"])
+        metadata_consumer.assign(self._all_partitions_from_beginning(md, ["styx-metadata"]))
         while self.running_metadata_consumer:
             # poll every 100ms
             msg: Message = metadata_consumer.poll(0.1)
