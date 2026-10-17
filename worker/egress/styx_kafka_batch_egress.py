@@ -129,15 +129,19 @@ class StyxKafkaBatchEgress(BaseEgress):
 
     async def send_batch(self) -> None:
         if self.batch:
+            # Take ownership of the batch before awaiting: send_responses runs as a
+            # background task alongside the fallback strategy, so send() can append
+            # while we wait. Clearing afterwards would drop those futures unawaited,
+            # letting the epoch snapshot before their responses are durable.
+            batch, self.batch = self.batch, []
             # send the batch and get the max offset per topic partition in that batch
-            for res in await asyncio.gather(*self.batch):
+            for res in await asyncio.gather(*batch):
                 operator_name = res.topic[:-5]
                 key = (operator_name, res.partition)
                 self.topic_partition_output_offsets[key] = max(
                     self.topic_partition_output_offsets[key],
                     res.offset,
                 )
-            self.batch = []
 
     async def get_messages_sent_before_recovery(self) -> None:
         kafka_output_consumer = AIOKafkaConsumer(

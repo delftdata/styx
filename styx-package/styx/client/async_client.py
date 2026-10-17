@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import logging
 import sys
 from typing import TYPE_CHECKING
@@ -77,15 +78,17 @@ class AsyncStyxClient(BaseStyxClient):
         """Closes the client by stopping Kafka consumers/producers and cancelling tasks."""
         await self.flush()
         await self._kafka_producer.stop()
-        await self._result_consumer.stop()
-        await self._metadata_consumer.stop()
-        self._result_consumer_task.cancel()
-        self._metadata_consumer_task.cancel()
-        try:
-            await self._result_consumer_task
-            await self._metadata_consumer_task
-        except asyncio.CancelledError:
-            pass
+        # Cancel the consumer loops before stopping their consumers: a loop still
+        # inside getmany() raises ConsumerStoppedError once its consumer stops.
+        # Either may be missing (no result consumer with open(consume=False)).
+        for task in (self._result_consumer_task, self._metadata_consumer_task):
+            if task is not None:
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
+        for consumer in (self._result_consumer, self._metadata_consumer):
+            if consumer is not None:
+                await consumer.stop()
 
     async def start_result_consumer_task(self) -> None:
         """Starts a background task to consume results from Kafka.
@@ -127,8 +130,11 @@ class AsyncStyxClient(BaseStyxClient):
             data = await self._result_consumer.getmany(timeout_ms=10)
             for messages in data.values():
                 for msg in messages:
-                    if msg.key in self._futures:
-                        self._futures[msg.key].set(
+                    # Responses are read from every output partition, including other
+                    # clients' and earlier runs'; only our pending requests match.
+                    future = self._futures.pop(msg.key, None)
+                    if future is not None:
+                        future.set(
                             response_val=msg.value,
                             out_timestamp=msg.timestamp,
                         )
@@ -158,7 +164,13 @@ class AsyncStyxClient(BaseStyxClient):
             data = await self._metadata_consumer.getmany(timeout_ms=100)
             for messages in data.values():
                 for msg in messages:
-                    metadata = cloudpickle_deserialization(msg.value)
+                    # A record we cannot decode must not end the loop: the
+                    # client would never see another graph update.
+                    try:
+                        metadata = cloudpickle_deserialization(msg.value)
+                    except Exception:
+                        logging.exception("Skipping undecodable styx-metadata record at offset %s", msg.offset)
+                        continue
                     if isinstance(metadata, StateflowGraph):
                         self._current_active_graph = metadata
                         logging.warning("Current active graph updated")
@@ -225,7 +237,12 @@ class AsyncStyxClient(BaseStyxClient):
             params,
             serializer,
         )
-        self._futures[request_id] = StyxAsyncFuture(request_id=request_id)
+        future = StyxAsyncFuture(request_id=request_id)
+        # Only the result consumer resolves futures, and it drops each one once
+        # resolved. Without it (open(consume=False)) nothing ever would, so
+        # tracking them would only grow memory and GC work.
+        if self._result_consumer_task is not None:
+            self._futures[request_id] = future
         msg = await self._kafka_producer.send_and_wait(
             operator.name,
             key=request_id,
@@ -233,8 +250,8 @@ class AsyncStyxClient(BaseStyxClient):
             partition=partition,
         )
         self._delivery_timestamps[request_id] = msg.timestamp
-        self._futures[request_id].set_in_timestamp(msg.timestamp)
-        return self._futures[request_id]
+        future.set_in_timestamp(msg.timestamp)
+        return future
 
     def set_graph(self, graph: StateflowGraph) -> None:
         self._current_active_graph = graph
