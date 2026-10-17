@@ -1,3 +1,4 @@
+from functools import partial
 import logging
 import socket
 import threading
@@ -73,7 +74,10 @@ class SyncStyxClient(BaseStyxClient):
             "linger.ms": 0,
             "compression.type": "none",
             "enable.idempotence": True,
-            "max.in.flight.requests.per.connection": 1,
+            # The idempotent producer keeps per-partition order and drops retry
+            # duplicates with up to 5 requests in flight; 1 only made each
+            # partition wait a full broker round trip before its next batch.
+            "max.in.flight.requests.per.connection": 5,
             "client.id": str(uuid.uuid4()),
         }
         self.graph_known_event: threading.Event = threading.Event()
@@ -181,8 +185,11 @@ class SyncStyxClient(BaseStyxClient):
                 continue
             if msg.error():
                 continue
-            if msg.key() in self._futures:
-                self._futures[msg.key()].set(
+            # Responses are read from every output partition, including other
+            # clients' and earlier runs'; only our pending requests match.
+            future = self._futures.pop(msg.key(), None)
+            if future is not None:
+                future.set(
                     response_val=msgpack_deserialization(msg.value()),
                     out_timestamp=msg.timestamp()[1],
                 )
@@ -211,7 +218,13 @@ class SyncStyxClient(BaseStyxClient):
                 continue
             if msg.error():
                 continue
-            metadata = cloudpickle_deserialization(msg.value())
+            # A record we cannot decode must not end the thread: the client
+            # would never see another graph update.
+            try:
+                metadata = cloudpickle_deserialization(msg.value())
+            except Exception:
+                logging.exception("Skipping undecodable styx-metadata record at offset %s", msg.offset())
+                continue
             if isinstance(metadata, StateflowGraph):
                 self._current_active_graph = metadata
                 self.graph_known_event.set()
@@ -249,21 +262,22 @@ class SyncStyxClient(BaseStyxClient):
             msg = f"Failed to empty Kafka producer buffer, queue size: {queue_size}"
             raise AssertionError(msg)
 
-    def delivery_callback(self, err: str, msg: Message) -> None:
+    def delivery_callback(self, err: str, msg: Message, future: StyxFuture | None = None) -> None:
         """Handles Kafka delivery report callbacks.
 
-        Updates internal timestamps and resolves futures if applicable.
+        Records the delivery timestamp and stamps it on the request's future.
 
         Args:
             err: Kafka error (if any).
             msg: Kafka message delivered.
+            future: The future of the delivered request, if any.
         """
         if err is not None:
             logging.warning("Delivery failed for User record %s: %s", msg.key(), err)
         else:
             self._delivery_timestamps[msg.key()] = msg.timestamp()[1]
-            if msg.key() in self._futures:
-                self._futures[msg.key()].set_in_timestamp(msg.timestamp()[1])
+            if future is not None:
+                future.set_in_timestamp(msg.timestamp()[1])
 
     def send_event(
         self,
@@ -294,7 +308,12 @@ class SyncStyxClient(BaseStyxClient):
             params,
             serializer,
         )
-        self._futures[request_id] = StyxFuture(request_id=request_id)
+        future = StyxFuture(request_id=request_id)
+        # Only the result consumer resolves futures, and it drops each one once
+        # resolved. Without it (open(consume=False), as the benchmarks run)
+        # nothing ever would, so tracking them would only grow memory and GC work.
+        if self.running_result_consumer:
+            self._futures[request_id] = future
         while True:
             try:
                 self._kafka_producer.produce(
@@ -302,12 +321,14 @@ class SyncStyxClient(BaseStyxClient):
                     key=request_id,
                     value=serialized_value,
                     partition=partition,
-                    on_delivery=self.delivery_callback,
+                    # Bound to the future rather than looked up in _futures, which
+                    # may already have dropped it if the response arrived first.
+                    on_delivery=partial(self.delivery_callback, future=future),
                 )
                 break
             except BufferError:
                 time.sleep(0.001)  # wait 1ms and retry
-        return self._futures[request_id]
+        return future
 
     def set_graph(self, graph: StateflowGraph) -> None:
         self._current_active_graph = graph

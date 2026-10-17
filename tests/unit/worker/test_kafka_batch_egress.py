@@ -126,6 +126,40 @@ class TestSendBatch:
         assert e.topic_partition_output_offsets[("users", 0)] == 42
         assert e.batch == []
 
+    @pytest.mark.asyncio
+    async def test_send_during_flush_is_kept_for_next_flush(self):
+        # send_responses flushes in a background task while the fallback
+        # strategy keeps calling send(); those sends must not be dropped.
+        e = _egress()
+        e.started.set()
+
+        def meta(partition, offset):
+            m = MagicMock()
+            m.topic = "users--OUT"
+            m.partition = partition
+            m.offset = offset
+            return m
+
+        first = asyncio.get_running_loop().create_future()
+        e.batch = [first]
+        flush = asyncio.create_task(e.send_batch())
+        await asyncio.sleep(0)  # flush is now awaiting `first`
+
+        second = asyncio.get_running_loop().create_future()
+        second.set_result(meta(1, 7))
+        e.kafka_egress_producer = MagicMock()
+        e.kafka_egress_producer.send = AsyncMock(return_value=second)
+        await e.send(b"key2", b"value2", "users", 1)
+
+        first.set_result(meta(0, 3))
+        await flush
+        assert e.batch == [second]
+        assert e.topic_partition_output_offsets[("users", 1)] == -1
+
+        await e.send_batch()
+        assert e.batch == []
+        assert e.topic_partition_output_offsets == {("users", 0): 3, ("users", 1): 7}
+
 
 # ---------------------------------------------------------------------------
 # process_messages_sent_before_recovery
