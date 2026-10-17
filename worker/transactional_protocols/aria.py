@@ -649,20 +649,26 @@ class AriaProtocol(BaseTransactionalProtocol):
         if not sequence:
             return {"wal_ms": 0.0, "func_ms": 0.0, "chain_ms": 0.0}
 
-        start_wal, end_wal = await self._write_to_wal(sequence)
+        # The WAL write (acks=all) runs concurrently with execution. Execution is
+        # speculative until commit, and nothing leaves the worker before then
+        # (responses, fallback, and snapshots all follow the commit), so the
+        # sequence only has to be durable before this epoch syncs for commit.
+        wal_task = asyncio.create_task(self._write_to_wal(sequence))
+        try:
+            start_func = timer()
+            await asyncio.gather(
+                *[self.run_function(item.t_id, item.payload) for item in sequence],
+            )
+            end_func = timer()
 
-        start_func = timer()
-        await asyncio.gather(
-            *[self.run_function(item.t_id, item.payload) for item in sequence],
-        )
-        end_func = timer()
-
-        # Wait for chains to finish
-        start_chain = timer()
-        await asyncio.gather(
-            *[ack.wait() for ack in self.networking.waited_ack_events.values()],
-        )
-        end_chain = timer()
+            # Wait for chains to finish
+            start_chain = timer()
+            await asyncio.gather(
+                *[ack.wait() for ack in self.networking.waited_ack_events.values()],
+            )
+            end_chain = timer()
+        finally:
+            start_wal, end_wal = await wal_task
 
         return {
             "wal_ms": (end_wal - start_wal) * 1000,
