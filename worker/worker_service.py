@@ -791,7 +791,7 @@ class Worker:
         while True:
             try:
                 await consumer.start()
-            except UnknownTopicOrPartitionError, KafkaConnectionError:
+            except (UnknownTopicOrPartitionError, KafkaConnectionError):  # fmt: skip
                 await asyncio.sleep(1)
                 logging.warning(
                     f"Kafka at {KAFKA_URL} not ready yet, sleeping for 1 second",

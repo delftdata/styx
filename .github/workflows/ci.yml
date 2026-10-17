@@ -114,9 +114,58 @@ jobs:
           fail_ci_if_error: true
           use_pypi: true
 
+  unit-tests-compiled:
+    # The worker image compiles the hot-path modules with Cython
+    # (STYX_CYTHONIZE_HOT_PATHS), and Cython does not always keep Python's
+    # semantics. The other unit jobs test the .py sources for coverage; this one
+    # runs the same tests against the compiled modules.
+    name: Unit tests (Cython hot paths)
+    runs-on: ubuntu-latest
+    env:
+      STYX_CYTHONIZE_HOT_PATHS: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: "pip"
+
+      - name: Install dependencies and compile
+        run: |
+          python -m pip install --upgrade pip setuptools Cython
+          cd styx-package && python setup.py build_ext --inplace && cd ..
+          python -m pip install -e styx-package/
+          python -m pip install msgspec pytest==9.1.1 pytest-asyncio psutil
+          python worker/setup.py build_ext --inplace
+
+      - name: Check the hot-path modules are the compiled ones
+        run: |
+          python - <<'EOF'
+          import importlib.util
+          for setup_py in ("styx-package/setup.py", "worker/setup.py"):
+              spec = importlib.util.spec_from_file_location("hot_setup", setup_py)
+              setup = importlib.util.module_from_spec(spec)
+              spec.loader.exec_module(setup)
+              for path in setup.HOT_PY_MODULES:
+                  name = path.removesuffix(".py").replace("/", ".")
+                  origin = importlib.util.find_spec(name).origin
+                  assert not origin.endswith(".py"), f"{name} is not compiled: {origin}"
+                  print("compiled:", name)
+          EOF
+
+      - name: Run worker unit tests
+        run: pytest tests/unit/worker/ -q
+
+      - name: Run styx-package unit tests
+        run: pytest tests/unit/styx_package/ -q
+
   integration-tests:
     name: Integration tests
-    needs: [unit-tests-coordinator, unit-tests-worker, unit-tests-styx-package]
+    needs: [unit-tests-coordinator, unit-tests-worker, unit-tests-styx-package, unit-tests-compiled]
     runs-on: ubuntu-latest
 
     steps:
