@@ -69,3 +69,20 @@ class TestExceptGuard:
     def test_hot_paths_off_by_default(self, setup, monkeypatch):
         monkeypatch.delenv("STYX_CYTHONIZE_HOT_PATHS", raising=False)
         assert setup.hot_path_extensions(setup.HOT_PY_MODULES) == []
+
+    def test_hot_paths_on_compiles_every_module_with_python_semantics(self, setup, monkeypatch):
+        monkeypatch.setenv("STYX_CYTHONIZE_HOT_PATHS", "true")
+        calls = []
+
+        def fake_cythonize(extensions, compiler_directives):
+            calls.append(compiler_directives)
+            return extensions
+
+        monkeypatch.setattr(setup, "cythonize", fake_cythonize, raising=False)
+        root = REPO if setup is WORKER_SETUP else REPO / "styx-package"
+        monkeypatch.chdir(root)
+        extensions = setup.hot_path_extensions(setup.HOT_PY_MODULES)
+
+        assert [e.sources for e in extensions] == [[m] for m in setup.HOT_PY_MODULES]
+        assert [e.name for e in extensions] == [m.removesuffix(".py").replace("/", ".") for m in setup.HOT_PY_MODULES]
+        assert calls == [{"language_level": "3", "annotation_typing": False, "binding": True}]
