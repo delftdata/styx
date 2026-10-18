@@ -22,7 +22,7 @@ import cityhash
 import msgspec
 import zstandard as zstd
 
-from styx.common.partitioning.hash_partitioner import HashPartitioner
+from styx.common.partitioning.hash_partitioner import HashPartitioner, _get_partition_cached
 from styx.common.serialization import (
     msgpack_deserialization,
     msgpack_serialization,
@@ -237,7 +237,7 @@ def bench_hashing(n_ops: int, iterations: int) -> None:
             partitioner_composite.get_partition_no_cache(k)
 
     # LRU cache hit rate simulation
-    HashPartitioner._get_partition_cached.cache_clear()
+    _get_partition_cached.cache_clear()
 
     def partitioner_cached_warmup():
         for k in int_keys:

@@ -19,6 +19,12 @@ COPY worker/requirements.txt /tmp/requirements.txt
 RUN python -m pip install --upgrade pip && \
     python -m pip install -r /tmp/requirements.txt
 
+# Also compile the pure-Python modules on the per-transaction path (see
+# HOT_PY_MODULES in styx-package/setup.py and worker/setup.py). Set to false
+# for a pure-Python worker, e.g. to profile it with py-spy without --native.
+ARG cythonize_hot_paths=true
+ENV STYX_CYTHONIZE_HOT_PATHS=$cythonize_hot_paths
+
 COPY styx-package /tmp/styx-package
 RUN cd /tmp/styx-package && python setup.py build_ext --inplace && \
     python -m pip install /tmp/styx-package

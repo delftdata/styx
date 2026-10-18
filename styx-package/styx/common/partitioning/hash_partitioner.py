@@ -11,6 +11,22 @@ if TYPE_CHECKING:
     from styx.common.types import K
 
 
+# Module level rather than a `@staticmethod` over `@lru_cache`: compiled by
+# Cython (see HOT_PY_MODULES in styx-package/setup.py), that stack still
+# received `self`, so every get_partition() call raised TypeError.
+@lru_cache(maxsize=100_000)
+def _get_partition_cached(
+    partitions: int,
+    composite_key_hash_parameters: tuple[int, str] | None,
+    key: K,
+) -> int:
+    if composite_key_hash_parameters is not None:
+        key: str  # This only holds for str keys
+        field, delim = composite_key_hash_parameters
+        key = key.split(delim)[field]
+    return _cy_make_key_hashable(key) % partitions
+
+
 class HashPartitioner(BasePartitioner):
     def __init__(
         self,
@@ -30,24 +46,11 @@ class HashPartitioner(BasePartitioner):
     def get_partition(self, key: K) -> int | None:
         if key is None:
             return None
-        return self._get_partition_cached(
+        return _get_partition_cached(
             self._partitions,
             self._composite_key_hash_parameters,
             key,
         )
-
-    @staticmethod
-    @lru_cache(maxsize=100_000)
-    def _get_partition_cached(
-        partitions: int,
-        composite_key_hash_parameters: tuple[int, str] | None,
-        key: K,
-    ) -> int:
-        if composite_key_hash_parameters is not None:
-            key: str  # This only holds for str keys
-            field, delim = composite_key_hash_parameters
-            key = key.split(delim)[field]
-        return _cy_make_key_hashable(key) % partitions
 
     def get_partition_no_cache(self, key: K) -> int | None:
         return _cy_get_partition_no_cache(

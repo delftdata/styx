@@ -163,7 +163,7 @@ class StyxKafkaBatchEgress(BaseEgress):
                         self.topic_partition_output_offsets[(topic_partition.topic[:-5], topic_partition.partition)]
                         + 1,
                     )
-            except UnknownTopicOrPartitionError, KafkaConnectionError:
+            except (UnknownTopicOrPartitionError, KafkaConnectionError):  # fmt: skip
                 await asyncio.sleep(1)
                 logging.warning(
                     f"Kafka at {KAFKA_URL} not ready yet, sleeping for 1 second",
