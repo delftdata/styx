@@ -37,9 +37,26 @@ class InMemoryOperatorState(BaseAriaState):
         # Used to track migration progress, the async migration and whether the operator still owns the specific key
         # (operator_name, old_partition): set of keys with the new partition
         self.keys_to_send: dict[OperatorPartition, set[tuple[K, int]]] = {}
+        # The keys of keys_to_send, for O(1) lookups (built lazily per partition)
+        self._keys_to_send_index: dict[OperatorPartition, set[K]] = {}
 
     def add_keys_to_send(self, keys_to_send: dict[OperatorPartition, K]) -> None:
         self.keys_to_send = keys_to_send
+        self._keys_to_send_index = {}
+
+    def _is_pending_send(self, operator_partition: OperatorPartition, key: K) -> bool:
+        """Whether key was registered to leave operator_partition.
+
+        The index may still hold keys that already left; callers check that the
+        key is still in the partition's data, and sending always removes it there.
+        """
+        if not self.keys_to_send.get(operator_partition):
+            return False
+        index = self._keys_to_send_index.get(operator_partition)
+        if index is None:
+            index = {k for k, _ in self.keys_to_send[operator_partition]}
+            self._keys_to_send_index[operator_partition] = index
+        return key in index
 
     def has_keys_to_send(self) -> bool:
         return bool(self.keys_to_send)
@@ -292,10 +309,9 @@ class InMemoryOperatorState(BaseAriaState):
             return False
         if key in self.data[operator_partition]:
             # During migration: a key still in data but pending send to another
-            # partition should not be considered as belonging here.
-            if operator_partition in self.keys_to_send:
-                return not any(k == key for k, _ in self.keys_to_send[operator_partition])
-            return True
+            # partition should not be considered as belonging here. The ingress
+            # calls this for every message, so it must not scan keys_to_send.
+            return not self._is_pending_send(operator_partition, key)
         # During migration: key is expected to arrive from a remote worker
         return self.in_remote_keys(key, operator_name, partition)
 

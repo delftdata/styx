@@ -386,6 +386,42 @@ class TestExists:
         s = _state()
         assert s.exists("k", "other_op", 99) is False
 
+    def test_does_not_rescan_keys_to_send(self):
+        # The ingress calls exists() for every message during a migration.
+        class CountingSet(set):
+            scans = 0
+
+            def __iter__(self):
+                CountingSet.scans += 1
+                return super().__iter__()
+
+        s = _state()
+        s.data[OP_PART] = {"k": "v", "stay": "v"}
+        s.add_keys_to_send({OP_PART: CountingSet({("k", 1)})})
+        for _ in range(100):
+            assert s.exists("k", OP, PART) is False
+            assert s.exists("stay", OP, PART) is True
+        assert CountingSet.scans == 1
+
+    def test_key_that_left_is_answered_by_remote_keys(self):
+        s = _state()
+        s.data[OP_PART] = {"k": "v"}
+        s.add_keys_to_send({OP_PART: {("k", 1)}})
+        assert s.exists("k", OP, PART) is False
+        s.get_async_migrate_batch(10)  # k leaves; keys_to_send empties
+        assert s.exists("k", OP, PART) is False
+        s.data[OP_PART]["k"] = "v2"  # migration over: a key here belongs here
+        assert s.exists("k", OP, PART) is True
+
+    def test_new_transfer_resets_the_index(self):
+        s = _state()
+        s.data[OP_PART] = {"a": 1, "b": 2}
+        s.add_keys_to_send({OP_PART: {("a", 1)}})
+        assert s.exists("b", OP, PART) is True
+        s.add_keys_to_send({OP_PART: {("b", 1)}})
+        assert s.exists("b", OP, PART) is False
+        assert s.exists("a", OP, PART) is True
+
 
 # ---------------------------------------------------------------------------
 # snapshot helpers
