@@ -26,6 +26,7 @@ from dataclasses import dataclass
 import json
 import logging
 from pathlib import Path
+import shutil
 
 import pytest
 
@@ -207,7 +208,14 @@ def _run_client(
         raise AssertionError(f"client.py failed (rc={rc}). Output:\n{out}")
 
 
+def _keep_results(results_dir: Path) -> None:
+    """Copy the run's results next to the cluster logs, which CI uploads."""
+    target = _resolve_paths().repo_root / "logs" / results_dir.parent.name
+    shutil.copytree(results_dir, target, dirs_exist_ok=True)
+
+
 def _assert_artifacts_and_metrics(results_dir: Path, client: _ClientParams) -> None:
+    _keep_results(results_dir)
     client_csv = results_dir / "client_requests.csv"
     output_csv = results_dir / "output.csv"
     log.info("Checking artifacts: %s and %s", client_csv, output_csv)
