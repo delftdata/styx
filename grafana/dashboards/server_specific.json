@@ -296,7 +296,7 @@
       "id": 5,
       "type": "timeseries",
       "title": "Throughput (TPS)",
-      "description": "Transactions per second, averaged over the epochs sampled in the rate window.",
+      "description": "Committed transactions per second (wall-clock, including idle time between epochs).",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -339,7 +339,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (exported_instance) (avg_over_time(worker_epoch_throughput_tps{exported_instance=~\"$worker\"}[$__rate_interval]))",
+          "expr": "sum by (exported_instance) (rate(worker_committed_transactions_total{exported_instance=~\"$worker\"}[$__rate_interval]))",
           "legendFormat": "worker {{exported_instance}}",
           "refId": "A",
           "instant": false,
@@ -406,7 +406,7 @@
       "id": 7,
       "type": "timeseries",
       "title": "Concurrency Abort Rate",
-      "description": "Share of an epoch's transactions aborted by Aria conflict detection.",
+      "description": "Share of the worker's transactions that hit an Aria conflict and were re-executed by the fallback (fallback is on by default, so they still commit in the same epoch).",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"

@@ -17,7 +17,7 @@ from aria_sync_metadata import AriaSyncMetadata
 import boto3
 import botocore
 from coordinator_metadata import Coordinator
-from prometheus_client import Gauge, start_http_server
+from prometheus_client import Counter, Gauge, start_http_server
 from styx.common.base_networking import SOCKET_RCV_BUF, SOCKET_SND_BUF
 from styx.common.logging import logging
 from styx.common.message_types import MessageType
@@ -135,6 +135,14 @@ class CoordinatorService:
         self.epoch_latency_gauge = Gauge(
             "worker_epoch_latency_ms",
             "Epoch Latency (ms)",
+            ["instance"],
+        )
+        # Running total of committed transactions: rate() over it gives the real
+        # throughput, including the idle time between epochs that the per-epoch
+        # throughput gauge leaves out.
+        self.committed_transactions_counter = Counter(
+            "worker_committed_transactions",
+            "Committed transactions",
             ["instance"],
         )
         self.epoch_throughput_gauge = Gauge(
@@ -603,6 +611,9 @@ class CoordinatorService:
         snap_time: float,
     ) -> None:
         self.epoch_throughput_gauge.labels(instance=worker_id).set(epoch_throughput)
+        # The worker sends committed * 1000 // epoch_latency, so this recovers
+        # the epoch's committed count (rounding error < epoch_latency / 1000).
+        self.committed_transactions_counter.labels(instance=worker_id).inc(epoch_throughput * epoch_latency / 1000)
         self.epoch_latency_gauge.labels(instance=worker_id).set(epoch_latency)
         self.epoch_abort_gauge.labels(instance=worker_id).set(local_abort_rate)
 
