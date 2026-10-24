@@ -17,6 +17,7 @@ from aria_sync_metadata import AriaSyncMetadata
 import boto3
 import botocore
 from coordinator_metadata import Coordinator
+from prometheus_client import Gauge, start_http_server
 from styx.common.base_networking import SOCKET_RCV_BUF, SOCKET_SND_BUF
 from styx.common.logging import logging
 from styx.common.message_types import MessageType
@@ -26,7 +27,6 @@ from styx.common.tcp_networking import MessagingMode, NetworkingManager
 from styx.common.util.aio_task_scheduler import AIOTaskScheduler
 import uvloop
 
-from coordinator.metrics import start_metrics_server
 from coordinator.migration_metadata import MigrationMetadata
 
 if TYPE_CHECKING:
@@ -36,7 +36,6 @@ if TYPE_CHECKING:
 
 SERVER_PORT = 8888
 PROTOCOL_PORT = 8889
-METRICS_PORT = 8000
 
 S3_ENDPOINT: str = os.environ["S3_ENDPOINT"]
 S3_ACCESS_KEY: str = os.environ["S3_ACCESS_KEY"]
@@ -112,7 +111,57 @@ class CoordinatorService:
         self.recovery_lock: asyncio.Lock = asyncio.Lock()
         self.recovery_state: RecoveryState = RecoveryState.IDLE
 
-        self.metrics = start_metrics_server(METRICS_PORT)
+        self.metrics_server = start_http_server(8000)
+        self.cpu_usage_gauge = Gauge(
+            "worker_cpu_usage_percent",
+            "CPU usage percentage",
+            ["instance"],
+        )
+        self.memory_usage_gauge = Gauge(
+            "worker_memory_usage_mb",
+            "Memory usage in MB",
+            ["instance"],
+        )
+        self.network_rx_gauge = Gauge(
+            "worker_network_rx_kb",
+            "Network received KB",
+            ["instance"],
+        )
+        self.network_tx_gauge = Gauge(
+            "worker_network_tx_kb",
+            "Network transmitted KB",
+            ["instance"],
+        )
+        self.epoch_latency_gauge = Gauge(
+            "worker_epoch_latency_ms",
+            "Epoch Latency (ms)",
+            ["instance"],
+        )
+        self.epoch_throughput_gauge = Gauge(
+            "worker_epoch_throughput_tps",
+            "Epoch Throughput (transactions per second)",
+            ["instance"],
+        )
+        self.epoch_abort_gauge = Gauge(
+            "worker_abort_percent",
+            "Epoch Concurrency Abort percentage",
+            ["instance"],
+        )
+        self.latency_breakdown_gauge = Gauge(
+            "latency_breakdown",
+            "Time Spent in different phases within the transactional protocol",
+            ["instance", "component"],
+        )
+        self.snapshotting_gauge = Gauge(
+            "worker_total_snapshotting_time_ms",
+            "Snapshotting time (ms)",
+            ["instance"],
+        )
+        self.heartbeat_gauge = Gauge(
+            "time_since_last_heartbeat",
+            "Time Since Last Heartbeat",
+            ["instance"],
+        )
 
         self.migration_in_progress: bool = False
 
@@ -349,7 +398,7 @@ class CoordinatorService:
             ) = self.networking.decode_message(data)
 
             snapshot_time = end - start
-            self.metrics.record_snapshot(worker_id, snapshot_time)
+            self.snapshotting_gauge.labels(instance=worker_id).set(snapshot_time)
 
             logging.warning(
                 f"Worker: {worker_id} | "
@@ -379,9 +428,12 @@ class CoordinatorService:
     ) -> None:
         mt = MessageType.Heartbeat
         async with self.networking_locks[mt]:
-            worker_id, cpu_perc, mem_bytes, rx_bytes, tx_bytes = self.networking.decode_message(data)
+            worker_id, cpu_perc, mem_util, rx_net, tx_net = self.networking.decode_message(data)
 
-            self.metrics.record_heartbeat(worker_id, cpu_perc, mem_bytes, rx_bytes, tx_bytes)
+            self.cpu_usage_gauge.labels(instance=worker_id).set(cpu_perc)  # %
+            self.memory_usage_gauge.labels(instance=worker_id).set(mem_util)  # MB
+            self.network_rx_gauge.labels(instance=worker_id).set(rx_net)  # KB
+            self.network_tx_gauge.labels(instance=worker_id).set(tx_net)  # KB
 
             heartbeat_rcv_time = timer()
             logging.info(
@@ -495,31 +547,6 @@ class CoordinatorService:
         async with self.networking_locks[mt]:
             (
                 worker_id,
-                n_sequenced,
-                n_committed,
-                n_aborted,
-                epoch_latency,
-                *phase_ms,
-            ) = self.protocol_networking.decode_message(data)
-
-            self.metrics.record_epoch(worker_id, n_sequenced, n_committed, n_aborted, epoch_latency, phase_ms)
-
-            sync_complete: bool = self.aria_metadata.set_empty_sync_done(worker_id)
-            if not sync_complete:
-                return
-
-            await self.finalize_worker_sync(
-                mt,
-                b"",
-                Serializer.NONE,
-            )
-            self.aria_metadata.cleanup()
-
-    async def _handle_sync_cleanup(self, data: bytes) -> None:
-        mt = MessageType.SyncCleanup
-        async with self.networking_locks[mt]:
-            (
-                worker_id,
                 epoch_throughput,
                 epoch_latency,
                 local_abort_rate,
@@ -558,6 +585,35 @@ class CoordinatorService:
                 Serializer.MSGPACK,
             )
             self.aria_metadata.cleanup(epoch_end=True)
+
+    def _record_epoch_metrics(
+        self,
+        *,
+        worker_id: str,
+        epoch_throughput: float,
+        epoch_latency: float,
+        local_abort_rate: float,
+        wal_time: float,
+        func_time: float,
+        chain_ack_time: float,
+        sync_time: float,
+        conflict_res_time: float,
+        commit_time: float,
+        fallback_time: float,
+        snap_time: float,
+    ) -> None:
+        self.epoch_throughput_gauge.labels(instance=worker_id).set(epoch_throughput)
+        self.epoch_latency_gauge.labels(instance=worker_id).set(epoch_latency)
+        self.epoch_abort_gauge.labels(instance=worker_id).set(local_abort_rate)
+
+        self.latency_breakdown_gauge.labels(instance=worker_id, component="WAL").set(wal_time)
+        self.latency_breakdown_gauge.labels(instance=worker_id, component="1st Run").set(func_time)
+        self.latency_breakdown_gauge.labels(instance=worker_id, component="Chain Acks").set(chain_ack_time)
+        self.latency_breakdown_gauge.labels(instance=worker_id, component="SYNC").set(sync_time)
+        self.latency_breakdown_gauge.labels(instance=worker_id, component="Conflict Resolution").set(conflict_res_time)
+        self.latency_breakdown_gauge.labels(instance=worker_id, component="Commit time").set(commit_time)
+        self.latency_breakdown_gauge.labels(instance=worker_id, component="Fallback").set(fallback_time)
+        self.latency_breakdown_gauge.labels(instance=worker_id, component="Async Snapshot").set(snap_time)
 
     async def _handle_deterministic_reordering(self, data: bytes) -> None:
         mt = MessageType.DeterministicReordering
@@ -776,11 +832,20 @@ class CoordinatorService:
         # All workers will effectively need to rebuild their snapshot IDs
         self.coordinator.worker_snapshot_ids = {worker.worker_id: -1 for worker in participating_workers}
 
-        # 4) Reset worker heartbeat baseline times
+        # 4) Reset worker heartbeat gauges and baseline times
         for worker in participating_workers:
             # Next heartbeat from worker defines fresh baseline
             worker.previous_heartbeat = 1_000_000.0
-        self.metrics.reset_heartbeat_ages(worker.worker_id for worker in participating_workers)
+            self.heartbeat_gauge.labels(instance=worker.worker_id).set(0)
+
+        # 5) Reset epoch-related metrics
+        for worker in participating_workers:
+            wid = worker.worker_id
+            self.epoch_throughput_gauge.labels(instance=wid).set(0)
+            self.epoch_latency_gauge.labels(instance=wid).set(0)
+            self.epoch_abort_gauge.labels(instance=wid).set(0)
+        # Reset latency breakdown (all labels)
+        self.latency_breakdown_gauge._metrics.clear()  # noqa: SLF001
 
         logging.warning("Protocol metadata reset complete")
 
@@ -842,7 +907,13 @@ class CoordinatorService:
             await asyncio.sleep(interval_time)
             heartbeat_check_time = timer()
             workers_to_remove, heartbeats_per_worker = self.coordinator.check_heartbeats(heartbeat_check_time)
-            self.metrics.set_heartbeat_ages(heartbeats_per_worker)
+            for (
+                worker_id,
+                time_since_last_heartbeat_ms,
+            ) in heartbeats_per_worker.items():
+                self.heartbeat_gauge.labels(instance=worker_id).set(
+                    time_since_last_heartbeat_ms,
+                )
 
             # Add workers that re-registered (same IP/ports) to the failed set
             if (workers_to_remove or self.workers_that_re_registered) and self.recovery_state == RecoveryState.IDLE:

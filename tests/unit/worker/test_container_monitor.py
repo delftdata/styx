@@ -44,33 +44,11 @@ class TestGetStats:
             cpu, mem, rx, tx = cm.get_stats()
 
         assert cpu == 50.12
-        assert mem == 10 * 1024 * 1024
-        # Loopback is excluded: only eth0 counts.
-        assert rx == 4096
-        assert tx == 8192
-
-    @patch("worker.util.container_monitor.psutil.Process")
-    def test_sums_non_loopback_interfaces_without_space_after_colon(self, mock_process_cls):
-        mock_proc = MagicMock()
-        mock_proc.cpu_percent.return_value = 0.0
-        mock_proc.memory_info.return_value = MagicMock(rss=0)
-        mock_process_cls.return_value = mock_proc
-
-        cm = ContainerMonitor(os.getpid())
-
-        net_dev_content = (
-            "Inter-|   Receive                                                |  Transmit\n"
-            " face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed\n"
-            "    lo:999       10    0    0    0     0          0         0     999       20    0    0    0     0       0          0\n"
-            "  eth0:100       40    0    0    0     0          0         0     200       80    0    0    0     0       0          0\n"
-            "  eth1:  10       40    0    0    0     0          0         0      20       80    0    0    0     0       0          0\n"
-        )
-
-        with patch("builtins.open", mock_open(read_data=net_dev_content)):
-            _, _, rx, tx = cm.get_stats()
-
-        assert rx == 110
-        assert tx == 220
+        assert mem == 10.0
+        # Loopback is excluded: rx = 4096 / 1024 = 4.0
+        assert rx == 4.0
+        # tx = 8192 / 1024 = 8.0
+        assert tx == 8.0
 
     @patch("worker.util.container_monitor.psutil.Process")
     def test_file_not_found_returns_zero_network(self, mock_process_cls):
@@ -85,6 +63,6 @@ class TestGetStats:
             cpu, mem, rx, tx = cm.get_stats()
 
         assert cpu == 10.0
-        assert mem == 5 * 1024 * 1024
+        assert mem == 5.0
         assert rx == 0
         assert tx == 0

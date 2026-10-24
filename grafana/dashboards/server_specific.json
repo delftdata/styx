@@ -49,10 +49,10 @@
           "type": "prometheus",
           "uid": "prometheus"
         },
-        "definition": "label_values(styx_worker_cpu_percent, worker_id)",
+        "definition": "label_values(worker_cpu_usage_percent, exported_instance)",
         "query": {
           "qryType": 1,
-          "query": "label_values(styx_worker_cpu_percent, worker_id)",
+          "query": "label_values(worker_cpu_usage_percent, exported_instance)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 2,
@@ -119,8 +119,8 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "styx_worker_cpu_percent{worker_id=~\"$worker\"}",
-          "legendFormat": "worker {{worker_id}}",
+          "expr": "worker_cpu_usage_percent{exported_instance=~\"$worker\"}",
+          "legendFormat": "worker {{exported_instance}}",
           "refId": "A",
           "instant": false,
           "range": true
@@ -174,8 +174,8 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "styx_worker_memory_bytes{worker_id=~\"$worker\"}",
-          "legendFormat": "worker {{worker_id}}",
+          "expr": "worker_memory_usage_mb{exported_instance=~\"$worker\"} * 1048576",
+          "legendFormat": "worker {{exported_instance}}",
           "refId": "A",
           "instant": false,
           "range": true
@@ -229,8 +229,8 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (worker_id) (rate(styx_worker_network_receive_bytes_total{worker_id=~\"$worker\"}[$__rate_interval]))",
-          "legendFormat": "worker {{worker_id}}",
+          "expr": "sum by (exported_instance) (rate(worker_network_rx_kb{exported_instance=~\"$worker\"}[$__rate_interval])) * 1024",
+          "legendFormat": "worker {{exported_instance}}",
           "refId": "A",
           "instant": false,
           "range": true
@@ -284,8 +284,8 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (worker_id) (rate(styx_worker_network_transmit_bytes_total{worker_id=~\"$worker\"}[$__rate_interval]))",
-          "legendFormat": "worker {{worker_id}}",
+          "expr": "sum by (exported_instance) (rate(worker_network_tx_kb{exported_instance=~\"$worker\"}[$__rate_interval])) * 1024",
+          "legendFormat": "worker {{exported_instance}}",
           "refId": "A",
           "instant": false,
           "range": true
@@ -295,8 +295,8 @@
     {
       "id": 5,
       "type": "timeseries",
-      "title": "Throughput (committed TPS)",
-      "description": "Committed transactions per second. 'Sequenced' also counts re-executions of aborted transactions.",
+      "title": "Throughput (TPS)",
+      "description": "Transactions per second, averaged over the epochs sampled in the rate window.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -339,8 +339,8 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (worker_id) (rate(styx_transactions_committed_total{worker_id=~\"$worker\"}[$__rate_interval]))",
-          "legendFormat": "worker {{worker_id}}",
+          "expr": "sum by (exported_instance) (avg_over_time(worker_epoch_throughput_tps{exported_instance=~\"$worker\"}[$__rate_interval]))",
+          "legendFormat": "worker {{exported_instance}}",
           "refId": "A",
           "instant": false,
           "range": true
@@ -350,8 +350,8 @@
     {
       "id": 6,
       "type": "timeseries",
-      "title": "Epoch Latency (avg)",
-      "description": "Average duration of a transactional epoch over the rate window.",
+      "title": "Epoch Latency",
+      "description": "Epoch duration, averaged over the epochs sampled in the rate window.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -394,8 +394,8 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (worker_id) (rate(styx_epoch_duration_ms_sum{worker_id=~\"$worker\"}[$__rate_interval])) / sum by (worker_id) (rate(styx_epoch_duration_ms_count{worker_id=~\"$worker\"}[$__rate_interval]))",
-          "legendFormat": "worker {{worker_id}}",
+          "expr": "avg by (exported_instance) (avg_over_time(worker_epoch_latency_ms{exported_instance=~\"$worker\"}[$__rate_interval]))",
+          "legendFormat": "worker {{exported_instance}}",
           "refId": "A",
           "instant": false,
           "range": true
@@ -406,7 +406,7 @@
       "id": 7,
       "type": "timeseries",
       "title": "Concurrency Abort Rate",
-      "description": "Share of sequenced transactions aborted by Aria conflict detection (before fallback).",
+      "description": "Share of an epoch's transactions aborted by Aria conflict detection.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -449,8 +449,8 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (worker_id) (rate(styx_transactions_concurrency_aborted_total{worker_id=~\"$worker\"}[$__rate_interval])) / sum by (worker_id) (rate(styx_transactions_sequenced_total{worker_id=~\"$worker\"}[$__rate_interval]))",
-          "legendFormat": "worker {{worker_id}}",
+          "expr": "avg by (exported_instance) (avg_over_time(worker_abort_percent{exported_instance=~\"$worker\"}[$__rate_interval]))",
+          "legendFormat": "worker {{exported_instance}}",
           "refId": "A",
           "instant": false,
           "range": true
@@ -461,7 +461,7 @@
       "id": 8,
       "type": "piechart",
       "title": "Latency Breakdown",
-      "description": "Share of epoch time spent in each protocol phase over the selected time range.",
+      "description": "Average share of epoch time spent in each protocol phase over the selected time range.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -508,8 +508,8 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (phase) (increase(styx_epoch_phase_ms_total{worker_id=~\"$worker\"}[$__range]))",
-          "legendFormat": "{{phase}}",
+          "expr": "avg by (component) (avg_over_time(latency_breakdown{exported_instance=~\"$worker\"}[$__range]))",
+          "legendFormat": "{{component}}",
           "refId": "A",
           "instant": true,
           "range": false
@@ -563,8 +563,8 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "styx_worker_snapshot_duration_ms{worker_id=~\"$worker\"}",
-          "legendFormat": "worker {{worker_id}}",
+          "expr": "worker_total_snapshotting_time_ms{exported_instance=~\"$worker\"}",
+          "legendFormat": "worker {{exported_instance}}",
           "refId": "A",
           "instant": false,
           "range": true
@@ -631,8 +631,8 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "styx_worker_heartbeat_age_ms{worker_id=~\"$worker\"}",
-          "legendFormat": "worker {{worker_id}}",
+          "expr": "time_since_last_heartbeat{exported_instance=~\"$worker\"}",
+          "legendFormat": "worker {{exported_instance}}",
           "refId": "A",
           "instant": true,
           "range": false

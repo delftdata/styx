@@ -90,8 +90,8 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "styx_worker_cpu_percent",
-          "legendFormat": "worker {{worker_id}}",
+          "expr": "worker_cpu_usage_percent",
+          "legendFormat": "worker {{exported_instance}}",
           "refId": "A",
           "instant": false,
           "range": true
@@ -145,8 +145,8 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "styx_worker_memory_bytes",
-          "legendFormat": "worker {{worker_id}}",
+          "expr": "worker_memory_usage_mb * 1048576",
+          "legendFormat": "worker {{exported_instance}}",
           "refId": "A",
           "instant": false,
           "range": true
@@ -200,7 +200,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(styx_worker_network_receive_bytes_total[$__rate_interval]))",
+          "expr": "sum(rate(worker_network_rx_kb[$__rate_interval])) * 1024",
           "legendFormat": "cluster",
           "refId": "A",
           "instant": false,
@@ -255,7 +255,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(styx_worker_network_transmit_bytes_total[$__rate_interval]))",
+          "expr": "sum(rate(worker_network_tx_kb[$__rate_interval])) * 1024",
           "legendFormat": "cluster",
           "refId": "A",
           "instant": false,
@@ -266,8 +266,8 @@
     {
       "id": 5,
       "type": "timeseries",
-      "title": "Throughput (committed TPS)",
-      "description": "Committed transactions per second. 'Sequenced' also counts re-executions of aborted transactions.",
+      "title": "Throughput (TPS)",
+      "description": "Transactions per second, averaged over the epochs sampled in the rate window.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -294,7 +294,7 @@
       },
       "options": {
         "legend": {
-          "showLegend": true,
+          "showLegend": false,
           "displayMode": "list",
           "placement": "bottom",
           "calcs": []
@@ -310,20 +310,9 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(styx_transactions_committed_total[$__rate_interval]))",
-          "legendFormat": "committed",
+          "expr": "sum(avg_over_time(worker_epoch_throughput_tps[$__rate_interval]))",
+          "legendFormat": "cluster",
           "refId": "A",
-          "instant": false,
-          "range": true
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum(rate(styx_transactions_sequenced_total[$__rate_interval]))",
-          "legendFormat": "sequenced (incl. retries)",
-          "refId": "B",
           "instant": false,
           "range": true
         }
@@ -332,8 +321,8 @@
     {
       "id": 6,
       "type": "timeseries",
-      "title": "Epoch Latency (avg)",
-      "description": "Average duration of a transactional epoch over the rate window.",
+      "title": "Epoch Latency",
+      "description": "Epoch duration, averaged over the epochs sampled in the rate window.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -376,7 +365,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(styx_epoch_duration_ms_sum[$__rate_interval])) / sum(rate(styx_epoch_duration_ms_count[$__rate_interval]))",
+          "expr": "avg(avg_over_time(worker_epoch_latency_ms[$__rate_interval]))",
           "legendFormat": "avg",
           "refId": "A",
           "instant": false,
@@ -388,7 +377,7 @@
       "id": 7,
       "type": "timeseries",
       "title": "Concurrency Abort Rate",
-      "description": "Share of sequenced transactions aborted by Aria conflict detection (before fallback).",
+      "description": "Share of an epoch's transactions aborted by Aria conflict detection.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -431,8 +420,8 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(styx_transactions_concurrency_aborted_total[$__rate_interval])) / sum(rate(styx_transactions_sequenced_total[$__rate_interval]))",
-          "legendFormat": "abort rate",
+          "expr": "avg(avg_over_time(worker_abort_percent[$__rate_interval]))",
+          "legendFormat": "avg",
           "refId": "A",
           "instant": false,
           "range": true
@@ -443,7 +432,7 @@
       "id": 8,
       "type": "piechart",
       "title": "Latency Breakdown",
-      "description": "Share of epoch time spent in each protocol phase over the selected time range.",
+      "description": "Average share of epoch time spent in each protocol phase over the selected time range.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -490,8 +479,8 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (phase) (increase(styx_epoch_phase_ms_total[$__range]))",
-          "legendFormat": "{{phase}}",
+          "expr": "avg by (component) (avg_over_time(latency_breakdown[$__range]))",
+          "legendFormat": "{{component}}",
           "refId": "A",
           "instant": true,
           "range": false
@@ -545,7 +534,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "avg(styx_worker_snapshot_duration_ms)",
+          "expr": "avg(worker_total_snapshotting_time_ms)",
           "legendFormat": "avg",
           "refId": "A",
           "instant": false,
@@ -556,7 +545,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(styx_worker_snapshot_duration_ms)",
+          "expr": "max(worker_total_snapshotting_time_ms)",
           "legendFormat": "slowest worker",
           "refId": "B",
           "instant": false,
@@ -624,8 +613,8 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "styx_worker_heartbeat_age_ms",
-          "legendFormat": "worker {{worker_id}}",
+          "expr": "time_since_last_heartbeat",
+          "legendFormat": "worker {{exported_instance}}",
           "refId": "A",
           "instant": true,
           "range": false
