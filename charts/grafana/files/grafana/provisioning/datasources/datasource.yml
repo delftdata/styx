@@ -2,9 +2,11 @@ apiVersion: 1
 
 datasources:
   - name: Prometheus
+    uid: prometheus  # Referenced by the provisioned dashboards
     type: prometheus
     access: proxy
     url: http://{{ .Release.Name }}-prometheus:9090
     isDefault: true
     jsonData:
       httpMethod: GET
+      timeInterval: {{ .Values.scrapeInterval }}

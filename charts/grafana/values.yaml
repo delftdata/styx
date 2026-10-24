@@ -9,6 +9,9 @@ service:
 
 resources: {}
 
+# Prometheus scrape interval; sets the datasource's minimum step and $__rate_interval.
+scrapeInterval: 5s
+
 env:
   GF_AUTH_ANONYMOUS_ENABLED: "true"
   GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"

@@ -7,16 +7,23 @@ class ContainerMonitor:
         self.proc = psutil.Process(worker_pid)
 
     def __get_process_network_usage(self) -> tuple[float, float]:
-        """Reads /proc/[pid]/net/dev for per-process network usage."""
+        """Reads /proc/[pid]/net/dev for per-process network usage, excluding loopback.
+
+        Loopback is skipped because the worker ships snapshot deltas to its own
+        snapshotting process over localhost, which is not network traffic.
+        """
         net_stat_path = f"/proc/{self.worker_pid}/net/dev"
         try:
             with open(net_stat_path) as f:  # noqa: PTH123
                 lines = f.readlines()[2:]  # Skip headers
             net_rx, net_tx = 0, 0
             for line in lines:
-                parts = line.split()
-                net_rx += int(parts[1])  # Received bytes
-                net_tx += int(parts[9])  # Transmitted bytes
+                iface, _, counters = line.partition(":")
+                if iface.strip() == "lo":
+                    continue
+                parts = counters.split()
+                net_rx += int(parts[0])  # Received bytes
+                net_tx += int(parts[8])  # Transmitted bytes
             return net_rx / 1024, net_tx / 1024  # Convert to KB
         except FileNotFoundError:
             return 0, 0  # Process might have exited

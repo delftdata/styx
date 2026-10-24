@@ -45,10 +45,10 @@ class TestGetStats:
 
         assert cpu == 50.12
         assert mem == 10.0
-        # rx = (1024 + 4096) / 1024 = 5.0
-        assert rx == 5.0
-        # tx = (2048 + 8192) / 1024 = 10.0
-        assert tx == 10.0
+        # Loopback is excluded: rx = 4096 / 1024 = 4.0
+        assert rx == 4.0
+        # tx = 8192 / 1024 = 8.0
+        assert tx == 8.0
 
     @patch("worker.util.container_monitor.psutil.Process")
     def test_file_not_found_returns_zero_network(self, mock_process_cls):

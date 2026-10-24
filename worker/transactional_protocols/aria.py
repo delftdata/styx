@@ -601,16 +601,19 @@ class AriaProtocol(BaseTransactionalProtocol):
         concurrency_aborts = await self._compute_concurrency_aborts()
         conflict_resolution_end = timer()
 
-        local_abort_rate = (len(concurrency_aborts) / len(sequence)) if sequence else 0.0
-
         # Notify peers that we are ready to commit
         sync_time += await self._sync_commit(sequence, concurrency_aborts)
 
         # HERE WE KNOW ALL THE CONCURRENCY ABORTS
         commit_start = timer()
-        self._commit_and_prepare_responses(sequence)
+        n_committed = self._commit_and_prepare_responses(sequence)
         await self.send_delta_to_snapshotting_proc()
         commit_end = timer()
+
+        # Share of this worker's own transactions aborted anywhere in the cluster.
+        # (concurrency_aborts can't be used: it also holds remote transactions
+        # that touched local keys, so dividing it by len(sequence) exceeds 1.)
+        local_abort_rate = ((len(sequence) - n_committed) / len(sequence)) if sequence else 0.0
 
         fallback_start = timer()
         abort_rate = await self._maybe_run_fallback()
@@ -747,7 +750,8 @@ class AriaProtocol(BaseTransactionalProtocol):
 
         return end - start
 
-    def _commit_and_prepare_responses(self, sequence: list[SequencedItem]) -> None:
+    def _commit_and_prepare_responses(self, sequence: list[SequencedItem]) -> int:
+        """Commit the epoch and schedule its responses; returns how many of ``sequence`` committed."""
         logging.debug(
             f"{self.id} ||| Starting commit! {self.concurrency_aborts_everywhere}",
         )
@@ -776,6 +780,7 @@ class AriaProtocol(BaseTransactionalProtocol):
             f"{self.id} ||| Sequence committed! | "
             f"{len(self.concurrency_aborts_everywhere)} / {self.total_processed_seq_size}",
         )
+        return len(current_completed_t_ids)
 
     async def _maybe_run_fallback(self) -> float:
         abort_rate: float = (
