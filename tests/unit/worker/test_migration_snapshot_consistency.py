@@ -118,6 +118,7 @@ def _worker(link: _Link, worker_id: int, addr: tuple, peers: dict, state: InMemo
     proto.started = asyncio.Event()
     proto.started.set()
     proto.migrating_state = True
+    proto.currently_processing = False
     proto.registered_operators = dict.fromkeys(state.operator_partitions)
     proto._init_async_migration_state()
     proto.protocol_handlers_map = {
@@ -303,3 +304,25 @@ class TestStopForMigration:
         await proto.stop(keep_egress=True)
         await proto.stop()
         proto.egress.stop.assert_awaited_once()
+
+
+class TestMigrationBudget:
+    async def test_keys_per_epoch_are_capped_until_the_epoch_ends(self, monkeypatch):
+        monkeypatch.setattr(aria, "ASYNC_MIGRATION_KEYS_PER_EPOCH", 4)
+        monkeypatch.setattr(aria, "ASYNC_MIGRATION_BATCH_SIZE", 3)
+        _link, src, _dst = _two_workers(10)
+        src._init_async_migration_state()
+        src.currently_processing = True  # an epoch is running
+
+        sender = asyncio.create_task(src._continuous_migration_sender())
+        await asyncio.sleep(0.05)
+        assert src.local_state.keys_remaining_to_send() == 6  # 3 + 1, then waits
+
+        src._migration_epoch_ended.set()  # the epoch ends
+        await asyncio.sleep(0.05)
+        assert src.local_state.keys_remaining_to_send() == 2
+
+        src.currently_processing = False  # idle: refills on its own
+        src._migration_epoch_ended.set()
+        await asyncio.wait_for(sender, timeout=2)
+        assert src.local_state.keys_remaining_to_send() == 0

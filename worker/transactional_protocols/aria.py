@@ -49,6 +49,11 @@ KAFKA_URL: str = os.environ["KAFKA_URL"]
 USE_ASYNC_MIGRATION: bool = bool(strtobool(os.getenv("USE_ASYNC_MIGRATION", "true")))
 # Small batches keep each sender step short, so epochs are not held up behind it.
 ASYNC_MIGRATION_BATCH_SIZE: int = int(os.getenv("ASYNC_MIGRATION_BATCH_SIZE", "500"))
+# Keys moved per epoch. Everything moved in an epoch is serialized into that
+# epoch's snapshot delta on its critical path, so the transfer is spread out.
+ASYNC_MIGRATION_KEYS_PER_EPOCH: int = int(os.getenv("ASYNC_MIGRATION_KEYS_PER_EPOCH", "3_000"))
+# With no epoch running, the budget refills after this long instead.
+ASYNC_MIGRATION_IDLE_REFILL_S: float = 0.01
 
 
 class AriaProtocol(BaseTransactionalProtocol):
@@ -208,6 +213,8 @@ class AriaProtocol(BaseTransactionalProtocol):
         # Distinguishes acks for this protocol's batches from late acks for a
         # previous protocol instance (recovery or migration rebuilds the protocol).
         self._migration_nonce: int = random.getrandbits(62)
+        self._migration_budget: int = ASYNC_MIGRATION_KEYS_PER_EPOCH
+        self._migration_epoch_ended: asyncio.Event = asyncio.Event()
 
     async def wait_stopped(self) -> None:
         await self.stopped.wait()
@@ -655,13 +662,30 @@ class AriaProtocol(BaseTransactionalProtocol):
                     await asyncio.sleep(0.01)
                     continue
 
-                batch = self.local_state.get_async_migrate_batch(ASYNC_MIGRATION_BATCH_SIZE)
+                if self._migration_budget <= 0:
+                    await self._wait_for_migration_budget()
+                    continue
+
+                batch = self.local_state.get_async_migrate_batch(
+                    min(ASYNC_MIGRATION_BATCH_SIZE, self._migration_budget),
+                )
+                self._migration_budget -= sum(len(kv) for kv in batch.values())
                 await self._send_migration_batch(batch)
                 # Yield to event loop between batches
                 await asyncio.sleep(0)
         except asyncio.CancelledError:
             logging.warning("MIGRATION | Continuous migration sender cancelled")
             raise
+
+    async def _wait_for_migration_budget(self) -> None:
+        """Wait for the next epoch to end, or a short while if none is running."""
+        self._migration_epoch_ended.clear()
+        if self.currently_processing:
+            await self._migration_epoch_ended.wait()
+        else:
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(self._migration_epoch_ended.wait(), ASYNC_MIGRATION_IDLE_REFILL_S)
+        self._migration_budget = ASYNC_MIGRATION_KEYS_PER_EPOCH
 
     async def function_scheduler(self) -> None:
         await self.started.wait()
@@ -769,6 +793,7 @@ class AriaProtocol(BaseTransactionalProtocol):
         # Every worker has passed this epoch's snapshot cut, so batches sent from
         # here on belong to the next epoch at both ends.
         self._migration_gate.set()
+        self._migration_epoch_ended.set()
 
     async def _run_epoch_functions_and_chain(
         self,
