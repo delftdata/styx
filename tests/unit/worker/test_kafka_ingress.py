@@ -3,6 +3,7 @@
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from aiokafka import TopicPartition
 from aiokafka.errors import KafkaConnectionError, UnknownTopicOrPartitionError
 import pytest
 from styx.common.message_types import MessageType
@@ -383,7 +384,7 @@ class TestKafkaConsumerStartupExceptionHandling:
         import inspect
         import textwrap
 
-        source = textwrap.dedent(inspect.getsource(StyxKafkaIngress.start_kafka_consumer))
+        source = textwrap.dedent(inspect.getsource(StyxKafkaIngress._create_kafka_consumer))
         tree = ast.parse(source)
 
         # Find all except handlers in the function
@@ -403,3 +404,59 @@ class TestKafkaConsumerStartupExceptionHandling:
                     "Use 'except (UnknownTopicOrPartitionError, KafkaConnectionError):' "
                     "to catch both.",
                 )
+
+
+async def _poll_forever(**_):
+    await asyncio.sleep(10)
+
+
+class TestConsumerHandOver:
+    """A migration stop keeps the connected consumer for the rebuilt protocol."""
+
+    @pytest.mark.asyncio
+    async def test_adopted_consumer_is_reassigned_and_seeked_not_recreated(self):
+        ingress, *_ = _make_ingress()
+        consumer = MagicMock()
+        consumer.getmany = AsyncMock(side_effect=asyncio.CancelledError())
+        consumer.stop = AsyncMock()
+        ingress.adopt_consumer(consumer)
+        tps = [TopicPartition("users", 0), TopicPartition("users", 4)]
+
+        with (
+            patch("worker.ingress.styx_kafka_ingress.AIOKafkaConsumer") as factory,
+            pytest.raises(asyncio.CancelledError),
+        ):
+            await ingress.start_kafka_consumer(tps, {("users", 0): 41, ("users", 4): -1})
+
+        factory.assert_not_called()
+        consumer.assign.assert_called_once_with(tps)
+        consumer.seek.assert_any_call(TopicPartition("users", 0), 42)
+        consumer.seek.assert_any_call(TopicPartition("users", 4), 0)
+        consumer.start.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_stop_keep_consumer_hands_it_over(self):
+        ingress, *_ = _make_ingress()
+        consumer = MagicMock(stop=AsyncMock())
+        consumer.getmany = AsyncMock(side_effect=_poll_forever)
+        ingress.adopt_consumer(consumer)
+        await ingress.start([TopicPartition("users", 0)], {("users", 0): -1})
+
+        await ingress.stop(keep_consumer=True)
+
+        consumer.stop.assert_not_called()
+        assert ingress.take_consumer() is consumer
+        assert ingress.take_consumer() is None
+
+    @pytest.mark.asyncio
+    async def test_stop_closes_consumer(self):
+        ingress, *_ = _make_ingress()
+        consumer = MagicMock(stop=AsyncMock())
+        consumer.getmany = AsyncMock(side_effect=_poll_forever)
+        ingress.adopt_consumer(consumer)
+        await ingress.start([TopicPartition("users", 0)], {("users", 0): -1})
+
+        await ingress.stop()
+
+        consumer.stop.assert_awaited_once()
+        assert ingress.take_consumer() is None

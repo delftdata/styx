@@ -26,7 +26,7 @@ from worker.sequencer.sequencer import Sequencer
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
-    from aiokafka import TopicPartition
+    from aiokafka import AIOKafkaConsumer, TopicPartition
     from styx.common.operator import Operator
     from styx.common.types import OperatorPartition
 
@@ -77,6 +77,7 @@ class AriaProtocol(BaseTransactionalProtocol):
         *,
         dedup_output_offsets: dict[OperatorPartition, int] | None = None,
         egress: StyxKafkaBatchEgress | None = None,
+        kafka_consumer: AIOKafkaConsumer | None = None,
     ) -> None:
         if topic_partition_offsets is None:
             topic_partition_offsets = {(tp.topic, tp.partition): -1 for tp in topic_partitions}
@@ -132,6 +133,9 @@ class AriaProtocol(BaseTransactionalProtocol):
             sequence_max_size=SEQUENCE_MAX_SIZE,
             epoch_interval_ms=100,
         )
+        if kafka_consumer is not None:
+            # Rebuilt after a clean migration stop: keep the connected consumer.
+            self.ingress.adopt_consumer(kafka_consumer)
 
         # Responses may duplicate ones sent before a recovery; scan for them first.
         # After a clean migration stop nothing is replayed, so there is nothing to scan.
@@ -219,19 +223,21 @@ class AriaProtocol(BaseTransactionalProtocol):
     async def wait_stopped(self) -> None:
         await self.stopped.wait()
 
-    async def stop(self, *, keep_egress: bool = False) -> None:
-        """Stop the protocol. keep_egress flushes the egress but leaves its Kafka
-        producer running, so the protocol rebuilt after a migration can reuse it."""
+    async def stop(self, *, keep_kafka_clients: bool = False) -> None:
+        """Stop the protocol. keep_kafka_clients flushes the egress but leaves its
+        producer and the ingress consumer connected, so the protocol rebuilt after
+        a migration can reuse them."""
         if self._stopping:
             # Another caller is already tearing down — just wait for completion.
             await self.stopped.wait()
-            if not keep_egress:
-                # A graceful (migration) stop may have left the producer running.
+            if not keep_kafka_clients:
+                # A graceful (migration) stop may have left them connected.
+                await self.ingress.close_consumer()
                 await self.egress.stop()
             return
         self._stopping = True
-        await self.ingress.stop()
-        if keep_egress:
+        await self.ingress.stop(keep_consumer=keep_kafka_clients)
+        if keep_kafka_clients:
             await self.egress.flush()
         else:
             await self.egress.stop()
@@ -724,8 +730,8 @@ class AriaProtocol(BaseTransactionalProtocol):
             # stop() awaits this task, while this task awaits stopped.
             if not self._stopping:
                 # Only a migration stops the protocol gracefully; its rebuilt
-                # protocol takes over the egress.
-                await self.stop(keep_egress=graceful)
+                # protocol takes over the Kafka clients.
+                await self.stop(keep_kafka_clients=graceful)
 
     async def _process_epoch(self, sequence: list[SequencedItem]) -> None:
         epoch_start = timer()

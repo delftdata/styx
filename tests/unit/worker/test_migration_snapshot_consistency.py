@@ -278,7 +278,7 @@ def _stoppable_protocol() -> AriaProtocol:
     proto = AriaProtocol.__new__(AriaProtocol)
     proto._stopping = False
     proto.stopped = asyncio.Event()
-    proto.ingress = SimpleNamespace(stop=AsyncMock())
+    proto.ingress = SimpleNamespace(stop=AsyncMock(), close_consumer=AsyncMock())
     proto.egress = SimpleNamespace(stop=AsyncMock(), flush=AsyncMock())
     proto.aio_task_scheduler = SimpleNamespace(close=AsyncMock())
     proto.background_functions = SimpleNamespace(close=AsyncMock())
@@ -293,7 +293,8 @@ def _stoppable_protocol() -> AriaProtocol:
 class TestStopForMigration:
     async def test_graceful_stop_keeps_egress_running(self):
         proto = _stoppable_protocol()
-        await proto.stop(keep_egress=True)
+        await proto.stop(keep_kafka_clients=True)
+        proto.ingress.stop.assert_awaited_once_with(keep_consumer=True)
         proto.egress.flush.assert_awaited_once()
         proto.egress.stop.assert_not_awaited()
         assert proto.stopped.is_set()
@@ -301,8 +302,9 @@ class TestStopForMigration:
     async def test_later_full_stop_releases_kept_egress(self):
         # Recovery after a graceful stop must not leak the producer.
         proto = _stoppable_protocol()
-        await proto.stop(keep_egress=True)
+        await proto.stop(keep_kafka_clients=True)
         await proto.stop()
+        proto.ingress.close_consumer.assert_awaited_once()
         proto.egress.stop.assert_awaited_once()
 
 

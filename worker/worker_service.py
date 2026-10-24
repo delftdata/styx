@@ -554,8 +554,9 @@ class Worker:
 
         # Recreate protocol (restart_after_migration). The old protocol stopped
         # gracefully at an epoch boundary with every response flushed, so the new
-        # one reuses its Kafka producer and has nothing to deduplicate.
+        # one reuses its Kafka clients and has nothing to deduplicate.
         old_egress = self.function_execution_protocol.egress
+        old_consumer = self.function_execution_protocol.ingress.take_consumer()
         self.function_execution_protocol = AriaProtocol(
             worker_id=self.id,
             peers=self.peers,
@@ -571,6 +572,7 @@ class Worker:
             t_counter=self.m_t_counter,
             restart_after_migration=True,
             egress=old_egress if old_egress.is_running else None,
+            kafka_consumer=old_consumer,
         )
 
     async def _handle_receive_migration_hashes(

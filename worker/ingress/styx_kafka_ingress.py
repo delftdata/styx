@@ -47,6 +47,20 @@ class StyxKafkaIngress(BaseIngress):
 
         self.kafka_consumer: AIOKafkaConsumer | None = None
         self.kafka_ingress_task: asyncio.Task | None = None
+        self._keep_consumer: bool = False
+
+    def adopt_consumer(self, kafka_consumer: AIOKafkaConsumer) -> None:
+        """Reuse a connected consumer from the protocol this one replaces.
+
+        Creating and starting a new consumer, and waiting for its first fetch,
+        holds up the first epoch after a migration by a few hundred milliseconds.
+        """
+        self.kafka_consumer = kafka_consumer
+
+    def take_consumer(self) -> AIOKafkaConsumer | None:
+        """Hand over the consumer kept by stop(keep_consumer=True), if any."""
+        consumer, self.kafka_consumer = self.kafka_consumer, None
+        return consumer
 
     async def start(
         self,
@@ -58,13 +72,22 @@ class StyxKafkaIngress(BaseIngress):
         )
         await self.started.wait()
 
-    async def stop(self) -> None:
+    async def stop(self, *, keep_consumer: bool = False) -> None:
+        """Stop consuming. keep_consumer leaves the Kafka consumer connected for
+        take_consumer()."""
+        self._keep_consumer = keep_consumer
         self.kafka_ingress_task.cancel()
         try:
             await self.kafka_ingress_task
         except asyncio.CancelledError:
             logging.warning("kafka ingress coroutine suts down...")
-        await self.kafka_consumer.stop()
+        if not keep_consumer:
+            await self.close_consumer()
+
+    async def close_consumer(self) -> None:
+        consumer = self.take_consumer()
+        if consumer is not None:
+            await consumer.stop()
 
     def handle_message_from_kafka(self, msg: ConsumerRecord) -> None:
         message_type: int = self.networking.get_msg_type(msg.value)
@@ -134,6 +157,24 @@ class StyxKafkaIngress(BaseIngress):
         topic_partitions: list[TopicPartition],
         topic_partition_offsets: dict[OperatorPartition, int],
     ) -> None:
+        if self.kafka_consumer is not None:
+            # Adopted from the previous protocol: already connected. Seeking every
+            # assigned partition drops any records it had prefetched.
+            self.kafka_consumer.assign(topic_partitions)
+            for operator, offset in topic_partition_offsets.items():
+                self.kafka_consumer.seek(TopicPartition(operator[0], operator[1]), offset + 1)
+            logging.warning(
+                f"{self.worker_id} REUSED Kafka consumer for topic partitions: {topic_partitions}",
+            )
+        else:
+            await self._create_kafka_consumer(topic_partitions, topic_partition_offsets)
+        await self._consume(topic_partition_offsets)
+
+    async def _create_kafka_consumer(
+        self,
+        topic_partitions: list[TopicPartition],
+        topic_partition_offsets: dict[OperatorPartition, int],
+    ) -> None:
         logging.warning(
             f"{self.worker_id} CREATED Kafka consumer for topic partitions: {topic_partitions}",
         )
@@ -160,6 +201,8 @@ class StyxKafkaIngress(BaseIngress):
                 )
                 continue
             break
+
+    async def _consume(self, topic_partition_offsets: dict[OperatorPartition, int]) -> None:
         try:
             # Consume messages
             logging.warning(
@@ -186,4 +229,5 @@ class StyxKafkaIngress(BaseIngress):
                             self.send_message_tasks = []
                     self.messages_available.set()
         finally:
-            await self.kafka_consumer.stop()
+            if not self._keep_consumer:
+                await self.close_consumer()
