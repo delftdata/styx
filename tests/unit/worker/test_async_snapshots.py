@@ -24,14 +24,7 @@ class TestAsyncSnapshotsInit:
         assert s.worker_id == 0
         assert s.n_assigned_partitions == 4
         assert s.snapshot_id == 1
-        assert s.completed_snapshots == 0
-        assert s.snapshot_in_progress is False
-        assert s.snapshot_start == 0.0
-        assert s.current_input_offsets is None
-        assert s.current_output_offsets is None
-        assert s.current_epoch_counter == -1
-        assert s.current_t_counter == -1
-        assert s.total_snapshot_size == 0
+        assert s._in_progress == {}
 
     def test_zero_partitions(self):
         s = AsyncSnapshotsS3(worker_id=1)
@@ -64,70 +57,74 @@ class TestSetSnapshotId:
 
 
 # ---------------------------------------------------------------------------
-# register_size
+# Snapshot lifecycle
 # ---------------------------------------------------------------------------
 
 
-class TestRegisterSize:
-    def test_accumulates(self):
-        s = _snap()
-        s.register_size(100)
-        s.register_size(200)
-        assert s.total_snapshot_size == 300
+def _done(exc=None):
+    f = MagicMock()
+    f.cancelled.return_value = False
+    f.exception.return_value = exc
+    return f
 
 
-# ---------------------------------------------------------------------------
-# start_snapshotting
-# ---------------------------------------------------------------------------
+def _sent_snapshot_ids(mock_socket):
+    """Snapshot ids in the SnapID messages sent to the coordinator, in order."""
+    from styx.common.tcp_networking import NetworkingManager
+
+    sent = [c.args[0] for c in mock_socket.socket.return_value.send.call_args_list]
+    return [NetworkingManager.decode_message(m[8:])[1] for m in sent]
 
 
-class TestStartSnapshotting:
-    async def test_sets_fields(self):
-        s = _snap()
-        offsets_in = {("op", 0): 10}
-        offsets_out = {("op", 0): 5}
-        s.start_snapshotting(offsets_in, offsets_out, current_epoch_counter=3, current_t_counter=42)
-        assert s.snapshot_in_progress is True
-        assert s.snapshot_start > 0
-        assert s.current_input_offsets == offsets_in
-        assert s.current_output_offsets == offsets_out
-        assert s.current_epoch_counter == 3
-        assert s.current_t_counter == 42
+@patch("worker.fault_tolerance.async_snapshots.socket")
+class TestSnapshotLifecycle:
+    def test_reports_once_every_file_is_stored(self, mock_socket):
+        s = _snap(snapshot_id=5)
+        sid = s.start_snapshotting({("op", 0): 1}, {("op", 0): 0}, 10, 100, n_files=2)
+        assert sid == 5
+        assert s.snapshot_id == 6
+        s.register_size(sid, 100)
+        s.file_stored_callback(sid)(_done())
+        assert _sent_snapshot_ids(mock_socket) == []
+        s.file_stored_callback(sid)(_done())
+        assert _sent_snapshot_ids(mock_socket) == [5]
+        msg = mock_socket.socket.return_value.send.call_args.args[0]
+        from styx.common.tcp_networking import NetworkingManager
 
+        (_w, _sid, _start, _end, _in, _out, epoch, t_counter, size, checkpoint) = NetworkingManager.decode_message(
+            msg[8:]
+        )
+        assert (epoch, t_counter, size, checkpoint) == (10, 100, 100, False)
 
-# ---------------------------------------------------------------------------
-# snapshot_completed_callback
-# ---------------------------------------------------------------------------
+    def test_overlapping_snapshots_keep_their_own_ids_and_metadata(self, mock_socket):
+        s = _snap(snapshot_id=1)
+        first = s.start_snapshotting({}, {}, 10, 100, n_files=1)
+        second = s.start_snapshotting({}, {}, 11, 110, n_files=1)
+        assert (first, second) == (1, 2)
+        assert s._in_progress[first].epoch_counter == 10
+        assert s._in_progress[second].epoch_counter == 11
 
+    def test_later_snapshot_waits_for_earlier_one(self, mock_socket):
+        s = _snap(snapshot_id=1)
+        first = s.start_snapshotting({}, {}, 10, 100, n_files=1)
+        second = s.start_snapshotting({}, {}, 11, 110, n_files=1)
+        s.file_stored_callback(second)(_done())  # the later, smaller one finishes first
+        assert _sent_snapshot_ids(mock_socket) == []
+        s.file_stored_callback(first)(_done())
+        assert _sent_snapshot_ids(mock_socket) == [1, 2]
 
-class TestSnapshotCompletedCallback:
-    def test_increments_completed(self):
-        s = _snap(n_partitions=4)
-        s.start_snapshotting({}, {}, 1, 1)
-        s.snapshot_completed_callback(MagicMock())
-        assert s.completed_snapshots == 1
-        assert s.snapshot_in_progress is True  # not done yet
+    def test_failed_upload_blocks_it_and_later_snapshots(self, mock_socket):
+        s = _snap(snapshot_id=1)
+        first = s.start_snapshotting({}, {}, 10, 100, n_files=1)
+        second = s.start_snapshotting({}, {}, 11, 110, n_files=1)
+        s.file_stored_callback(first)(_done(RuntimeError("S3 down")))
+        s.file_stored_callback(second)(_done())
+        assert _sent_snapshot_ids(mock_socket) == []
 
-    @patch("worker.fault_tolerance.async_snapshots.socket")
-    def test_all_completed_sends_message(self, mock_socket):
-        mock_conn = MagicMock()
-        mock_socket.socket.return_value = mock_conn
-
-        s = _snap(n_partitions=2, snapshot_id=5)
-        s.start_snapshotting({("op", 0): 1}, {("op", 0): 0}, 10, 100)
-
-        s.snapshot_completed_callback(MagicMock())
-        assert s.snapshot_in_progress is True
-
-        s.snapshot_completed_callback(MagicMock())
-        assert s.snapshot_in_progress is False
-        assert s.completed_snapshots == 0
-        assert s.snapshot_id == 6  # incremented
-        assert s.total_snapshot_size == 0
-
-        mock_conn.connect.assert_called_once()
-        mock_conn.send.assert_called_once()
-        mock_conn.close.assert_called_once()
+    def test_snapshot_without_files_is_reported_immediately(self, mock_socket):
+        s = _snap(snapshot_id=3)
+        s.start_snapshotting({}, {}, 1, 1, n_files=0)
+        assert _sent_snapshot_ids(mock_socket) == [3]
 
 
 # ---------------------------------------------------------------------------
@@ -426,3 +423,13 @@ class TestLoadSequencerStateTupleFormats:
         assert epoch == 0
         assert t_counter == 0
         assert migration_blob is None
+
+
+@patch("worker.fault_tolerance.async_snapshots.socket")
+def test_checkpoint_flag_is_reported(mock_socket):
+    from styx.common.tcp_networking import NetworkingManager
+
+    s = _snap(snapshot_id=7)
+    s.start_snapshotting({}, {}, 1, 1, n_files=0, is_migration_checkpoint=True)
+    msg = mock_socket.socket.return_value.send.call_args.args[0]
+    assert NetworkingManager.decode_message(msg[8:])[-1] is True

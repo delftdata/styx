@@ -112,6 +112,9 @@ class CoordinatorService:
         self.aria_metadata: AriaSyncMetadata | None = None
         self.migration_metadata: MigrationMetadata | None = None
         self.workers_that_re_registered: list[Worker] = []
+        # Workers a barrier or migration message could not be delivered to. The
+        # protocol cannot progress without them, so they are handed to recovery.
+        self.unreachable_workers: list[Worker] = []
         self.recovery_lock: asyncio.Lock = asyncio.Lock()
         self.recovery_state: RecoveryState = RecoveryState.IDLE
 
@@ -365,12 +368,10 @@ class CoordinatorService:
                 return
 
             # Set migration checkpoint blob BEFORE telling workers to proceed.
-            # Workers will take a checkpoint snapshot after receiving
-            # MigrationRepartitioningDone; when the SnapID arrives the coordinator
-            # writes the sequencer file which will include this blob.
-            # Use max(..., 0) so the baseline is always >= 0 — after recovery
-            # worker_snapshot_ids are reset to -1, but we still need the
-            # checkpoint detection (baseline >= 0) to fire on the next snapshot.
+            # Workers take the checkpoint snapshot after MigrationRepartitioningDone
+            # and flag it in its SnapID; the blob goes into the sequencer files of
+            # that snapshot and later ones, never of a snapshot cut before Phase B.
+            # baseline >= 0 marks that we are waiting for the checkpoint.
             baseline = max(self.coordinator.get_current_completed_snapshot_id(), 0)
             self.coordinator._migration_checkpoint_baseline_snap_id = baseline  # noqa: SLF001
             operator_partition_locations = self.coordinator.worker_pool.get_operator_partition_locations()
@@ -438,7 +439,7 @@ class CoordinatorService:
             # (before workers took their snapshot).  By now the checkpoint snapshot
             # may already be complete.  Handle the race, then launch the finalizer.
             baseline = self.coordinator._migration_checkpoint_baseline_snap_id  # noqa: SLF001
-            if baseline >= 0 and self.coordinator.get_current_completed_snapshot_id() > baseline:
+            if baseline >= 0 and self.coordinator.migration_checkpoint_completed():
                 self.coordinator._migration_checkpoint_snapshot_complete.set()  # noqa: SLF001
                 self.coordinator._migration_checkpoint_baseline_snap_id = -1  # noqa: SLF001
                 logging.warning("MIGRATION | Checkpoint snapshot already completed (race handled)")
@@ -504,6 +505,7 @@ class CoordinatorService:
                 epoch_counter,
                 t_counter,
                 sn_size,
+                is_migration_checkpoint,
             ) = self.networking.decode_message(data)
 
             snapshot_time = end - start
@@ -527,6 +529,7 @@ class CoordinatorService:
                 epoch_counter,
                 t_counter,
                 pool,
+                is_migration_checkpoint=is_migration_checkpoint,
             )
 
             # Check for deferred migration re-trigger: fire once the first
@@ -902,36 +905,55 @@ class CoordinatorService:
                 self.aria_metadata.stop_in_next_epoch()
 
         logging.warning("Sending MigrationRepartitioningDone to all workers (protocol will stop)")
-        async with asyncio.TaskGroup() as tg:
-            for worker in self.coordinator.worker_pool.get_participating_workers():
-                tg.create_task(
-                    self.protocol_networking.send_message(
-                        worker.worker_ip,
-                        worker.worker_port,
-                        msg=b"",
-                        msg_type=MessageType.MigrationRepartitioningDone,
-                        serializer=Serializer.NONE,
-                    ),
-                )
+        await self._send_to_participating_workers(
+            lambda worker: worker.worker_port,
+            b"",
+            MessageType.MigrationRepartitioningDone,
+            Serializer.NONE,
+        )
 
     async def finalize_migration(self) -> None:
-        async with asyncio.TaskGroup() as tg:
-            for worker in self.coordinator.worker_pool.get_participating_workers():
-                logging.warning(f"Sending MigrationDone to : {worker}")
-                tg.create_task(
-                    self.protocol_networking.send_message(
-                        worker.worker_ip,
-                        worker.worker_port,
-                        msg=(
-                            self.migration_metadata.epoch_counter,
-                            self.migration_metadata.t_counter,
-                            self.migration_metadata.input_offsets,
-                            self.migration_metadata.output_offsets,
-                        ),
-                        msg_type=MessageType.MigrationDone,
-                        serializer=Serializer.MSGPACK,
-                    ),
+        logging.warning("Sending MigrationDone to all workers")
+        await self._send_to_participating_workers(
+            lambda worker: worker.worker_port,
+            (
+                self.migration_metadata.epoch_counter,
+                self.migration_metadata.t_counter,
+                self.migration_metadata.input_offsets,
+                self.migration_metadata.output_offsets,
+            ),
+            MessageType.MigrationDone,
+            Serializer.MSGPACK,
+        )
+
+    async def _send_to_participating_workers(
+        self,
+        port_of: Callable[[Worker], int],
+        msg: tuple | bytes,
+        msg_type: MessageType,
+        serializer: Serializer,
+    ) -> None:
+        """Send to every participating worker. A worker the message cannot be
+        delivered to is handed to recovery: waiting on it would deadlock."""
+        workers = self.coordinator.worker_pool.get_participating_workers()
+
+        async def send(worker: Worker) -> bool:
+            try:
+                return await self.protocol_networking.send_message(
+                    worker.worker_ip,
+                    port_of(worker),
+                    msg=msg,
+                    msg_type=msg_type,
+                    serializer=serializer,
                 )
+            except OSError:
+                return False
+
+        delivered = await asyncio.gather(*[send(worker) for worker in workers])
+        for worker, ok in zip(workers, delivered, strict=True):
+            if ok is False:
+                logging.error(f"Could not deliver {msg_type.name} to worker {worker.worker_id}; recovering it")
+                self.unreachable_workers.append(worker)
 
     async def _wait_for_migration_checkpoint_and_finalize(self, mt: MessageType) -> None:
         """Wait for the migration checkpoint snapshot to complete, then finalize migration."""
@@ -972,17 +994,12 @@ class CoordinatorService:
         message: tuple | bytes,
         serializer: Serializer = Serializer.MSGPACK,
     ) -> None:
-        async with asyncio.TaskGroup() as tg:
-            for worker in self.coordinator.worker_pool.get_participating_workers():
-                tg.create_task(
-                    self.protocol_networking.send_message(
-                        worker.worker_ip,
-                        worker.protocol_port,
-                        msg=message,
-                        msg_type=msg_type,
-                        serializer=serializer,
-                    ),
-                )
+        await self._send_to_participating_workers(
+            lambda worker: worker.protocol_port,
+            message,
+            msg_type,
+            serializer,
+        )
 
     async def worker_wants_to_proceed(self) -> None:
         async with asyncio.TaskGroup() as tg:
@@ -1207,6 +1224,7 @@ class CoordinatorService:
             self.coordinator.set_migration_checkpoint(
                 resumed_migration["new_graph"],
                 resumed_migration["operator_partition_locations"],
+                from_snapshot_id=snap_id,
             )
             self.migration_in_progress = True
 
@@ -1249,7 +1267,9 @@ class CoordinatorService:
                 )
 
             # Add workers that re-registered (same IP/ports) to the failed set
-            if (workers_to_remove or self.workers_that_re_registered) and self.recovery_state == RecoveryState.IDLE:
+            if (
+                workers_to_remove or self.workers_that_re_registered or self.unreachable_workers
+            ) and self.recovery_state == RecoveryState.IDLE:
                 logging.warning(
                     f"heartbeat_monitor | entering recovery lock "
                     f"dead={workers_to_remove} re_registered={self.workers_that_re_registered} "
@@ -1265,6 +1285,8 @@ class CoordinatorService:
                         re_registered_set = set(self.workers_that_re_registered)
                         workers_to_remove.update(re_registered_set)
                         self.workers_that_re_registered = []
+                        workers_to_remove.update(self.unreachable_workers)
+                        self.unreachable_workers = []
 
                         await self._perform_recovery(workers_to_remove)
                     except Exception as e:

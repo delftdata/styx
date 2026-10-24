@@ -66,6 +66,10 @@ class Coordinator:
         # Deferred graph update: held until migration completes
         self._pending_graph: StateflowGraph | None = None
 
+        # Bumped on every recovery and sent to the workers, which drop migration
+        # messages from any other incarnation (sent before the recovery).
+        self.incarnation: int = 0
+
         # Checkpoint-and-resume migration FT
         self._migration_checkpoint_blob: bytes | None = None
         # The graph the current checkpoint migrates to
@@ -73,7 +77,10 @@ class Coordinator:
         # Set once every worker finished its transfer: snapshots carrying a later
         # epoch were cut after the last migrated key landed and need no checkpoint.
         self._migration_checkpoint_until_epoch: int | None = None
-        self._migration_checkpoint_baseline_snap_id: int = -1
+        self._migration_checkpoint_baseline_snap_id: int = -1  # >= 0 while waiting for the checkpoint
+        # Id of the checkpoint snapshot (reported by the workers). Only snapshots
+        # from it on carry the checkpoint; earlier ones were cut before Phase B.
+        self._migration_checkpoint_snap_id: int | None = None
         self._migration_checkpoint_snapshot_complete: asyncio.Event = asyncio.Event()
 
     async def start_kafka_metadata_producer(self) -> None:
@@ -128,6 +135,7 @@ class Coordinator:
     async def send_recovery_to_participating_workers(self) -> None:
         operator_partition_locations = self.worker_pool.get_operator_partition_locations()
         snap_id: int = self.get_current_completed_snapshot_id()
+        self.incarnation += 1
         worker_assignments = self.worker_pool.get_worker_assignments()
         participating_workers: list[Worker] = self.worker_pool.get_participating_workers()
         self.worker_is_healthy = {worker.worker_id: asyncio.Event() for worker in participating_workers}
@@ -154,6 +162,7 @@ class Coordinator:
                             self.submitted_graph.operator_state_backend,
                             snap_id,
                             self.submitted_graph,
+                            self.incarnation,
                         ),
                         msg_type=MessageType.InitRecovery,
                     ),
@@ -200,8 +209,17 @@ class Coordinator:
         epoch_counter: int,
         t_counter: int,
         pool: concurrent.futures.ProcessPoolExecutor,
+        *,
+        is_migration_checkpoint: bool = False,
     ) -> None:
         self.worker_snapshot_ids[worker_id] = snapshot_id
+        if (
+            is_migration_checkpoint
+            and self._migration_checkpoint_blob is not None
+            and self._migration_checkpoint_snap_id is None
+        ):
+            self._migration_checkpoint_snap_id = snapshot_id
+            logging.warning(f"Migration checkpoint is snapshot {snapshot_id}")
         for operator_partition, pio in partial_input_offsets.items():
             self.completed_input_offsets[operator_partition] = max(
                 pio,
@@ -233,16 +251,10 @@ class Coordinator:
             logging.warning(
                 f"Post-migration snapshot {current_completed_snapshot} completed — graph finalized",
             )
-        # Detect migration checkpoint snapshot completion via baseline ID comparison
-        if (
-            self._migration_checkpoint_baseline_snap_id >= 0
-            and current_completed_snapshot > self._migration_checkpoint_baseline_snap_id
-        ):
+        # Detect migration checkpoint snapshot completion
+        if self._migration_checkpoint_baseline_snap_id >= 0 and self.migration_checkpoint_completed():
             self._migration_checkpoint_snapshot_complete.set()
-            logging.warning(
-                f"Migration checkpoint snapshot {current_completed_snapshot} completed "
-                f"(baseline was {self._migration_checkpoint_baseline_snap_id})",
-            )
+            logging.warning(f"Migration checkpoint snapshot {self._migration_checkpoint_snap_id} completed")
             self._migration_checkpoint_baseline_snap_id = -1
         if current_completed_snapshot != self.prev_completed_snapshot_id:
             logging.warning(f"Cluster completed snapshot: {current_completed_snapshot}")
@@ -259,7 +271,7 @@ class Coordinator:
                     self.completed_out_offsets,
                     self.completed_epoch_counter,
                     self.completed_t_counter,
-                    self._migration_checkpoint_blob,
+                    self._migration_checkpoint_blob if self.migration_checkpoint_completed() else None,
                 ),
             )
             self.s3_client.put_object(
@@ -275,6 +287,13 @@ class Coordinator:
                     start_snapshot_compaction,
                     current_completed_snapshot,
                 )
+
+    def migration_checkpoint_completed(self) -> bool:
+        """Whether the cluster has completed the checkpoint snapshot (or a later one)."""
+        return (
+            self._migration_checkpoint_snap_id is not None
+            and self.get_current_completed_snapshot_id() >= self._migration_checkpoint_snap_id
+        )
 
     def get_current_completed_snapshot_id(self) -> int:
         if self.worker_snapshot_ids:
@@ -375,8 +394,11 @@ class Coordinator:
         self,
         new_graph: StateflowGraph,
         operator_partition_locations: dict,
+        from_snapshot_id: int | None = None,
     ) -> None:
-        """Serialize migration metadata for inclusion in the next sequencer file."""
+        """Serialize migration metadata for the sequencer files of the checkpoint
+        snapshot and later ones. from_snapshot_id is the checkpoint snapshot if it
+        is already known (a resumed migration), else the workers report it."""
         self._migration_checkpoint_blob = cloudpickle_serialization(
             {
                 "new_graph": new_graph,
@@ -385,6 +407,7 @@ class Coordinator:
         )
         self._migration_checkpoint_graph = new_graph
         self._migration_checkpoint_until_epoch = None
+        self._migration_checkpoint_snap_id = from_snapshot_id
 
     def end_migration_checkpoint_after(self, transfer_done_epoch: int) -> None:
         """Every migrated key landed by transfer_done_epoch. Snapshots cut up to that
@@ -397,6 +420,7 @@ class Coordinator:
         self._migration_checkpoint_blob = None
         self._migration_checkpoint_graph = None
         self._migration_checkpoint_until_epoch = None
+        self._migration_checkpoint_snap_id = None
 
     async def submit_stateflow_graph(
         self,

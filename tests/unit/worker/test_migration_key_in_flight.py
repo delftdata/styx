@@ -20,10 +20,10 @@ OP = "op"
 DST = (OP, 1)
 
 
-def _receive_remote_key_msg(key, found, value) -> bytes:
+def _receive_remote_key_msg(key, found, value, incarnation=0) -> bytes:
     # Drop the 8-byte length prefix, as the receiving TCP reader does.
     return NetworkingManager.encode_message(
-        msg=(DST, key, found, value),
+        msg=(DST, key, found, value, incarnation),
         msg_type=MessageType.ReceiveRemoteKey,
         serializer=Serializer.MSGPACK,
     )[8:]
@@ -31,6 +31,7 @@ def _receive_remote_key_msg(key, found, value) -> bytes:
 
 def _worker():
     w = Worker.__new__(Worker)
+    w.incarnation = 0
     w.networking = SimpleNamespace(decode_message=NetworkingManager.decode_message)
     w.protocol_networking = MagicMock()
     w.protocol_networking.wait_remote_key_event = {DST: {"k1": asyncio.Event()}}
@@ -59,3 +60,11 @@ class TestRemoteKeyResponse:
         w.protocol_networking.key_received.assert_called_once_with(DST, "k1")
         assert w.local_state.data[DST] == {"k1": None}
         assert not w.local_state.in_remote_keys("k1", OP, 1)
+
+    async def test_reply_from_before_a_recovery_is_dropped(self):
+        w = _worker()
+        w.incarnation = 2
+        msg = _receive_remote_key_msg("k1", True, "stale", incarnation=1)
+        await w._handle_receive_remote_key(msg, MessageType.ReceiveRemoteKey)
+        w.protocol_networking.key_received.assert_not_called()
+        assert "k1" not in w.local_state.data[DST]

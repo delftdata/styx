@@ -135,10 +135,13 @@ class Worker:
 
         self.migration_completed: asyncio.Event = asyncio.Event()
         self._migration_generation: int = 0  # bumped on recovery to invalidate zombie Phase B tasks
+        # Cluster incarnation from the coordinator (bumped on every recovery). Migration
+        # messages carry it, and those from another incarnation are dropped.
+        self.incarnation: int = 0
 
         # Post-checkpoint recovery: workers exchange which keys each still holds
         # for the others' new partitions (all-to-all) before the protocol starts.
-        self._recovery_hash_tag: int = -1  # snapshot id of the recovery, -1 = no exchange
+        self._recovery_hash_tag: int = -1  # incarnation of the recovery, -1 = no exchange
         self._recovery_hashes_out: dict[OperatorPartition, dict[Any, tuple[int, int]]] = {}
         self._recovery_hash_senders: set[int] = set()
         self._recovery_hashes_received: asyncio.Event = asyncio.Event()
@@ -274,6 +277,7 @@ class Worker:
         )
         self.protocol_networking.set_worker_id(self.id)
         self.protocol_networking.set_peers(self.peers)
+        self.protocol_networking.incarnation = self.incarnation
 
     async def _send_snap_assigned(self, snapshot_id: int) -> None:
         await self.networking.send_message(
@@ -350,6 +354,7 @@ class Worker:
             snapshotting_port=self.snapshotting_port,
             epoch_counter=epoch,
             t_counter=t_counter,
+            incarnation=self.incarnation,
         )
         logging.warning("Starting Function Execution Protocol")
         self.function_execution_protocol.start()
@@ -385,16 +390,16 @@ class Worker:
             logging.error(f"Uncaught exception during migration Phase A: {e}")
 
     async def _migration_stop_protocol(self) -> None:
-        try:
-            await asyncio.wait_for(
-                self.function_execution_protocol.wait_stopped(),
-                timeout=15.0,
-            )
-        except TimeoutError:
-            logging.warning(
-                "MIGRATION | Protocol did not stop within 15s via stop_gracefully — force-stopping",
-            )
-            await self.function_execution_protocol.stop()
+        # The protocol stops at the next epoch boundary. Never cancel it here: a
+        # slow epoch would be cut mid-commit. If the stop message cannot reach this
+        # worker, the coordinator hands the worker to recovery, which stops it.
+        protocol = self.function_execution_protocol
+        while True:
+            try:
+                await asyncio.wait_for(asyncio.shield(protocol.wait_stopped()), timeout=15.0)
+                break
+            except TimeoutError:
+                logging.warning("MIGRATION | Protocol still running 15s after the stop request")
         logging.warning("MIGRATION | ARIA STOPPED")
 
     async def _migration_decode_and_apply_plan(self, data: bytes) -> None:
@@ -573,6 +578,7 @@ class Worker:
             restart_after_migration=True,
             egress=old_egress if old_egress.is_running else None,
             kafka_consumer=old_consumer,
+            incarnation=self.incarnation,
         )
 
     async def _handle_receive_migration_hashes(
@@ -593,7 +599,10 @@ class Worker:
         # Lock-free: pop() is atomic in CPython; concurrent requests for the same
         # key are race-safe (the loser gets found=False, which the requester handles).
         del msg_type
-        operator_partition, key, old_partition, host, port = self.networking.decode_message(data)
+        operator_partition, key, old_partition, host, port, incarnation = self.networking.decode_message(data)
+        if incarnation != self.incarnation:
+            logging.warning(f"Dropping RequestRemoteKey for {key!r} from incarnation {incarnation}")
+            return
         found, value = self.local_state.get_key_to_migrate(
             operator_partition,
             key,
@@ -602,7 +611,7 @@ class Worker:
         await self.networking.send_message(
             host,
             port,
-            msg=(operator_partition, key, found, value),
+            msg=(operator_partition, key, found, value, self.incarnation),
             msg_type=MessageType.ReceiveRemoteKey,
             serializer=Serializer.MSGPACK,
         )
@@ -614,7 +623,10 @@ class Worker:
     ) -> None:
         # Lock-free: no awaits.
         del msg_type
-        operator_partition, key, found, value = self.networking.decode_message(data)
+        operator_partition, key, found, value, incarnation = self.networking.decode_message(data)
+        if incarnation != self.incarnation:
+            logging.warning(f"Dropping ReceiveRemoteKey for {key!r} from incarnation {incarnation}")
+            return
         if not found:
             # The source's async sender already took the key into a batch; the
             # batch wakes the waiting transaction when it lands here.
@@ -693,6 +705,7 @@ class Worker:
                     self.function_execution_protocol.egress.topic_partition_output_offsets,
                     self.function_execution_protocol.sequencer.epoch_counter,
                     self.function_execution_protocol.sequencer.t_counter,
+                    True,  # the migration checkpoint
                 ),
                 msg_type=MessageType.SnapTakeSnapshot,
                 serializer=Serializer.MSGPACK,
@@ -779,6 +792,7 @@ class Worker:
             self.operator_state_backend,
             snapshot_id,
             self.deployed_graph,
+            self.incarnation,
         ) = self.networking.decode_message(data)
 
         if self.function_execution_protocol is not None:
@@ -794,6 +808,7 @@ class Worker:
                 mode=MessagingMode.PROTOCOL_PROTOCOL,
             )
             self.protocol_networking.set_worker_id(self.id)
+        self.protocol_networking.incarnation = self.incarnation
 
         self._update_peers(peers)
         self.protocol_networking.set_peers(self.peers)
@@ -875,7 +890,7 @@ class Worker:
                     f"[RECOVERY] W{self.id} Re-derived {sum(len(v) for v in keys_to_send.values())} keys to send",
                 )
             # Sent to the destinations on ReadyAfterRecovery, once every worker has loaded its snapshot.
-            self._reset_recovery_hash_exchange(tag=snapshot_id, hashes_out=hashes_out)
+            self._reset_recovery_hash_exchange(tag=self.incarnation, hashes_out=hashes_out)
             restart_after_migration = True
 
         request_id_to_t_id_map = await self.get_sequencer_assignments_before_failure(
@@ -899,6 +914,7 @@ class Worker:
             restart_after_recovery=not restart_after_migration,
             restart_after_migration=restart_after_migration,
             dedup_output_offsets=all_dedup_out_offsets,
+            incarnation=self.incarnation,
         )
         self.function_execution_protocol.start()
 

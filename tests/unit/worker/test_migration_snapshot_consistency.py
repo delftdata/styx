@@ -110,6 +110,7 @@ class _Link:
 def _worker(link: _Link, worker_id: int, addr: tuple, peers: dict, state: InMemoryOperatorState) -> AriaProtocol:
     proto = AriaProtocol.__new__(AriaProtocol)
     proto.id = worker_id
+    proto.incarnation = 0
     proto.peers = peers
     proto.dns = DNS
     proto.local_state = state
@@ -328,3 +329,17 @@ class TestMigrationBudget:
         src._migration_epoch_ended.set()
         await asyncio.wait_for(sender, timeout=2)
         assert src.local_state.keys_remaining_to_send() == 0
+
+
+class TestStaleBatches:
+    async def test_batch_from_before_a_recovery_is_dropped_and_not_acked(self):
+        link, src, dst = _two_workers(3)
+        dst.incarnation = 1  # dst already recovered; src still runs the old protocol
+
+        sender = asyncio.create_task(src._continuous_migration_sender())
+        await asyncio.sleep(LINK_DELAY_S * 5)
+
+        assert dst.local_state.data[DST] == {}
+        assert not src._migration_all_acked.is_set()
+        sender.cancel()
+        await asyncio.gather(sender, *link.in_flight, return_exceptions=True)

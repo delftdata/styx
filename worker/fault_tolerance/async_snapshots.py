@@ -1,9 +1,12 @@
+from dataclasses import dataclass
+import functools
 import os
 import socket
 import time
 from typing import TYPE_CHECKING
 
 import boto3
+from styx.common.logging import logging
 from styx.common.message_types import MessageType
 from styx.common.serialization import Serializer, zstd_msgpack_deserialization
 from styx.common.tcp_networking import NetworkingManager
@@ -11,7 +14,7 @@ from styx.common.tcp_networking import NetworkingManager
 from worker.fault_tolerance.base_snapshoter import BaseSnapshotter
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Callable, Iterable
     from concurrent.futures import Future
 
     from botocore.client import BaseClient as S3Client
@@ -55,6 +58,19 @@ def warm_s3_client() -> None:
     _get_s3_client()
 
 
+@dataclass
+class _SnapshotInProgress:
+    start_ms: float
+    input_offsets: dict[OperatorPartition, int]
+    output_offsets: dict[OperatorPartition, int]
+    epoch_counter: int
+    t_counter: int
+    files_left: int
+    is_migration_checkpoint: bool = False
+    size: int = 0
+    failed: bool = False
+
+
 class AsyncSnapshotsS3(BaseSnapshotter):
     def __init__(
         self,
@@ -63,16 +79,13 @@ class AsyncSnapshotsS3(BaseSnapshotter):
         snapshot_id: int = 1,
     ) -> None:
         self.worker_id: int = worker_id
+        # Id of the next snapshot to start
         self.snapshot_id: int = snapshot_id
         self.n_assigned_partitions: int = n_assigned_partitions
-        self.completed_snapshots: int = 0
-        self.snapshot_in_progress: bool = False
-        self.snapshot_start: float = 0.0
-        self.current_input_offsets = None
-        self.current_output_offsets = None
-        self.current_epoch_counter = -1
-        self.current_t_counter = -1
-        self.total_snapshot_size = 0
+        # Snapshots whose files are still uploading, by id. Each is a delta on top
+        # of the previous one, so they are reported to the coordinator strictly in
+        # id order, and never past one that failed to upload.
+        self._in_progress: dict[int, _SnapshotInProgress] = {}
 
     def update_n_assigned_partitions(self, n_assigned_partitions: int) -> None:
         self.n_assigned_partitions = n_assigned_partitions
@@ -80,50 +93,86 @@ class AsyncSnapshotsS3(BaseSnapshotter):
     def set_snapshot_id(self, snapshot_id: int) -> None:
         self.snapshot_id = snapshot_id + 1
 
-    def snapshot_completed_callback(self, _: Future) -> None:
-        self.completed_snapshots += 1
-        if self.completed_snapshots == self.n_assigned_partitions:
-            snapshot_end = time.time() * 1000
-            msg = NetworkingManager.encode_message(
-                msg=(
-                    self.worker_id,
-                    self.snapshot_id,
-                    self.snapshot_start,
-                    snapshot_end,
-                    self.current_input_offsets,
-                    self.current_output_offsets,
-                    self.current_epoch_counter,
-                    self.current_t_counter,
-                    self.total_snapshot_size,
-                ),
-                msg_type=MessageType.SnapID,
-                serializer=Serializer.MSGPACK,
-            )
-            s = socket.socket()
-            s.connect((COORDINATOR_HOST, COORDINATOR_PORT))
-            s.send(msg)
-            s.close()
-            self.snapshot_id += 1
-            self.snapshot_in_progress = False
-            self.completed_snapshots = 0
-            self.total_snapshot_size = 0
-
     def start_snapshotting(
         self,
         current_input_offsets: dict[OperatorPartition, int],
         current_output_offsets: dict[OperatorPartition, int],
         current_epoch_counter: int,
         current_t_counter: int,
-    ) -> None:
-        self.snapshot_in_progress = True
-        self.snapshot_start = time.time() * 1000
-        self.current_input_offsets = current_input_offsets
-        self.current_output_offsets = current_output_offsets
-        self.current_epoch_counter = current_epoch_counter
-        self.current_t_counter = current_t_counter
+        n_files: int,
+        *,
+        is_migration_checkpoint: bool = False,
+    ) -> int:
+        """Start a snapshot of n_files files and return its id.
 
-    def register_size(self, file_size_bytes: int) -> None:
-        self.total_snapshot_size += file_size_bytes
+        A snapshot can start while earlier ones are still uploading; each keeps its
+        own id and metadata.
+        """
+        snapshot_id = self.snapshot_id
+        self.snapshot_id += 1
+        self._in_progress[snapshot_id] = _SnapshotInProgress(
+            start_ms=time.time() * 1000,
+            input_offsets=current_input_offsets,
+            output_offsets=current_output_offsets,
+            epoch_counter=current_epoch_counter,
+            t_counter=current_t_counter,
+            files_left=n_files,
+            is_migration_checkpoint=is_migration_checkpoint,
+        )
+        # A snapshot with no files is complete already.
+        self._report_completed()
+        return snapshot_id
+
+    def register_size(self, snapshot_id: int, file_size_bytes: int) -> None:
+        self._in_progress[snapshot_id].size += file_size_bytes
+
+    def file_stored_callback(self, snapshot_id: int) -> Callable[[Future], None]:
+        return functools.partial(self._file_stored, snapshot_id)
+
+    def _file_stored(self, snapshot_id: int, future: Future) -> None:
+        snapshot = self._in_progress[snapshot_id]
+        error = "cancelled" if future.cancelled() else future.exception()
+        if error is not None:
+            snapshot.failed = True
+            logging.error(f"Snapshot {snapshot_id}: a file failed to upload: {error}")
+        snapshot.files_left -= 1
+        self._report_completed()
+
+    def _report_completed(self) -> None:
+        while self._in_progress:
+            snapshot_id = min(self._in_progress)
+            snapshot = self._in_progress[snapshot_id]
+            if snapshot.files_left > 0:
+                return
+            if snapshot.failed:
+                logging.error(
+                    f"Snapshot {snapshot_id} is incomplete in S3; neither it nor any later snapshot is reported",
+                )
+                return
+            del self._in_progress[snapshot_id]
+            self._send_snapshot_id(snapshot_id, snapshot)
+
+    def _send_snapshot_id(self, snapshot_id: int, snapshot: _SnapshotInProgress) -> None:
+        msg = NetworkingManager.encode_message(
+            msg=(
+                self.worker_id,
+                snapshot_id,
+                snapshot.start_ms,
+                time.time() * 1000,
+                snapshot.input_offsets,
+                snapshot.output_offsets,
+                snapshot.epoch_counter,
+                snapshot.t_counter,
+                snapshot.size,
+                snapshot.is_migration_checkpoint,
+            ),
+            msg_type=MessageType.SnapID,
+            serializer=Serializer.MSGPACK,
+        )
+        s = socket.socket()
+        s.connect((COORDINATOR_HOST, COORDINATOR_PORT))
+        s.send(msg)
+        s.close()
 
     @staticmethod
     def store_snapshot(snapshot_name: str, sn_data: bytes) -> bool:

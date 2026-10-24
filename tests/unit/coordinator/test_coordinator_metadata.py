@@ -372,7 +372,7 @@ class TestMigrationCheckpoint:
 
 
 class TestRegisterSnapshotCheckpointDetection:
-    def test_checkpoint_event_fires_when_snapshot_exceeds_baseline(self):
+    def test_checkpoint_event_fires_when_checkpoint_snapshot_completes(self):
         c = _coordinator()
         pool = MagicMock()
         c.worker_snapshot_ids = {0: 0}
@@ -381,10 +381,23 @@ class TestRegisterSnapshotCheckpointDetection:
         c._migration_checkpoint_baseline_snap_id = 0
         c._migration_checkpoint_blob = b"fake"
 
-        c.register_snapshot(0, 1, {}, {}, 1, 1, pool)
+        c.register_snapshot(0, 1, {}, {}, 1, 1, pool, is_migration_checkpoint=True)
 
         assert c._migration_checkpoint_snapshot_complete.is_set()
         assert c._migration_checkpoint_baseline_snap_id == -1
+
+    def test_checkpoint_event_ignores_other_snapshots(self):
+        # A snapshot started before Phase B is not the checkpoint.
+        c = _coordinator()
+        pool = MagicMock()
+        c.worker_snapshot_ids = {0: 0}
+        c.prev_completed_snapshot_id = 0
+        c._migration_checkpoint_baseline_snap_id = 0
+        c._migration_checkpoint_blob = b"fake"
+
+        c.register_snapshot(0, 1, {}, {}, 1, 1, pool)
+
+        assert not c._migration_checkpoint_snapshot_complete.is_set()
 
     def test_checkpoint_event_does_not_fire_when_below_baseline(self):
         c = _coordinator()

@@ -28,11 +28,11 @@ def _graph(n_partitions: int) -> StateflowGraph:
     return g
 
 
-def _complete_snapshot(c: Coordinator, snapshot_id: int, epoch: int):
+def _complete_snapshot(c: Coordinator, snapshot_id: int, epoch: int, *, checkpoint: bool = False):
     """All (two) workers register snapshot_id; returns the sequencer tuple written to S3."""
     c.s3_client.put_object.reset_mock()
     for worker_id in (0, 1):
-        c.register_snapshot(worker_id, snapshot_id, {}, {}, epoch, 0, MagicMock())
+        c.register_snapshot(worker_id, snapshot_id, {}, {}, epoch, 0, MagicMock(), is_migration_checkpoint=checkpoint)
     body = c.s3_client.put_object.call_args.kwargs["Body"]
     return zstd_msgpack_deserialization(body)
 
@@ -42,7 +42,7 @@ def _coordinator_with_checkpoint() -> Coordinator:
     c.s3_client = MagicMock()
     c.worker_snapshot_ids = {0: 2, 1: 2}
     c.prev_completed_snapshot_id = 2
-    c.set_migration_checkpoint(_graph(8), {})
+    c.set_migration_checkpoint(_graph(8), {}, from_snapshot_id=3)
     return c
 
 
@@ -64,8 +64,40 @@ class TestCheckpointLifetime:
     def test_new_checkpoint_resets_the_end(self):
         c = _coordinator_with_checkpoint()
         c.end_migration_checkpoint_after(transfer_done_epoch=50)
-        c.set_migration_checkpoint(_graph(16), {})
+        c.set_migration_checkpoint(_graph(16), {}, from_snapshot_id=3)
         assert _complete_snapshot(c, 3, epoch=60)[4] is not None
+
+
+class TestCheckpointTagging:
+    def test_snapshot_cut_before_phase_b_gets_no_checkpoint(self):
+        c = Coordinator(MagicMock(), MagicMock())
+        c.s3_client = MagicMock()
+        c.worker_snapshot_ids = {0: 2, 1: 2}
+        c.prev_completed_snapshot_id = 2
+        c.set_migration_checkpoint(_graph(8), {})
+        c._migration_checkpoint_baseline_snap_id = 2  # waiting for the checkpoint
+
+        # Started before Phase B, completes after the checkpoint metadata was set.
+        assert _complete_snapshot(c, 3, epoch=40)[4] is None
+        assert not c._migration_checkpoint_snapshot_complete.is_set()
+
+        # The checkpoint itself, flagged by the workers.
+        assert _complete_snapshot(c, 4, epoch=41, checkpoint=True)[4] is not None
+        assert c._migration_checkpoint_snapshot_complete.is_set()
+        # Snapshots after it keep the checkpoint until the transfer ends.
+        assert _complete_snapshot(c, 5, epoch=45)[4] is not None
+
+    def test_checkpoint_not_complete_until_every_worker_has_it(self):
+        c = Coordinator(MagicMock(), MagicMock())
+        c.s3_client = MagicMock()
+        c.worker_snapshot_ids = {0: 2, 1: 2}
+        c.prev_completed_snapshot_id = 2
+        c.set_migration_checkpoint(_graph(8), {})
+        c._migration_checkpoint_baseline_snap_id = 2
+        c.register_snapshot(0, 3, {}, {}, 41, 0, MagicMock(), is_migration_checkpoint=True)
+        assert not c.migration_checkpoint_completed()
+        c.register_snapshot(1, 3, {}, {}, 41, 0, MagicMock(), is_migration_checkpoint=True)
+        assert c.migration_checkpoint_completed()
 
 
 class TestMigrationDoneEpochs:
@@ -191,3 +223,29 @@ class TestRecoveryFromCheckpoint:
         assert svc.migration_in_progress is False
         assert svc._deferred_migration_graph is None
         c.revert_worker_pool_to_submitted_graph.assert_not_called()
+
+
+class TestUnreachableWorkers:
+    def _service_with_workers(self, *results):
+        c = Coordinator(MagicMock(), MagicMock())
+        svc = _service(c)
+        svc.unreachable_workers = []
+        workers = [MagicMock(worker_id=i, worker_ip=f"w{i}", protocol_port=6000 + i) for i in range(len(results))]
+        c.worker_pool = MagicMock(get_participating_workers=MagicMock(return_value=workers))
+        svc.protocol_networking.send_message = AsyncMock(side_effect=list(results))
+        return svc, workers
+
+    async def test_worker_a_barrier_reply_cannot_reach_is_handed_to_recovery(self):
+        svc, workers = self._service_with_workers(True, False)
+        await svc.finalize_worker_sync(MessageType.SyncCleanup, (True,))
+        assert svc.unreachable_workers == [workers[1]]
+
+    async def test_connection_error_counts_as_undelivered(self):
+        svc, workers = self._service_with_workers(ConnectionRefusedError(), True)
+        await svc.finalize_worker_sync(MessageType.SyncCleanup, (True,))
+        assert svc.unreachable_workers == [workers[0]]
+
+    async def test_all_delivered(self):
+        svc, _ = self._service_with_workers(True, True)
+        await svc.finalize_worker_sync(MessageType.SyncCleanup, (False,))
+        assert svc.unreachable_workers == []

@@ -96,7 +96,8 @@ class StyxSocketClient:
             success = False
         return success
 
-    async def send_message(self, message: bytes) -> None:
+    async def send_message(self, message: bytes) -> bool:
+        """Write the message, reconnecting on a broken connection; False if every retry failed."""
         if self.writer is None:
             msg = "Writer is not initialized (connection not established)."
             raise ConnectionError(msg)
@@ -129,6 +130,8 @@ class StyxSocketClient:
             logging.error(
                 f"Cannot send_message_rq_rs to worker {self.target_host}:{self.target_port}",
             )
+            return False
+        return True
 
     async def send_message_rq_rs(self, message: bytes) -> bytes | None:
         if self.writer is None or self.reader is None:
@@ -255,6 +258,9 @@ class NetworkingManager(BaseNetworking):
 
         self.peers: dict[int, tuple[str, int, int]] = {}
         self.wait_remote_key_event: dict[OperatorPartition, dict[K, asyncio.Event]] = {}
+        # Cluster incarnation (bumped on every recovery); key requests carry it so
+        # a reply to a request sent before a recovery is dropped.
+        self.incarnation: int = 0
 
         # ACK batching: per-peer buffer flushed on the next event-loop tick.
         # Coalesces many tiny `send_message(Ack)` calls (one per leaf txn)
@@ -344,7 +350,8 @@ class NetworkingManager(BaseNetworking):
         msg: tuple | bytes,
         msg_type: int,
         serializer: Serializer = Serializer.CLOUDPICKLE,
-    ) -> None:
+    ) -> bool:
+        """Send the message; False if it could not be delivered."""
         msg = self.encode_message(msg=msg, msg_type=msg_type, serializer=serializer)
         # Hot path: lock-free. dict.get and __next__ have no await points, so
         # asyncio's cooperative scheduling makes them atomic.
@@ -353,7 +360,7 @@ class NetworkingManager(BaseNetworking):
             await self.create_socket_connection(host, port)
             pool = self.pools[(host, port)]
         socket_conn = next(pool)
-        await socket_conn.send_message(msg)
+        return await socket_conn.send_message(msg)
 
     def set_peers(self, peers: dict[int, tuple[str, int, int]]) -> None:
         self.peers = peers
@@ -389,6 +396,7 @@ class NetworkingManager(BaseNetworking):
                 old_partition,
                 self.host_name,
                 self.host_port - 1000,
+                self.incarnation,
             ),
             MessageType.RequestRemoteKey,
             serializer=Serializer.MSGPACK,

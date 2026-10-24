@@ -81,24 +81,28 @@ class AsyncSnapshottingProcess:
             topic_partition_output_offsets,
             epoch_counter,
             t_counter,
+            *rest,
         ) = metadata
+        is_migration_checkpoint = bool(rest and rest[0])
         logging.warning(f"ASYNC_SN | Starting Snapshot at epoch: {epoch_counter}")
-        self.async_snapshots.start_snapshotting(
+        snapshot_id = self.async_snapshots.start_snapshotting(
             topic_partition_offsets,
             topic_partition_output_offsets,
             epoch_counter,
             t_counter,
+            n_files=len(self.delta_maps),
+            is_migration_checkpoint=is_migration_checkpoint,
         )
         for operator_partition, delta_map in self.delta_maps.items():
             operator_name, partition = operator_partition
             data_to_store: bytes = zstd_msgpack_serialization(delta_map)
-            self.async_snapshots.register_size(len(data_to_store))
+            self.async_snapshots.register_size(snapshot_id, len(data_to_store))
             loop.run_in_executor(
                 self.pool,
                 self.async_snapshots.store_snapshot,
-                f"data/{operator_name}/{partition}/{self.async_snapshots.snapshot_id}.bin",
+                f"data/{operator_name}/{partition}/{snapshot_id}.bin",
                 data_to_store,
-            ).add_done_callback(self.async_snapshots.snapshot_completed_callback)
+            ).add_done_callback(self.async_snapshots.file_stored_callback(snapshot_id))
         self.clear_delta_maps()
 
     def snapshotting_controller(self, data: bytes) -> None:

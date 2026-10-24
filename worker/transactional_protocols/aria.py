@@ -78,6 +78,7 @@ class AriaProtocol(BaseTransactionalProtocol):
         dedup_output_offsets: dict[OperatorPartition, int] | None = None,
         egress: StyxKafkaBatchEgress | None = None,
         kafka_consumer: AIOKafkaConsumer | None = None,
+        incarnation: int = 0,
     ) -> None:
         if topic_partition_offsets is None:
             topic_partition_offsets = {(tp.topic, tp.partition): -1 for tp in topic_partitions}
@@ -85,6 +86,8 @@ class AriaProtocol(BaseTransactionalProtocol):
             output_offsets = {(tp.topic, tp.partition): -1 for tp in topic_partitions}
 
         self.id: int = worker_id
+        # Migration messages from another incarnation (before a recovery) are dropped.
+        self.incarnation: int = incarnation
 
         self.topic_partitions = topic_partitions
         self.networking = networking
@@ -526,7 +529,14 @@ class AriaProtocol(BaseTransactionalProtocol):
             self.ingress.messages_available.set()
 
     async def _handle_async_migration(self, data: bytes) -> None:
-        operator_partition, batch, sender_id, nonce, batch_id = self.networking.decode_message(data)
+        operator_partition, batch, sender_id, nonce, batch_id, incarnation = self.networking.decode_message(data)
+        if incarnation != self.incarnation:
+            # Sent by a protocol from before a recovery: its keys are not ours to take.
+            logging.warning(
+                f"MIGRATION | Dropping batch for {operator_partition} from W{sender_id} "
+                f"of incarnation {incarnation} (now {self.incarnation})",
+            )
+            return
         logging.debug(f"MIGRATION | Received migration batch for: {operator_partition}")
 
         self._apply_migration_batch(operator_partition, batch)
@@ -614,7 +624,7 @@ class AriaProtocol(BaseTransactionalProtocol):
                 self.networking.send_message(
                     worker[0],
                     worker[2],
-                    msg=(operator_partition, k_v_pairs, self.id, self._migration_nonce, batch_id),
+                    msg=(operator_partition, k_v_pairs, self.id, self._migration_nonce, batch_id, self.incarnation),
                     msg_type=MessageType.AsyncMigration,
                     serializer=Serializer.MSGPACK,
                 ),
