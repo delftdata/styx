@@ -118,6 +118,7 @@ def _worker(link: _Link, worker_id: int, addr: tuple, peers: dict, state: InMemo
     proto.started = asyncio.Event()
     proto.started.set()
     proto.migrating_state = True
+    proto.registered_operators = dict.fromkeys(state.operator_partitions)
     proto._init_async_migration_state()
     proto.protocol_handlers_map = {
         MessageType.AsyncMigration: proto._handle_async_migration,
@@ -252,3 +253,53 @@ class TestWaitingTransactionWokenByBatch:
         await asyncio.wait_for(waiter.wait(), timeout=2)
         assert dst.local_state.data[DST][1] is None
         await asyncio.wait_for(sender, timeout=2)
+
+
+class TestLocalBatches:
+    async def test_local_batch_is_applied_in_place(self):
+        # Destination partition on the same worker: no network, no ack to wait for.
+        _link, src, _dst = _two_workers(3)
+        src.local_state.add_new_operator_partition(DST)
+        src.registered_operators = dict.fromkeys([SRC, DST])
+        waiter = asyncio.Event()
+        src.networking.wait_remote_key_event[DST] = {1: waiter}
+
+        batch = src.local_state.get_async_migrate_batch(10)
+        await src._send_migration_batch(batch)
+
+        assert src.local_state.data[DST] == {0: "v0", 1: "v1", 2: "v2"}
+        assert waiter.is_set()
+        assert src._migration_all_acked.is_set()
+        assert _link.in_flight == set()
+
+
+def _stoppable_protocol() -> AriaProtocol:
+    proto = AriaProtocol.__new__(AriaProtocol)
+    proto._stopping = False
+    proto.stopped = asyncio.Event()
+    proto.ingress = SimpleNamespace(stop=AsyncMock())
+    proto.egress = SimpleNamespace(stop=AsyncMock(), flush=AsyncMock())
+    proto.aio_task_scheduler = SimpleNamespace(close=AsyncMock())
+    proto.background_functions = SimpleNamespace(close=AsyncMock())
+    proto.snapshotting_networking_manager = SimpleNamespace(close_all_connections=AsyncMock())
+    proto.function_scheduler_task = asyncio.create_task(asyncio.sleep(10))
+    proto.communication_task = asyncio.create_task(asyncio.sleep(10))
+    proto.migration_sender_task = None
+    proto.topic_partition_offsets = {}
+    return proto
+
+
+class TestStopForMigration:
+    async def test_graceful_stop_keeps_egress_running(self):
+        proto = _stoppable_protocol()
+        await proto.stop(keep_egress=True)
+        proto.egress.flush.assert_awaited_once()
+        proto.egress.stop.assert_not_awaited()
+        assert proto.stopped.is_set()
+
+    async def test_later_full_stop_releases_kept_egress(self):
+        # Recovery after a graceful stop must not leak the producer.
+        proto = _stoppable_protocol()
+        await proto.stop(keep_egress=True)
+        await proto.stop()
+        proto.egress.stop.assert_awaited_once()

@@ -343,3 +343,59 @@ class TestGetMessagesSentBeforeRecoveryEmpty:
         await e.get_messages_sent_before_recovery()
         # Should return without creating a consumer
         assert len(e.messages_sent_before_recovery) == 0
+
+
+# ---------------------------------------------------------------------------
+# Reuse across a migration rebuild
+# ---------------------------------------------------------------------------
+
+
+class TestReuseAcrossMigration:
+    @pytest.mark.asyncio
+    async def test_start_reuses_running_producer(self, monkeypatch):
+        e = _egress()
+        producer = MagicMock()
+        e.kafka_egress_producer = producer
+        factory = MagicMock()
+        monkeypatch.setattr("worker.egress.styx_kafka_batch_egress.AIOKafkaProducer", factory)
+
+        await e.start(worker_id=1)
+
+        factory.assert_not_called()
+        assert e.kafka_egress_producer is producer
+        assert e.started.is_set()
+
+    @pytest.mark.asyncio
+    async def test_flush_keeps_producer_running(self):
+        e = _egress()
+        producer = MagicMock(stop=AsyncMock())
+        e.kafka_egress_producer = producer
+        await e.flush()
+        producer.stop.assert_not_called()
+        assert e.is_running
+
+    @pytest.mark.asyncio
+    async def test_stop_is_idempotent(self):
+        e = _egress()
+        producer = MagicMock(stop=AsyncMock())
+        e.kafka_egress_producer = producer
+        await e.stop()
+        await e.stop()
+        producer.stop.assert_awaited_once()
+        assert not e.is_running
+
+    def test_prepare_for_new_protocol_resets_per_protocol_state(self):
+        e = _egress(restart=True, dedup_offsets={("users", 0): 5})
+        e.messages_sent_before_recovery.add(b"r1")
+        e.batch.append(object())
+        e.started.set()
+        new_offsets = {("users", 0): 7, ("users", 4): -1}
+
+        e.prepare_for_new_protocol(new_offsets, restart_after_failure=False, dedup_output_offsets=None)
+
+        assert e.topic_partition_output_offsets is new_offsets
+        assert e.restart_after_failure is False
+        assert e.dedup_output_offsets == {}
+        assert e.messages_sent_before_recovery == set()
+        assert e.batch == []
+        assert not e.started.is_set()

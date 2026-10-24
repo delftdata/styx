@@ -48,24 +48,47 @@ class StyxKafkaBatchEgress(BaseEgress):
     def clear_messages_sent_before_recovery(self) -> None:
         self.messages_sent_before_recovery: set = set()
 
+    @property
+    def is_running(self) -> bool:
+        return self.kafka_egress_producer is not None
+
+    def prepare_for_new_protocol(
+        self,
+        topic_partition_output_offsets: dict[OperatorPartition, int],
+        restart_after_failure: bool,
+        dedup_output_offsets: dict[OperatorPartition, int] | None,
+    ) -> None:
+        """Reuse this egress, and its running Kafka producer, for a rebuilt protocol.
+
+        Starting a new idempotent producer takes hundreds of milliseconds, which a
+        migration would otherwise spend with no responses going out.
+        """
+        self.topic_partition_output_offsets = topic_partition_output_offsets
+        self.restart_after_failure = restart_after_failure
+        self.dedup_output_offsets = dedup_output_offsets or {}
+        self.messages_sent_before_recovery = set()
+        self.batch = []
+        self.started = asyncio.Event()
+
     async def start(self, worker_id: int) -> None:
         self.worker_id = worker_id
-        # Idempotent (implies acks="all"): this producer writes client responses and
-        # the sequencer WAL, which recovery relies on. With acks=1 a leader failover
-        # can truncate acked records, and retries can duplicate responses.
-        self.kafka_egress_producer = AIOKafkaProducer(
-            bootstrap_servers=[KAFKA_URL],
-            client_id=f"W{worker_id}_{uuid.uuid4()}",
-            enable_idempotence=True,
-        )
-        while True:
-            try:
-                await self.kafka_egress_producer.start()
-            except KafkaConnectionError:
-                await asyncio.sleep(1)
-                logging.info("Waiting for Kafka")
-                continue
-            break
+        if self.kafka_egress_producer is None:
+            # Idempotent (implies acks="all"): this producer writes client responses and
+            # the sequencer WAL, which recovery relies on. With acks=1 a leader failover
+            # can truncate acked records, and retries can duplicate responses.
+            self.kafka_egress_producer = AIOKafkaProducer(
+                bootstrap_servers=[KAFKA_URL],
+                client_id=f"W{worker_id}_{uuid.uuid4()}",
+                enable_idempotence=True,
+            )
+            while True:
+                try:
+                    await self.kafka_egress_producer.start()
+                except KafkaConnectionError:
+                    await asyncio.sleep(1)
+                    logging.info("Waiting for Kafka")
+                    continue
+                break
         if not self.restart_after_failure:
             # Non-recovery path: mark started immediately.
             # Recovery path: started is set later by run_dedup_scan_and_mark_started()
@@ -90,7 +113,13 @@ class StyxKafkaBatchEgress(BaseEgress):
             )
         self.started.set()
 
+    async def flush(self) -> None:
+        """Wait until every buffered response is written, keeping the producer running."""
+        await self.send_batch()
+
     async def stop(self) -> None:
+        if self.kafka_egress_producer is None:
+            return
         await self.send_batch()
         if self._dedup_suppressed > 0 or self._dedup_sent > 0:
             logging.warning(
@@ -98,7 +127,8 @@ class StyxKafkaBatchEgress(BaseEgress):
                 f"suppressed={self._dedup_suppressed}, sent={self._dedup_sent}, "
                 f"remaining_dedup_set_size={len(self.messages_sent_before_recovery)}",
             )
-        await self.kafka_egress_producer.stop()
+        producer, self.kafka_egress_producer = self.kafka_egress_producer, None
+        await producer.stop()
 
     async def send(
         self,

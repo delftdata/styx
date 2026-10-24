@@ -552,7 +552,10 @@ class Worker:
         topic_partition_offsets = {op: self.m_input_offsets.get(op, -1) for op in self.registered_operators}
         topic_partition_output_offsets = {op: self.m_output_offsets.get(op, -1) for op in self.registered_operators}
 
-        # Recreate protocol (restart_after_migration)
+        # Recreate protocol (restart_after_migration). The old protocol stopped
+        # gracefully at an epoch boundary with every response flushed, so the new
+        # one reuses its Kafka producer and has nothing to deduplicate.
+        old_egress = self.function_execution_protocol.egress
         self.function_execution_protocol = AriaProtocol(
             worker_id=self.id,
             peers=self.peers,
@@ -567,7 +570,7 @@ class Worker:
             epoch_counter=self.m_epoch_counter,
             t_counter=self.m_t_counter,
             restart_after_migration=True,
-            dedup_output_offsets=dict(self.m_output_offsets),
+            egress=old_egress if old_egress.is_running else None,
         )
 
     async def _handle_receive_migration_hashes(

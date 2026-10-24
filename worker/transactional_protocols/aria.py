@@ -47,7 +47,8 @@ SNAPSHOTTING_THREADS: int = int(os.getenv("SNAPSHOTTING_THREADS", "4"))
 SEQUENCE_MAX_SIZE: int = int(os.getenv("SEQUENCE_MAX_SIZE", "1_000"))
 KAFKA_URL: str = os.environ["KAFKA_URL"]
 USE_ASYNC_MIGRATION: bool = bool(strtobool(os.getenv("USE_ASYNC_MIGRATION", "true")))
-ASYNC_MIGRATION_BATCH_SIZE: int = int(os.getenv("ASYNC_MIGRATION_BATCH_SIZE", "2_000"))
+# Small batches keep each sender step short, so epochs are not held up behind it.
+ASYNC_MIGRATION_BATCH_SIZE: int = int(os.getenv("ASYNC_MIGRATION_BATCH_SIZE", "500"))
 
 
 class AriaProtocol(BaseTransactionalProtocol):
@@ -70,6 +71,7 @@ class AriaProtocol(BaseTransactionalProtocol):
         restart_after_migration: bool = False,
         *,
         dedup_output_offsets: dict[OperatorPartition, int] | None = None,
+        egress: StyxKafkaBatchEgress | None = None,
     ) -> None:
         if topic_partition_offsets is None:
             topic_partition_offsets = {(tp.topic, tp.partition): -1 for tp in topic_partitions}
@@ -126,11 +128,19 @@ class AriaProtocol(BaseTransactionalProtocol):
             epoch_interval_ms=100,
         )
 
-        self.egress: StyxKafkaBatchEgress = StyxKafkaBatchEgress(
-            output_offsets,
-            restart_after_recovery or restart_after_migration,
-            dedup_output_offsets=dedup_output_offsets,
-        )
+        # Responses may duplicate ones sent before a recovery; scan for them first.
+        # After a clean migration stop nothing is replayed, so there is nothing to scan.
+        dedup_on_start = restart_after_recovery or dedup_output_offsets is not None
+        if egress is None:
+            self.egress: StyxKafkaBatchEgress = StyxKafkaBatchEgress(
+                output_offsets,
+                dedup_on_start,
+                dedup_output_offsets=dedup_output_offsets,
+            )
+        else:
+            # Rebuilt after a clean migration stop: keep the running Kafka producer.
+            egress.prepare_for_new_protocol(output_offsets, dedup_on_start, dedup_output_offsets)
+            self.egress = egress
         # Primary task used for processing
         self.function_scheduler_task: asyncio.Task | None = None
         self.communication_task: asyncio.Task | None = None
@@ -202,14 +212,22 @@ class AriaProtocol(BaseTransactionalProtocol):
     async def wait_stopped(self) -> None:
         await self.stopped.wait()
 
-    async def stop(self) -> None:
+    async def stop(self, *, keep_egress: bool = False) -> None:
+        """Stop the protocol. keep_egress flushes the egress but leaves its Kafka
+        producer running, so the protocol rebuilt after a migration can reuse it."""
         if self._stopping:
             # Another caller is already tearing down — just wait for completion.
             await self.stopped.wait()
+            if not keep_egress:
+                # A graceful (migration) stop may have left the producer running.
+                await self.egress.stop()
             return
         self._stopping = True
         await self.ingress.stop()
-        await self.egress.stop()
+        if keep_egress:
+            await self.egress.flush()
+        else:
+            await self.egress.stop()
         await self.aio_task_scheduler.close()
         await self.background_functions.close()
         await self.snapshotting_networking_manager.close_all_connections()
@@ -498,13 +516,7 @@ class AriaProtocol(BaseTransactionalProtocol):
         operator_partition, batch, sender_id, nonce, batch_id = self.networking.decode_message(data)
         logging.debug(f"MIGRATION | Received migration batch for: {operator_partition}")
 
-        op = tuple(operator_partition)
-        self.local_state.set_batch_data_from_migration(op, batch)
-        # Unblock any transactions waiting for these keys via RequestRemoteKey
-        if op in self.networking.wait_remote_key_event:
-            for key in batch:
-                if key in self.networking.wait_remote_key_event.get(op, {}):
-                    self.networking.wait_remote_key_event[op][key].set()
+        self._apply_migration_batch(operator_partition, batch)
 
         # Acknowledge only after the batch is applied (and so in this epoch's delta).
         if sender_id == self.id:
@@ -518,6 +530,16 @@ class AriaProtocol(BaseTransactionalProtocol):
             msg_type=MessageType.AsyncMigrationAck,
             serializer=Serializer.MSGPACK,
         )
+
+    def _apply_migration_batch(self, operator_partition: OperatorPartition, batch: dict) -> None:
+        op = tuple(operator_partition)
+        self.local_state.set_batch_data_from_migration(op, batch)
+        # Unblock any transactions waiting for these keys
+        waiting = self.networking.wait_remote_key_event.get(op)
+        if waiting:
+            for key in batch:
+                if key in waiting:
+                    waiting[key].set()
 
     async def _handle_async_migration_ack(self, data: bytes) -> None:
         # Lock-free: no awaits.
@@ -561,11 +583,15 @@ class AriaProtocol(BaseTransactionalProtocol):
     ) -> None:
         """Send a migration batch to destination workers in parallel.
 
-        Every batch goes over the network, including to this worker, and stays
-        unacknowledged until the destination has applied it."""
+        A batch for a partition on this worker is applied in place: nothing is in
+        flight, so it needs no acknowledgement. A remote batch stays unacknowledged
+        until the destination has applied it."""
         send_tasks = []
         for operator_partition, k_v_pairs in batch.items():
             operator_name, partition = operator_partition
+            if (operator_name, partition) in self.registered_operators:
+                self._apply_migration_batch(operator_partition, k_v_pairs)
+                continue
             worker = self.dns[operator_name][partition]
             # Register before the first await so a concurrent drain waits for it.
             batch_id = next(self._migration_batch_ids)
@@ -641,6 +667,7 @@ class AriaProtocol(BaseTransactionalProtocol):
         await self.started.wait()
         logging.warning("STARTED function scheduler")
 
+        graceful = False
         try:
             while self.running:
                 # Wait until the ingress signals that messages are available,
@@ -660,6 +687,7 @@ class AriaProtocol(BaseTransactionalProtocol):
                     self.currently_processing = True
                     await self._process_epoch(sequence)
 
+            graceful = True
             logging.warning(f"Worker {self.id} | function_scheduler exiting (running=False)")
         except asyncio.CancelledError:
             logging.warning(f"Worker {self.id} | function_scheduler cancelled")
@@ -671,7 +699,9 @@ class AriaProtocol(BaseTransactionalProtocol):
             # already tearing down.  Otherwise we deadlock: the external
             # stop() awaits this task, while this task awaits stopped.
             if not self._stopping:
-                await self.stop()
+                # Only a migration stops the protocol gracefully; its rebuilt
+                # protocol takes over the egress.
+                await self.stop(keep_egress=graceful)
 
     async def _process_epoch(self, sequence: list[SequencedItem]) -> None:
         epoch_start = timer()
