@@ -381,14 +381,19 @@ class TestKafkaConsumerStartupExceptionHandling:
         or linters that might not catch this subtle syntax difference.
         """
         import ast
-        import inspect
-        import textwrap
+        from pathlib import Path
 
-        source = textwrap.dedent(inspect.getsource(StyxKafkaIngress._create_kafka_consumer))
+        # Parse the module file: the functions may be Cython-compiled, which
+        # inspect.getsource() cannot read.
+        source = (Path(__file__).parents[3] / "worker" / "ingress" / "styx_kafka_ingress.py").read_text()
         tree = ast.parse(source)
+        handlers = [node for node in ast.walk(tree) if isinstance(node, ast.ExceptHandler)]
+        assert any(
+            isinstance(h.type, ast.Tuple) and any(getattr(e, "id", None) == "KafkaConnectionError" for e in h.type.elts)
+            for h in handlers
+        ), "expected an except clause catching KafkaConnectionError alongside other errors"
 
-        # Find all except handlers in the function
-        for node in ast.walk(tree):
+        for node in handlers:
             if (
                 isinstance(node, ast.ExceptHandler)
                 and node.type is not None
