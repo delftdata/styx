@@ -17,6 +17,7 @@ from styx.common.operator import Operator
 from styx.common.stateflow_graph import StateflowGraph
 
 from coordinator.coordinator_metadata import Coordinator
+from tests.unit.coordinator.service_helpers import recover, stub_service
 
 
 def _mock_coordinator():
@@ -221,66 +222,71 @@ class TestPostMigrationSnapshotFinalization:
 
 
 class TestRecoveryConditionDetection:
-    """Tests that recovery correctly detects both mid-migration crashes AND
-    post-migration-pre-snapshot crashes.
+    """Recovery must notice a migration that had not reached its checkpoint,
+    including one whose MigrationDone arrived but whose post-migration snapshot
+    had not completed, and revert to the old layout and retry it.
 
-    Bug caught: if migration completed but no post-migration snapshot was taken,
-    recovery didn't detect this as migration-related, used the NEW graph with
-    the OLD snapshot, and lost half the data.
+    These drive the real CoordinatorService._perform_recovery.
     """
 
-    def test_mid_migration_detected(self):
-        """migration_in_progress=True with _pending_graph set → needs revert."""
+    async def test_mid_migration_reverts_and_retries(self):
         c = _mock_coordinator()
-        c._pending_graph = MagicMock()
-        migration_in_progress = True
+        pending = _make_graph(n_partitions=8)
+        c._pending_graph = pending
+        svc = stub_service(c)
+        svc.migration_in_progress = True
 
-        was_migrating = (migration_in_progress and c._pending_graph is not None) or c.post_migration_snapshot_pending
-        assert was_migrating is True
+        await recover(svc)
 
-    def test_post_migration_pre_snapshot_detected(self):
-        """migration_in_progress=False but post_migration_snapshot_pending=True
-        → needs revert. This is the bug scenario."""
+        c.revert_worker_pool_to_submitted_graph.assert_called_once()
+        assert svc._deferred_migration_graph is pending
+        assert svc.migration_in_progress is False
+
+    async def test_post_migration_pre_snapshot_reverts(self):
         c = _mock_coordinator()
-        c._pending_graph = MagicMock()
+        c._pending_graph = _make_graph(n_partitions=8)
         c.post_migration_snapshot_pending = True
-        migration_in_progress = False
+        svc = stub_service(c)
 
-        was_migrating = (migration_in_progress and c._pending_graph is not None) or c.post_migration_snapshot_pending
-        assert was_migrating is True
+        await recover(svc)
 
-    def test_no_migration_not_detected(self):
-        """Normal state — no migration, no pending snapshot."""
+        c.revert_worker_pool_to_submitted_graph.assert_called_once()
+
+    async def test_no_migration_is_an_ordinary_recovery(self):
         c = _mock_coordinator()
-        c._pending_graph = None
-        c.post_migration_snapshot_pending = False
-        migration_in_progress = False
+        svc = stub_service(c)
 
-        was_migrating = (migration_in_progress and c._pending_graph is not None) or c.post_migration_snapshot_pending
-        assert was_migrating is False
+        await recover(svc)
 
-    def test_completed_migration_with_snapshot_not_detected(self):
-        """Migration completed AND post-migration snapshot taken → no revert needed."""
+        c.revert_worker_pool_to_submitted_graph.assert_not_called()
+        assert svc._deferred_migration_graph is None
+
+    async def test_completed_migration_is_an_ordinary_recovery(self):
         c = _mock_coordinator()
-        c._pending_graph = None  # finalize_graph_update() cleared it
-        c.post_migration_snapshot_pending = False
-        migration_in_progress = False
+        c.submitted_graph = _make_graph(n_partitions=8)  # finalized
+        svc = stub_service(c)
 
-        was_migrating = (migration_in_progress and c._pending_graph is not None) or c.post_migration_snapshot_pending
-        assert was_migrating is False
+        await recover(svc)
 
-    def test_saved_pending_graph_preserved_for_retry(self):
-        """When was_migrating, the pending graph should be saved for auto-retry."""
+        c.revert_worker_pool_to_submitted_graph.assert_not_called()
+        assert c.submitted_graph.nodes["ycsb"].n_partitions == 8
+
+    async def test_recovery_clears_migration_state(self):
         c = _mock_coordinator()
-        new_graph = MagicMock(name="new_graph")
-        c._pending_graph = new_graph
+        c._pending_graph = _make_graph(n_partitions=8)
+        c.pre_migration_snapshot_pending = True
         c.post_migration_snapshot_pending = True
-        migration_in_progress = False
+        c._migration_checkpoint_baseline_snap_id = 3
+        svc = stub_service(c)
+        svc.migration_in_progress = True
 
-        was_migrating = (migration_in_progress and c._pending_graph is not None) or c.post_migration_snapshot_pending
-        saved_pending_graph = c._pending_graph if was_migrating else None
+        await recover(svc)
 
-        assert saved_pending_graph is new_graph
+        assert c.pre_migration_snapshot_pending is False
+        assert c.post_migration_snapshot_pending is False
+        assert c._pending_graph is None
+        assert c._migration_checkpoint_baseline_snap_id == -1
+        assert c._migration_checkpoint_blob is None
 
 
 # ---------------------------------------------------------------------------
@@ -330,11 +336,6 @@ class TestMigrationLifecycleScenarios:
 
         # CRASH happens here — before post-migration snapshot
 
-        # Recovery check
-        migration_in_progress = False  # already cleared by _handle_migration_done
-        was_migrating = (migration_in_progress and c._pending_graph is not None) or c.post_migration_snapshot_pending
-        assert was_migrating is True
-
         # submitted_graph is still the OLD graph
         assert c.submitted_graph is old_graph
         assert c.submitted_graph.nodes["ycsb"].n_partitions == 4
@@ -382,10 +383,7 @@ class TestMigrationLifecycleScenarios:
 
         # CRASH happens here — after post-migration snapshot
 
-        # Recovery check: no migration recovery needed
-        migration_in_progress = False
-        was_migrating = (migration_in_progress and c._pending_graph is not None) or c.post_migration_snapshot_pending
-        assert was_migrating is False
+        # (Recovery from here is an ordinary one: TestRecoveryConditionDetection.)
 
     def test_scenario_crash_during_migration_phase_a(self):
         """Scenario: crash during Phase A (migration in progress,
@@ -400,12 +398,8 @@ class TestMigrationLifecycleScenarios:
         # Migration starts
         c._pending_graph = new_graph
         c.pre_migration_snapshot_pending = True
-        migration_in_progress = True
 
         # CRASH during Phase A — no pre-migration snapshot completed
-
-        was_migrating = (migration_in_progress and c._pending_graph is not None) or c.post_migration_snapshot_pending
-        assert was_migrating is True
 
         # Old graph preserved
         assert c.submitted_graph is old_graph
@@ -448,30 +442,6 @@ class TestMigrationLifecycleScenarios:
         c.worker_snapshot_ids = {0: 3, 1: 3, 2: 3}
         c.register_snapshot(0, 3, {}, {}, 30, 300, pool)
         assert c.submitted_graph is new_graph  # still new graph
-
-    def test_scenario_state_cleanup_on_recovery(self):
-        """Verify all migration state is properly cleared during recovery."""
-        c = self._setup_coordinator(n_partitions=4)
-        new_graph = _make_graph("test-app", n_partitions=8, max_parallelism=8)
-
-        # Set up mid-migration state
-        c._pending_graph = new_graph
-        c.pre_migration_snapshot_pending = True
-        c.pre_migration_snapshot_id = 1
-        c.post_migration_snapshot_pending = True
-
-        # Simulate recovery clearing state (mirrors _perform_recovery step 1c)
-        saved_pending_graph = c._pending_graph
-        c.pre_migration_snapshot_pending = False
-        c.post_migration_snapshot_pending = False
-        c._pending_graph = None
-
-        # All state cleared
-        assert c.pre_migration_snapshot_pending is False
-        assert c.post_migration_snapshot_pending is False
-        assert c._pending_graph is None
-        # But we saved the graph for retry
-        assert saved_pending_graph is new_graph
 
 
 # ---------------------------------------------------------------------------

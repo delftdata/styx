@@ -22,3 +22,13 @@ async def update(ctx: StatefulFunction):
     value: tuple = ctx.get()
     ctx.put(value)
     return ctx.key
+
+
+@ycsb_operator.register
+async def verify(ctx: StatefulFunction):
+    """Fingerprint of the stored record (None if missing), for end-of-run state
+    checks. Self-contained: it runs on the workers, where this module is absent."""
+    import zlib
+
+    value = ctx.get()
+    return ctx.key, None if value is None else zlib.crc32("\x1f".join(value).encode())

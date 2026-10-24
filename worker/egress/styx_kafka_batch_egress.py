@@ -152,7 +152,7 @@ class StyxKafkaBatchEgress(BaseEgress):
         else:
             self.messages_sent_before_recovery.discard(key)
             self._dedup_suppressed += 1
-            logging.warning(
+            logging.debug(
                 f"[DEDUP] W{getattr(self, 'worker_id', '?')} SUPPRESSED key={key!r} "
                 f"target_partition={operator_name}--OUT/{partition}",
             )
@@ -194,7 +194,7 @@ class StyxKafkaBatchEgress(BaseEgress):
         else:
             self.messages_sent_before_recovery.discard(key)
             self._dedup_suppressed += 1
-            logging.warning(
+            logging.debug(
                 f"[DEDUP] W{getattr(self, 'worker_id', '?')} SUPPRESSED (immediate) key={key!r} "
                 f"target_partition={operator_name}--OUT/{partition}",
             )
@@ -233,7 +233,7 @@ class StyxKafkaBatchEgress(BaseEgress):
                 for tp in all_topic_partitions:
                     offset = self.dedup_output_offsets[(tp.topic[:-5], tp.partition)] + 1
                     kafka_output_consumer.seek(tp, offset)
-                    logging.warning(f"[DEDUP] Seeking {tp} to offset {offset}")
+                    logging.debug(f"[DEDUP] Seeking {tp} to offset {offset}")
             except (UnknownTopicOrPartitionError, KafkaConnectionError):  # fmt: skip
                 await asyncio.sleep(1)
                 logging.warning(
@@ -243,14 +243,14 @@ class StyxKafkaBatchEgress(BaseEgress):
             break
         try:
             current_offsets = await kafka_output_consumer.end_offsets(all_topic_partitions)
-            logging.warning(
+            logging.debug(
                 f"[DEDUP] End offsets: {current_offsets}",
             )
             all_partitions_done: dict[TopicPartition, bool] = {
                 tp: current_offsets[tp] == self.dedup_output_offsets[(tp.topic[:-5], tp.partition)] + 1
                 for tp in all_topic_partitions
             }
-            logging.warning(f"[DEDUP] Initial partitions_done: {all_partitions_done}")
+            logging.debug(f"[DEDUP] Initial partitions_done: {all_partitions_done}")
             per_partition_count: dict[TopicPartition, int] = dict.fromkeys(all_topic_partitions, 0)
             while not all(all_partitions_done.values()):
                 result = await kafka_output_consumer.getmany(timeout_ms=EPOCH_INTERVAL_MS)

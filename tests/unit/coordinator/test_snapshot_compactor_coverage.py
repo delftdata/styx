@@ -85,9 +85,10 @@ class TestCompactDeltas:
         mock_client.get_object.side_effect = get_bytes_side_effect
         compact_deltas(mock_client, files, max_snap_id=5)
 
-        # Should write compacted data
+        # The merged state goes into the partition's latest file; older ones go.
         put_calls = mock_client.put_object.call_args_list
-        assert any("data/users/0/0.bin" in str(c) for c in put_calls)
+        assert any("data/users/0/1.bin" in str(c) for c in put_calls)
+        mock_client.delete_object.assert_any_call(Bucket="styx-snapshots", Key="data/users/0/0.bin")
 
     def test_compact_sequencer_snapshots(self):
         mock_client = MagicMock()
@@ -106,6 +107,63 @@ class TestCompactDeltas:
         # Should write the latest sequencer snapshot as 0.bin
         put_calls = mock_client.put_object.call_args_list
         assert any("sequencer/0.bin" in str(c) for c in put_calls)
+
+    def _s3(self, files: dict[str, dict]):
+        """In-memory S3: get/put/delete on a dict of key -> deserialized payload."""
+        from styx.common.serialization import zstd_msgpack_deserialization
+
+        store = {k: zstd_msgpack_serialization(v) for k, v in files.items()}
+        client = MagicMock()
+
+        def get(Bucket=None, Key=None):
+            body = MagicMock()
+            body.read.return_value = store[Key]
+            return {"Body": body}
+
+        def put(Bucket=None, Key=None, Body=None):
+            store[Key] = Body
+
+        def delete(Bucket=None, Key=None):
+            del store[Key]
+
+        client.get_object.side_effect = get
+        client.put_object.side_effect = put
+        client.delete_object.side_effect = delete
+        return client, store, zstd_msgpack_deserialization
+
+    def test_merges_in_snapshot_id_order(self):
+        # S3 lists keys lexicographically: 10.bin before 2.bin.
+        client, store, load = self._s3(
+            {
+                "data/users/0/10.bin": {"k": "newest"},
+                "data/users/0/2.bin": {"k": "old", "j": "v"},
+            },
+        )
+        compact_deltas(client, list(store), max_snap_id=10)
+        assert set(store) == {"data/users/0/10.bin"}
+        assert load(store["data/users/0/10.bin"]) == {"k": "newest", "j": "v"}
+
+    def test_partition_whose_first_file_is_not_zero(self):
+        # A partition created by a migration starts at a later snapshot.
+        client, store, load = self._s3(
+            {
+                "data/users/4/5.bin": {"k": "v5"},
+                "data/users/4/6.bin": {"k": "v6"},
+            },
+        )
+        compact_deltas(client, list(store), max_snap_id=6)
+        assert set(store) == {"data/users/4/6.bin"}
+        assert load(store["data/users/4/6.bin"]) == {"k": "v6"}
+
+    def test_tombstones_are_dropped_once_older_files_are_gone(self):
+        client, store, load = self._s3(
+            {
+                "data/users/0/0.bin": {"moved": "v", "stays": "v"},
+                "data/users/0/1.bin": {"moved": None},
+            },
+        )
+        compact_deltas(client, list(store), max_snap_id=1)
+        assert load(store["data/users/0/1.bin"]) == {"stays": "v"}
 
     def test_compact_empty_no_crash(self):
         mock_client = MagicMock()

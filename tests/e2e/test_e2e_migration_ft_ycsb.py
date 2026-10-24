@@ -1,16 +1,20 @@
 """E2E tests for fault tolerance during state migration.
 
 These tests verify that Styx maintains exactly-once semantics when a worker
-crashes at different points during a migration cycle:
+crashes at different points around a migration (4 -> 8 partitions, 10k keys).
+With this dataset the whole migration takes about a second, so a kill at a
+fixed second lands in a phase that depends on timing; the path noted for
+each test is the one observed on a typical machine:
 
-1. Normal migration (baseline) — no crash
-2. Kill during Phase A — crash while protocol is still running, before
-   repartitioning starts. Recovery should roll back to pre-migration snapshot.
-3. Kill during Phase C — crash after repartitioning, during async data
-   transfer. Recovery should roll back to pre-migration snapshot (no
-   post-migration snapshot has completed yet).
-4. Kill after migration completes — crash after MigrationDone. Recovery
-   should use the post-migration snapshot with new partition layout.
+1. Normal migration (baseline) — no crash.
+2. Kill before the post-migration snapshot — the latest snapshot is the
+   checkpoint (or one cut during the transfer), so recovery resumes the
+   migration with the new layout.
+3. Kill after the post-migration snapshot — ordinary recovery with the new
+   layout.
+4. Kill well after the migration — ordinary recovery with the new layout.
+5. External kill during the migration (Phase A) — no checkpoint yet, so
+   recovery reverts to the old layout and retries the migration.
 
 All tests validate:
 - No duplicate requests
@@ -50,6 +54,15 @@ def _assert_metrics(
     assert metrics.get("duplicate_requests") is False, metrics
     assert metrics.get("exactly_once_output") is True, metrics
     assert int(metrics.get("missed messages")) == 0, metrics
+
+    # Every key must still hold the record it was loaded with (YCSB updates
+    # write back what they read), so a lost or emptied key fails here.
+    state_json = results_dir / "state_check.json"
+    assert state_json.exists(), f"Missing state check: {state_json}"
+    with state_json.open("r", encoding="utf-8") as f:
+        state = json.load(f)
+    log.info("State check: %s", state)
+    assert state["mismatched"] == 0, state
 
 
 @dataclass(frozen=True)
@@ -256,20 +269,19 @@ def test_migration_ft_baseline(tmp_path: Path):
 
 
 # ---------------------------------------------------------------------------
-# Test: kill during Phase A (protocol running, before repartitioning)
+# Test: kill before the post-migration snapshot (resume from the checkpoint)
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.e2e_migration
-def test_migration_ft_kill_during_phase_a(tmp_path: Path):
-    """Kill a worker during Phase A — crash while protocol is running.
+def test_migration_ft_kill_before_post_migration_snapshot(tmp_path: Path):
+    """Kill a worker 5 s after the migration starts.
 
-    Migration starts at second 30.  Kill at second 35: the protocol is still
-    running and rehash metadata may not have arrived yet.  The coordinator
-    should detect the failure, recover to the pre-migration snapshot, and
-    retry the migration from scratch.
+    The transfer has usually finished, but the latest complete snapshot is the
+    checkpoint (or one cut while keys were still moving), so recovery takes the
+    new layout, re-derives the keys still to move and resumes the transfer.
 
-    Validates: recovery to pre-migration state, exactly-once output.
+    Validates: exactly-once output across a resumed migration.
     """
     paths = _resolve_paths()
     results_dir = _make_results_dir(tmp_path)
@@ -279,7 +291,7 @@ def test_migration_ft_kill_during_phase_a(tmp_path: Path):
         total_time=120,
         warmup_seconds=10,
         migration_at_sec=30,
-        kill_at_sec=35,  # Shortly after migration starts (Phase A)
+        kill_at_sec=35,  # 5 s after the migration starts
     )
 
     env = make_test_env()
@@ -299,20 +311,18 @@ def test_migration_ft_kill_during_phase_a(tmp_path: Path):
 
 
 # ---------------------------------------------------------------------------
-# Test: kill during Phase C (async data transfer, before post-mig snapshot)
+# Test: kill after the post-migration snapshot
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.e2e_migration
-def test_migration_ft_kill_during_phase_c(tmp_path: Path):
-    """Kill a worker during Phase C — async data transfer in progress.
+def test_migration_ft_kill_after_post_migration_snapshot(tmp_path: Path):
+    """Kill a worker 20 s after the migration starts.
 
-    Migration starts at second 30.  Kill at second 50: repartitioning has
-    completed but async data transfer is likely still in progress.  No
-    post-migration snapshot should have completed yet.  Recovery should
-    roll back to pre-migration snapshot with OLD partition layout.
+    A snapshot without the checkpoint has completed by then, so recovery is an
+    ordinary one with the new layout.
 
-    Validates: recovery to pre-migration state, exactly-once output.
+    Validates: recovery with the new layout, exactly-once output.
     """
     paths = _resolve_paths()
     results_dir = _make_results_dir(tmp_path)
@@ -322,7 +332,7 @@ def test_migration_ft_kill_during_phase_c(tmp_path: Path):
         total_time=150,
         warmup_seconds=10,
         migration_at_sec=30,
-        kill_at_sec=50,  # During async data transfer (Phase C)
+        kill_at_sec=50,  # 20 s after the migration starts
     )
 
     env = make_test_env()
@@ -350,9 +360,8 @@ def test_migration_ft_kill_during_phase_c(tmp_path: Path):
 def test_migration_ft_kill_after_migration_done(tmp_path: Path):
     """Kill a worker after migration completes.
 
-    Migration starts at second 30.  Kill at second 90: migration should have
-    completed and at least one post-migration snapshot should exist.  Recovery
-    should use the post-migration snapshot with NEW partition layout.
+    Migration starts at second 30.  Kill at second 90: several snapshots
+    with the new layout exist.  Recovery is an ordinary one with that layout.
 
     Validates: recovery to post-migration state, exactly-once output.
     """
@@ -398,7 +407,10 @@ def test_migration_ft_external_kill_during_migration(tmp_path: Path):
     timing is not synchronized with client message processing.
 
     Migration starts at second 30 (inside client).
-    External kill fires 45 seconds after client starts (~second 45).
+    External kill fires 45 seconds after the client process starts, which
+    with the client's setup lands a few seconds into the migration (Phase A):
+    there is no checkpoint yet, so recovery reverts to the old layout and the
+    migration is retried after the first post-recovery snapshot.
     """
     paths = _resolve_paths()
     results_dir = _make_results_dir(tmp_path)

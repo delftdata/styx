@@ -1224,13 +1224,5 @@ class AriaProtocol(BaseTransactionalProtocol):
             msg_type=msg_type,
             serializer=serializer,
         )
-        # Detect stuck barriers during migration debugging
-        try:
-            await asyncio.wait_for(self.sync_workers_event[msg_type].wait(), timeout=10.0)
-        except TimeoutError:
-            logging.warning(
-                f"Worker {self.id} | BARRIER STUCK for 10s on {msg_type.name} @epoch {self.sequencer.epoch_counter}",
-            )
-            # Continue waiting (no timeout)
-            await self.sync_workers_event[msg_type].wait()
+        await self.sync_workers_event[msg_type].wait()
         self.sync_workers_event[msg_type].clear()

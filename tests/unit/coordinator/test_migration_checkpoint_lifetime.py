@@ -6,8 +6,6 @@ after MigrationDone. Recovery from it resumes the transfer, and the coordinator
 must keep tracking that resumed transfer.
 """
 
-import asyncio
-from collections import defaultdict
 from unittest.mock import AsyncMock, MagicMock
 
 from styx.common.local_state_backends import LocalStateBackend
@@ -18,8 +16,8 @@ from styx.common.stateflow_graph import StateflowGraph
 from styx.common.tcp_networking import NetworkingManager
 
 from coordinator.coordinator_metadata import Coordinator
-from coordinator.coordinator_service import CoordinatorService
 from coordinator.migration_metadata import MigrationMetadata
+from tests.unit.coordinator.service_helpers import stub_service
 
 
 def _graph(n_partitions: int) -> StateflowGraph:
@@ -110,29 +108,6 @@ class TestMigrationDoneEpochs:
         assert m.transfer_done_epoch == -1
 
 
-def _service(coordinator: Coordinator) -> CoordinatorService:
-    svc = CoordinatorService.__new__(CoordinatorService)
-    svc.coordinator = coordinator
-    svc.migration_in_progress = False
-    svc.migration_metadata = MigrationMetadata(2)
-    svc.networking_locks = defaultdict(asyncio.Lock)
-    svc._migration_checkpoint_task = None
-    svc._deferred_migration_graph = None
-    svc.networking = MagicMock(close_worker_connections=AsyncMock())
-    svc.protocol_networking = MagicMock(
-        close_worker_connections=AsyncMock(),
-        close_all_connections=AsyncMock(),
-        decode_message=NetworkingManager.decode_message,
-    )
-    svc.aio_task_scheduler = MagicMock(close=AsyncMock())
-    svc._reset_after_recovery = AsyncMock()
-    coordinator.start_recovery_process = AsyncMock()
-    coordinator.wait_cluster_healthy = AsyncMock()
-    coordinator.notify_cluster_healthy = AsyncMock()
-    coordinator.revert_worker_pool_to_submitted_graph = MagicMock()
-    return svc
-
-
 def _migration_done_msg(epoch: int) -> bytes:
     return NetworkingManager.encode_message(
         msg=(epoch,),
@@ -144,7 +119,7 @@ def _migration_done_msg(epoch: int) -> bytes:
 class TestMigrationDoneHandler:
     async def test_all_workers_done_ends_checkpoint_after_latest_epoch(self):
         c = _coordinator_with_checkpoint()
-        svc = _service(c)
+        svc = stub_service(c)
         svc.migration_in_progress = True
 
         await svc._handle_migration_done(_migration_done_msg(41))
@@ -164,7 +139,7 @@ class TestRecoveryFromCheckpoint:
     async def test_resume_after_migration_done_keeps_tracking_the_transfer(self):
         c = Coordinator(MagicMock(), MagicMock())
         c.worker_snapshot_ids = {0: 7, 1: 7}
-        svc = _service(c)
+        svc = stub_service(c)
         # MigrationDone already processed; the latest snapshot still has the checkpoint.
         svc._read_migration_blob_from_s3 = MagicMock(return_value=_blob(_graph(8)))
         state_when_workers_released = {}
@@ -186,7 +161,7 @@ class TestRecoveryFromCheckpoint:
         c.worker_snapshot_ids = {0: 7, 1: 7}
         newer = _graph(16)
         c._pending_graph = newer
-        svc = _service(c)
+        svc = stub_service(c)
         svc.migration_in_progress = True
         svc._read_migration_blob_from_s3 = MagicMock(return_value=_blob(_graph(8)))
 
@@ -201,7 +176,7 @@ class TestRecoveryFromCheckpoint:
         c.worker_snapshot_ids = {0: 7, 1: 7}
         pending = _graph(8)
         c._pending_graph = pending
-        svc = _service(c)
+        svc = stub_service(c)
         svc.migration_in_progress = True
         svc._read_migration_blob_from_s3 = MagicMock(return_value=None)
 
@@ -215,7 +190,7 @@ class TestRecoveryFromCheckpoint:
     async def test_ordinary_recovery_stays_ordinary(self):
         c = Coordinator(MagicMock(), MagicMock())
         c.worker_snapshot_ids = {0: 7, 1: 7}
-        svc = _service(c)
+        svc = stub_service(c)
         svc._read_migration_blob_from_s3 = MagicMock(return_value=None)
 
         await svc._perform_recovery({MagicMock(name="dead_worker")})
@@ -228,7 +203,7 @@ class TestRecoveryFromCheckpoint:
 class TestUnreachableWorkers:
     def _service_with_workers(self, *results):
         c = Coordinator(MagicMock(), MagicMock())
-        svc = _service(c)
+        svc = stub_service(c)
         svc.unreachable_workers = []
         workers = [MagicMock(worker_id=i, worker_ip=f"w{i}", protocol_port=6000 + i) for i in range(len(results))]
         c.worker_pool = MagicMock(get_participating_workers=MagicMock(return_value=workers))

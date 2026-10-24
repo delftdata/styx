@@ -10,6 +10,7 @@ Usage:
 - kill_at_sec:      second at which to `docker kill styx-worker-1` (-1 = disabled)
 """
 
+import json
 import multiprocessing
 from multiprocessing import Pool, cpu_count
 import os
@@ -20,6 +21,7 @@ import subprocess
 import sys
 import time
 from timeit import default_timer as timer
+import zlib
 
 import boto3
 
@@ -133,6 +135,36 @@ def ycsb_init(styx: SyncStyxClient, operator: Operator, num_workers: int = None)
     print("Data loaded")
     time.sleep(5)
     submit_graph(styx)
+    return partitions
+
+
+def fingerprint(value) -> int | None:
+    # Same as ycsb.verify on the workers.
+    return None if value is None else zlib.crc32("\x1f".join(value).encode())
+
+
+def verify_final_state(partitions: dict[int, dict]) -> None:
+    """Compare every key's stored record with the loaded dataset.
+
+    YCSB updates write back the record they read, so the final state must equal
+    the initial dataset: a lost, emptied or misplaced key shows up here even when
+    every request got exactly one response.
+    """
+    expected = {key: fingerprint(value) for part in partitions.values() for key, value in part.items()}
+    styx = SyncStyxClient(STYX_HOST, STYX_PORT, kafka_url=KAFKA_URL)
+    styx.open(consume=True)
+    futures = {key: styx.send_event(operator=ycsb_operator, key=key, function="verify") for key in expected}
+    styx.flush()
+    mismatched = []
+    for key, future in futures.items():
+        response = future.get().response
+        stored = response[1] if response is not None else "no response"
+        if stored != expected[key]:
+            mismatched.append({"key": key, "stored": stored, "expected": expected[key]})
+    styx.close()
+    print(f"State check: {len(mismatched)} of {len(expected)} keys differ from the loaded dataset")
+    with open(f"{SAVE_DIR}/state_check.json", "w", encoding="utf-8") as f:
+        json.dump({"keys": len(expected), "mismatched": len(mismatched), "examples": mismatched[:20]}, f)
 
 
 def transactional_ycsb_generator(operator: Operator):
@@ -205,7 +237,7 @@ def main():
         region_name=os.getenv("S3_REGION") or "us-east-1",
     )
     styx_client = SyncStyxClient(STYX_HOST, STYX_PORT, kafka_url=KAFKA_URL, s3=s3)
-    ycsb_init(styx_client, ycsb_operator)
+    partitions = ycsb_init(styx_client, ycsb_operator)
     del styx_client
     time.sleep(5)
 
@@ -224,6 +256,7 @@ def main():
     ).sort_values("timestamp").to_csv(f"{SAVE_DIR}/client_requests.csv", index=False)
 
     print("Workload completed")
+    verify_final_state(partitions)
 
 
 if __name__ == "__main__":

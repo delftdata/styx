@@ -832,13 +832,13 @@ class Worker:
             f"[RECOVERY] W{self.id} snapshot_id={snapshot_id} epoch={epoch} t_counter={t_counter}"
             f" migration_blob={'present' if migration_blob else 'none'}",
         )
-        logging.warning(
+        logging.debug(
             f"[RECOVERY] W{self.id} registered_operators={list(self.registered_operators.keys())}",
         )
-        logging.warning(
+        logging.debug(
             f"[RECOVERY] W{self.id} raw tp_offsets from snapshot: {tp_offsets}",
         )
-        logging.warning(
+        logging.debug(
             f"[RECOVERY] W{self.id} raw tp_out_offsets from snapshot: {tp_out_offsets}",
         )
 
@@ -850,13 +850,13 @@ class Worker:
         tp_offsets = {k: v for k, v in tp_offsets.items() if k in self.registered_operators}
         tp_out_offsets = {k: v for k, v in tp_out_offsets.items() if k in self.registered_operators}
 
-        logging.warning(
+        logging.debug(
             f"[RECOVERY] W{self.id} filtered tp_offsets: {tp_offsets}",
         )
-        logging.warning(
+        logging.debug(
             f"[RECOVERY] W{self.id} filtered tp_out_offsets: {tp_out_offsets}",
         )
-        logging.warning(
+        logging.debug(
             f"[RECOVERY] W{self.id} dedup_output_offsets (all partitions): {all_dedup_out_offsets}",
         )
 

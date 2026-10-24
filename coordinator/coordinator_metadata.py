@@ -38,6 +38,12 @@ COMPACT_SNAPSHOTS: bool = bool(strtobool(os.getenv("COMPACT_SNAPSHOTS", "false")
 KAFKA_URL: str = os.getenv("KAFKA_URL", None)
 
 
+def _log_graph_publish_failure(future: asyncio.Future) -> None:
+    # Clients route by the published graph; a failed publish must not go unnoticed.
+    if not future.cancelled() and future.exception() is not None:
+        logging.error(f"Publishing the new graph to styx-metadata failed: {future.exception()}")
+
+
 class Coordinator:
     def __init__(self, networking: NetworkingManager, s3_client: S3Client) -> None:
         self.networking = networking
@@ -233,7 +239,7 @@ class Coordinator:
         self.completed_epoch_counter = epoch_counter
         self.completed_t_counter = t_counter
         current_completed_snapshot: int = self.get_current_completed_snapshot_id()
-        logging.warning(
+        logging.debug(
             f"register_snapshot | worker={worker_id} snap={snapshot_id} "
             f"cluster_min={current_completed_snapshot} prev={self.prev_completed_snapshot_id} "
             f"baseline={self._migration_checkpoint_baseline_snap_id} "
@@ -305,7 +311,7 @@ class Coordinator:
             raise NotAStateflowGraphError
         # TODO the cluster was balanced by the previous deployment, if the graph is complex it might be
         #  unbalanced after the update
-        logging.warning(
+        logging.debug(
             f"update_stateflow_graph | updating worker pool operators "
             f"(new partitions: { {n: op.n_partitions for n, op in new_stateflow_graph.nodes.items()} })",
         )
@@ -326,7 +332,7 @@ class Coordinator:
         # recovery, it harmlessly re-sets the field (which _perform_recovery
         # already handles via saved_migration_in_progress).
         self._pending_graph = new_stateflow_graph
-        logging.warning("update_stateflow_graph | _pending_graph set (before send)")
+        logging.debug("update_stateflow_graph | _pending_graph set (before send)")
 
         worker_assignments = self.worker_pool.get_worker_assignments()
         tasks = [
@@ -345,7 +351,7 @@ class Coordinator:
             for worker in self.worker_pool.get_participating_workers()
         ]
         await asyncio.gather(*tasks)
-        logging.warning("update_stateflow_graph | InitMigration sent to all workers")
+        logging.debug("update_stateflow_graph | InitMigration sent to all workers")
 
     def revert_worker_pool_to_submitted_graph(self) -> None:
         """Revert worker pool operators to match the current submitted_graph.
@@ -373,9 +379,9 @@ class Coordinator:
     def finalize_graph_update(self) -> None:
         """Commit the deferred graph update after migration completes successfully."""
         if self._pending_graph is None:
-            logging.warning("finalize_graph_update | no-op (_pending_graph is None)")
+            logging.debug("finalize_graph_update | no-op (_pending_graph is None)")
             return
-        logging.warning("finalize_graph_update | committing pending graph to submitted_graph")
+        logging.debug("finalize_graph_update | committing pending graph to submitted_graph")
         self.submitted_graph = self._pending_graph
         self._pending_graph = None
         # Write to Kafka via a background task; the producer is already running
@@ -389,6 +395,7 @@ class Coordinator:
                 value=serialized_graph,
             ),
         )
+        self._pending_kafka_write.add_done_callback(_log_graph_publish_failure)
 
     def set_migration_checkpoint(
         self,
