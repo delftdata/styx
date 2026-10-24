@@ -82,7 +82,7 @@
         "uid": "prometheus"
       },
       "gridPos": {
-        "h": 5,
+        "h": 7,
         "w": 6,
         "x": 0,
         "y": 0
@@ -137,7 +137,7 @@
         "uid": "prometheus"
       },
       "gridPos": {
-        "h": 5,
+        "h": 7,
         "w": 6,
         "x": 6,
         "y": 0
@@ -192,7 +192,7 @@
         "uid": "prometheus"
       },
       "gridPos": {
-        "h": 5,
+        "h": 7,
         "w": 6,
         "x": 12,
         "y": 0
@@ -247,7 +247,7 @@
         "uid": "prometheus"
       },
       "gridPos": {
-        "h": 5,
+        "h": 7,
         "w": 6,
         "x": 18,
         "y": 0
@@ -305,7 +305,7 @@
         "h": 7,
         "w": 8,
         "x": 0,
-        "y": 5
+        "y": 7
       },
       "fieldConfig": {
         "defaults": {
@@ -360,7 +360,7 @@
         "h": 7,
         "w": 8,
         "x": 8,
-        "y": 5
+        "y": 7
       },
       "fieldConfig": {
         "defaults": {
@@ -415,7 +415,7 @@
         "h": 7,
         "w": 8,
         "x": 16,
-        "y": 5
+        "y": 7
       },
       "fieldConfig": {
         "defaults": {
@@ -467,10 +467,10 @@
         "uid": "prometheus"
       },
       "gridPos": {
-        "h": 10,
+        "h": 12,
         "w": 8,
         "x": 0,
-        "y": 12
+        "y": 14
       },
       "fieldConfig": {
         "defaults": {
@@ -492,7 +492,7 @@
         "legend": {
           "showLegend": true,
           "displayMode": "table",
-          "placement": "bottom",
+          "placement": "right",
           "values": [
             "percent"
           ]
@@ -526,10 +526,10 @@
         "uid": "prometheus"
       },
       "gridPos": {
-        "h": 6,
+        "h": 7,
         "w": 16,
         "x": 8,
-        "y": 12
+        "y": 14
       },
       "fieldConfig": {
         "defaults": {
@@ -581,10 +581,10 @@
         "uid": "prometheus"
       },
       "gridPos": {
-        "h": 4,
+        "h": 5,
         "w": 16,
         "x": 8,
-        "y": 18
+        "y": 21
       },
       "fieldConfig": {
         "defaults": {
@@ -617,6 +617,9 @@
         "valueMode": "color",
         "showUnfilled": true,
         "namePlacement": "left",
+        "sizing": "manual",
+        "minVizHeight": 16,
+        "maxVizHeight": 24,
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
