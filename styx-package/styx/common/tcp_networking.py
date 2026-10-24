@@ -403,10 +403,17 @@ class NetworkingManager(BaseNetworking):
         operator_partition = (operator_name, partition)
         ev = self.wait_remote_key_event[operator_partition][key]
         await ev.wait()
-        # (6) cleanup to prevent unbounded growth
-        del self.wait_remote_key_event[operator_partition][key]
-        if not self.wait_remote_key_event[operator_partition]:
-            del self.wait_remote_key_event[operator_partition]
+        # (6) cleanup to prevent unbounded growth. Several transactions can wait
+        # on the same key; only the first one to wake removes the event.
+        events = self.wait_remote_key_event.get(operator_partition)
+        if events is not None and events.get(key) is ev:
+            del events[key]
+            if not events:
+                del self.wait_remote_key_event[operator_partition]
+
+    def expect_remote_key(self, operator_name: str, partition: int, key: K) -> None:
+        """Register a wait for a key already on its way here in a migration batch."""
+        self.wait_remote_key_event.setdefault((operator_name, partition), {}).setdefault(key, asyncio.Event())
 
     def key_received(self, operator_partition: OperatorPartition, key: K) -> None:
         operator_partition = tuple(operator_partition)

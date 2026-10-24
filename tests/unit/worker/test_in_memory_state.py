@@ -478,9 +478,19 @@ class TestMigrateWithinSameWorker:
         s.data[(OP, 0)]["k1"] = "val"
         s.keys_to_send[(OP, 0)] = {("k1", 1)}
         s.remote_keys[(OP, 1)] = {"k1": (0, 0)}
-        s.migrate_within_the_same_worker(OP, 1, "k1", 0)
+        assert s.migrate_within_the_same_worker(OP, 1, "k1", 0) is True
         assert "k1" not in s.data[(OP, 0)]
         assert s.data[(OP, 1)]["k1"] == "val"
+
+    def test_key_already_in_a_migration_batch_is_not_moved(self):
+        s = InMemoryOperatorState({(OP, 0), (OP, 1)})
+        s.data[(OP, 0)]["k1"] = "val"
+        s.keys_to_send[(OP, 0)] = {("k1", 1)}
+        s.remote_keys[(OP, 1)] = {"k1": (0, 0)}
+        s.get_async_migrate_batch(10)  # the async sender takes it
+        assert s.migrate_within_the_same_worker(OP, 1, "k1", 0) is False
+        assert "k1" not in s.data[(OP, 1)]
+        assert s.in_remote_keys("k1", OP, 1)  # still expected: the batch will deliver it
 
 
 # ---------------------------------------------------------------------------

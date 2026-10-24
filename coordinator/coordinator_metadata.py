@@ -68,6 +68,11 @@ class Coordinator:
 
         # Checkpoint-and-resume migration FT
         self._migration_checkpoint_blob: bytes | None = None
+        # The graph the current checkpoint migrates to
+        self._migration_checkpoint_graph: StateflowGraph | None = None
+        # Set once every worker finished its transfer: snapshots carrying a later
+        # epoch were cut after the last migrated key landed and need no checkpoint.
+        self._migration_checkpoint_until_epoch: int | None = None
         self._migration_checkpoint_baseline_snap_id: int = -1
         self._migration_checkpoint_snapshot_complete: asyncio.Event = asyncio.Event()
 
@@ -241,6 +246,12 @@ class Coordinator:
             self._migration_checkpoint_baseline_snap_id = -1
         if current_completed_snapshot != self.prev_completed_snapshot_id:
             logging.warning(f"Cluster completed snapshot: {current_completed_snapshot}")
+            if (
+                self._migration_checkpoint_until_epoch is not None
+                and self.completed_epoch_counter > self._migration_checkpoint_until_epoch
+            ):
+                # Cut after the last migrated key landed: a normal snapshot from here on.
+                self.clear_migration_checkpoint()
             # if we reached a complete snapshot, we could compact its deltas with the previous one
             sn_data: bytes = zstd_msgpack_serialization(
                 (
@@ -372,10 +383,20 @@ class Coordinator:
                 "operator_partition_locations": operator_partition_locations,
             },
         )
+        self._migration_checkpoint_graph = new_graph
+        self._migration_checkpoint_until_epoch = None
+
+    def end_migration_checkpoint_after(self, transfer_done_epoch: int) -> None:
+        """Every migrated key landed by transfer_done_epoch. Snapshots cut up to that
+        epoch may still miss keys, so they keep the checkpoint; it is cleared with
+        the first snapshot cut after it."""
+        self._migration_checkpoint_until_epoch = transfer_done_epoch
 
     def clear_migration_checkpoint(self) -> None:
         """Clear migration metadata so subsequent snapshots are normal."""
         self._migration_checkpoint_blob = None
+        self._migration_checkpoint_graph = None
+        self._migration_checkpoint_until_epoch = None
 
     async def submit_stateflow_graph(
         self,

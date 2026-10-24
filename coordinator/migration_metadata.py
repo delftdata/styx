@@ -17,6 +17,8 @@ class MigrationMetadata:
         self.output_offsets: dict[OperatorPartition, int] = {}
         self.epoch_counter: int = -1
         self.t_counter: int = -1
+        # Latest epoch in which a worker's last migrated key landed
+        self.transfer_done_epoch: int = -1
 
     def check_sum(self, msg_type: MessageType) -> bool:
         return self.sync_sum[msg_type] == self.n_workers
@@ -51,6 +53,13 @@ class MigrationMetadata:
             self.t_counter = max(t_counter, self.t_counter)
             return self.check_sum(MessageType.MigrationInitDone)
 
+    async def migration_done(self, epoch_counter: int) -> bool:
+        """A worker finished its async transfer; its last key landed by epoch_counter."""
+        async with self.lock:
+            self.sync_sum[MessageType.MigrationDone] += 1
+            self.transfer_done_epoch = max(epoch_counter, self.transfer_done_epoch)
+            return self.check_sum(MessageType.MigrationDone)
+
     async def set_empty_sync_done(self, msg_type: MessageType) -> bool:
         async with self.lock:
             self.sync_sum[msg_type] += 1
@@ -64,3 +73,5 @@ class MigrationMetadata:
                 self.t_counter = -1
                 self.input_offsets.clear()
                 self.output_offsets.clear()
+            elif msg_type == MessageType.MigrationDone:
+                self.transfer_done_epoch = -1

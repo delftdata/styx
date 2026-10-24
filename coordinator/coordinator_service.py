@@ -784,7 +784,7 @@ class CoordinatorService:
             )
             self.aria_metadata.cleanup()
 
-    async def _handle_migration_done(self, _: bytes) -> None:
+    async def _handle_migration_done(self, data: bytes) -> None:
         if not self.migration_in_progress:
             logging.warning("Dropping stale MigrationDone (no migration in progress)")
             return
@@ -795,22 +795,27 @@ class CoordinatorService:
             if not self.migration_in_progress:
                 logging.warning("Dropping stale MigrationDone (recovery intervened)")
                 return
-            sync_complete: bool = await self.migration_metadata.set_empty_sync_done(mt)
+            (worker_done_epoch,) = self.protocol_networking.decode_message(data)
+            sync_complete: bool = await self.migration_metadata.migration_done(worker_done_epoch)
             logging.warning(
                 f"MIGRATION | MigrationDone | {self.migration_metadata.sync_sum}",
             )
             if not sync_complete:
                 return
 
+            transfer_done_epoch = self.migration_metadata.transfer_done_epoch
             logging.warning(
-                f"MIGRATION_FINISHED at time: {time.time_ns() // 1_000_000}",
+                f"MIGRATION_FINISHED at time: {time.time_ns() // 1_000_000}"
+                f" (last key landed by epoch {transfer_done_epoch})",
             )
             await self.migration_metadata.cleanup(mt)
             self.migration_in_progress = False
 
-            # Clear migration checkpoint blob so subsequent snapshots are normal.
+            # Snapshots cut before the last key landed may still complete after this
+            # point and must keep the checkpoint; it is cleared with the first
+            # snapshot cut after transfer_done_epoch.
             # The graph was already finalized in _wait_for_migration_checkpoint_and_finalize().
-            self.coordinator.clear_migration_checkpoint()
+            self.coordinator.end_migration_checkpoint_after(transfer_done_epoch)
 
             # Defer final graph write until a post-migration snapshot captures
             # the state without migration metadata. This is a safety net — the
@@ -1043,7 +1048,7 @@ class CoordinatorService:
 
     def _read_migration_blob_from_s3(self, snap_id: int) -> bytes | None:
         """Read the migration checkpoint blob from the sequencer file in S3."""
-        if snap_id <= 0:
+        if snap_id < 0:
             return None
         try:
             resp = self.s3_client.get_object(
@@ -1133,6 +1138,7 @@ class CoordinatorService:
             or self.coordinator._migration_checkpoint_baseline_snap_id >= 0  # noqa: SLF001
         )
         saved_pending_graph = None
+        resumed_migration: dict | None = None
         snap_id = self.coordinator.get_current_completed_snapshot_id()
 
         if was_migrating:
@@ -1142,21 +1148,28 @@ class CoordinatorService:
                 f"current_completed_snapshot_id={snap_id}, "
                 f"worker_snapshot_ids={self.coordinator.worker_snapshot_ids}",
             )
-            migration_blob = self._read_migration_blob_from_s3(snap_id)
-            if migration_blob is not None:
-                # POST-CHECKPOINT: use NEW layout — workers will resume transfer
-                logging.warning("[RECOVERY] Migration checkpoint found — using NEW layout for recovery")
-                migration_meta = cloudpickle_deserialization(migration_blob)
-                new_graph = migration_meta["new_graph"]
-                self.coordinator.submitted_graph = new_graph
-                self.coordinator._pending_graph = None  # noqa: SLF001
-                # The worker pool already has the new operator assignments from
-                # update_stateflow_graph() — no need to revert.
-            else:
-                # PRE-CHECKPOINT: revert to old layout and retry migration
-                logging.warning("[RECOVERY] No migration checkpoint — reverting to OLD layout")
-                saved_pending_graph = self.coordinator._pending_graph  # noqa: SLF001
-                self.coordinator.revert_worker_pool_to_submitted_graph()
+        # Read the checkpoint even if no migration seems in progress: a snapshot cut
+        # before the last migrated key landed can complete after MigrationDone, and
+        # the workers resume from it either way.
+        migration_blob = self._read_migration_blob_from_s3(snap_id)
+        if migration_blob is not None:
+            # POST-CHECKPOINT: use NEW layout — workers will resume transfer
+            logging.warning("[RECOVERY] Migration checkpoint found — using NEW layout for recovery")
+            resumed_migration = cloudpickle_deserialization(migration_blob)
+            pending_graph = self.coordinator._pending_graph  # noqa: SLF001
+            if pending_graph is not None and pending_graph is not self.coordinator._migration_checkpoint_graph:  # noqa: SLF001
+                # A newer migration started but had not reached its own checkpoint:
+                # resume this one, then retry the newer one.
+                saved_pending_graph = pending_graph
+            self.coordinator.submitted_graph = resumed_migration["new_graph"]
+            self.coordinator._pending_graph = None  # noqa: SLF001
+            # Undo any operator promotions of the newer migration.
+            self.coordinator.revert_worker_pool_to_submitted_graph()
+        elif was_migrating:
+            # PRE-CHECKPOINT: revert to old layout and retry migration
+            logging.warning("[RECOVERY] No migration checkpoint — reverting to OLD layout")
+            saved_pending_graph = self.coordinator._pending_graph  # noqa: SLF001
+            self.coordinator.revert_worker_pool_to_submitted_graph()
 
         # Clear remaining migration state so stale messages are dropped.
         logging.warning("[RECOVERY] step 1c | clearing remaining migration state")
@@ -1186,6 +1199,16 @@ class CoordinatorService:
         # 4) Reset protocol metadata (& snapshot/metrics state)
         logging.warning("Cleaning up protocol after everyone is healthy")
         await self._reset_after_recovery()
+
+        # 4b) Resuming from a checkpoint: snapshots cut during the resumed transfer
+        #     must still carry it, and the workers' MigrationDone must be counted.
+        #     Restore both before the workers start (ReadyAfterRecovery).
+        if resumed_migration is not None:
+            self.coordinator.set_migration_checkpoint(
+                resumed_migration["new_graph"],
+                resumed_migration["operator_partition_locations"],
+            )
+            self.migration_in_progress = True
 
         # 5) Close all protocol connections (workers will reconnect clean)
         await self.protocol_networking.close_all_connections()

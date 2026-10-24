@@ -202,6 +202,26 @@ class TestStatefulFunctionCall:
         assert result == "migrated"
 
     @pytest.mark.asyncio
+    async def test_call_local_migration_key_in_flight_waits_for_batch(self):
+        sf, state, networking, *_ = _make_sf()
+        state.in_remote_keys.return_value = True
+        state.get_worker_id_old_partition.return_value = (0, 1)
+        state.operator_partitions = {("users", 1)}  # old partition is local
+        # The async sender already took the key into a batch to this worker.
+        state.migrate_within_the_same_worker.return_value = False
+        networking.wait_for_remote_key_event = AsyncMock()
+
+        async def mock_run(*args):
+            return "migrated"
+
+        sf.run = mock_run
+        result, _n_calls = await sf()
+        networking.expect_remote_key.assert_called_once_with("users", 0, "k1")
+        networking.wait_for_remote_key_event.assert_awaited_once_with("users", 0, "k1")
+        networking.request_key.assert_not_called()
+        assert result == "migrated"
+
+    @pytest.mark.asyncio
     async def test_call_remote_migration(self):
         sf, state, networking, *_ = _make_sf()
         state.in_remote_keys.return_value = True

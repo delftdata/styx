@@ -227,3 +227,16 @@ class TestMigrationBatchesDoNotStraddleSnapshotCut:
         _link, src, _dst = _two_workers(0)
         await asyncio.wait_for(src._drain_migration_batches(), timeout=0.1)
         assert not src._migration_gate.is_set()
+
+
+class TestWaitingTransactionWokenByBatch:
+    async def test_waiter_for_key_in_flight_wakes_with_key_present(self):
+        _link, src, dst = _two_workers(3)
+        # A transaction at the destination waits for key 1, already on its way.
+        waiter = asyncio.Event()
+        dst.networking.wait_remote_key_event[DST] = {1: waiter}
+
+        sender = asyncio.create_task(src._continuous_migration_sender())
+        await asyncio.wait_for(waiter.wait(), timeout=2)
+        assert dst.local_state.data[DST][1] == "v1"
+        await asyncio.wait_for(sender, timeout=2)

@@ -607,15 +607,17 @@ class AriaProtocol(BaseTransactionalProtocol):
                     continue
                 if not self.local_state.has_keys_to_send():
                     if self.local_state.keys_remaining_to_send() == 0:
-                        # Report done only once every batch has landed.
+                        # Report done only once every batch has landed. The last one
+                        # landed in this epoch or earlier (a batch never crosses an
+                        # epoch's drain), so snapshots cut after this epoch are complete.
                         await self._migration_all_acked.wait()
                         self.migrating_state = False
                         await self.networking.send_message(
                             DISCOVERY_HOST,
                             DISCOVERY_PORT + 1,
-                            msg=b"",
+                            msg=(self.sequencer.epoch_counter,),
                             msg_type=MessageType.MigrationDone,
-                            serializer=Serializer.NONE,
+                            serializer=Serializer.MSGPACK,
                         )
                         logging.warning(
                             f"MIGRATION_FINISHED at epoch: {self.sequencer.epoch_counter}"

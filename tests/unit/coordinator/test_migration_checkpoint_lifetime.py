@@ -1,0 +1,193 @@
+"""How long a migration checkpoint stays attached to snapshots.
+
+A snapshot cut before the last migrated key landed still has keys at their old
+partitions, so its sequencer file must carry the checkpoint even if it completes
+after MigrationDone. Recovery from it resumes the transfer, and the coordinator
+must keep tracking that resumed transfer.
+"""
+
+import asyncio
+from collections import defaultdict
+from unittest.mock import AsyncMock, MagicMock
+
+from styx.common.local_state_backends import LocalStateBackend
+from styx.common.message_types import MessageType
+from styx.common.operator import Operator
+from styx.common.serialization import Serializer, cloudpickle_serialization, zstd_msgpack_deserialization
+from styx.common.stateflow_graph import StateflowGraph
+from styx.common.tcp_networking import NetworkingManager
+
+from coordinator.coordinator_metadata import Coordinator
+from coordinator.coordinator_service import CoordinatorService
+from coordinator.migration_metadata import MigrationMetadata
+
+
+def _graph(n_partitions: int) -> StateflowGraph:
+    g = StateflowGraph("app", operator_state_backend=LocalStateBackend.DICT, max_operator_parallelism=8)
+    g.add_operators(Operator("ycsb", n_partitions=n_partitions))
+    return g
+
+
+def _complete_snapshot(c: Coordinator, snapshot_id: int, epoch: int):
+    """All (two) workers register snapshot_id; returns the sequencer tuple written to S3."""
+    c.s3_client.put_object.reset_mock()
+    for worker_id in (0, 1):
+        c.register_snapshot(worker_id, snapshot_id, {}, {}, epoch, 0, MagicMock())
+    body = c.s3_client.put_object.call_args.kwargs["Body"]
+    return zstd_msgpack_deserialization(body)
+
+
+def _coordinator_with_checkpoint() -> Coordinator:
+    c = Coordinator(MagicMock(), MagicMock())
+    c.s3_client = MagicMock()
+    c.worker_snapshot_ids = {0: 2, 1: 2}
+    c.prev_completed_snapshot_id = 2
+    c.set_migration_checkpoint(_graph(8), {})
+    return c
+
+
+class TestCheckpointLifetime:
+    def test_snapshot_cut_before_last_key_landed_keeps_checkpoint(self):
+        c = _coordinator_with_checkpoint()
+        c.end_migration_checkpoint_after(transfer_done_epoch=50)
+
+        # Cut at the end of epoch 49 (carries 50), completes after MigrationDone.
+        assert _complete_snapshot(c, 3, epoch=50)[4] is not None
+        # Cut at the end of epoch 50 (carries 51): every key had landed.
+        assert _complete_snapshot(c, 4, epoch=51)[4] is None
+        assert _complete_snapshot(c, 5, epoch=60)[4] is None
+
+    def test_checkpoint_kept_while_transfer_runs(self):
+        c = _coordinator_with_checkpoint()
+        assert _complete_snapshot(c, 3, epoch=500)[4] is not None
+
+    def test_new_checkpoint_resets_the_end(self):
+        c = _coordinator_with_checkpoint()
+        c.end_migration_checkpoint_after(transfer_done_epoch=50)
+        c.set_migration_checkpoint(_graph(16), {})
+        assert _complete_snapshot(c, 3, epoch=60)[4] is not None
+
+
+class TestMigrationDoneEpochs:
+    async def test_transfer_done_epoch_is_the_latest_reported(self):
+        m = MigrationMetadata(2)
+        assert await m.migration_done(12) is False
+        assert await m.migration_done(10) is True
+        assert m.transfer_done_epoch == 12
+        await m.cleanup(MessageType.MigrationDone)
+        assert m.transfer_done_epoch == -1
+
+
+def _service(coordinator: Coordinator) -> CoordinatorService:
+    svc = CoordinatorService.__new__(CoordinatorService)
+    svc.coordinator = coordinator
+    svc.migration_in_progress = False
+    svc.migration_metadata = MigrationMetadata(2)
+    svc.networking_locks = defaultdict(asyncio.Lock)
+    svc._migration_checkpoint_task = None
+    svc._deferred_migration_graph = None
+    svc.networking = MagicMock(close_worker_connections=AsyncMock())
+    svc.protocol_networking = MagicMock(
+        close_worker_connections=AsyncMock(),
+        close_all_connections=AsyncMock(),
+        decode_message=NetworkingManager.decode_message,
+    )
+    svc.aio_task_scheduler = MagicMock(close=AsyncMock())
+    svc._reset_after_recovery = AsyncMock()
+    coordinator.start_recovery_process = AsyncMock()
+    coordinator.wait_cluster_healthy = AsyncMock()
+    coordinator.notify_cluster_healthy = AsyncMock()
+    coordinator.revert_worker_pool_to_submitted_graph = MagicMock()
+    return svc
+
+
+def _migration_done_msg(epoch: int) -> bytes:
+    return NetworkingManager.encode_message(
+        msg=(epoch,),
+        msg_type=MessageType.MigrationDone,
+        serializer=Serializer.MSGPACK,
+    )[8:]
+
+
+class TestMigrationDoneHandler:
+    async def test_all_workers_done_ends_checkpoint_after_latest_epoch(self):
+        c = _coordinator_with_checkpoint()
+        svc = _service(c)
+        svc.migration_in_progress = True
+
+        await svc._handle_migration_done(_migration_done_msg(41))
+        assert svc.migration_in_progress is True
+        await svc._handle_migration_done(_migration_done_msg(43))
+
+        assert svc.migration_in_progress is False
+        assert c._migration_checkpoint_blob is not None  # kept for snapshots cut up to 43
+        assert c._migration_checkpoint_until_epoch == 43
+
+
+def _blob(graph: StateflowGraph) -> bytes:
+    return cloudpickle_serialization({"new_graph": graph, "operator_partition_locations": {}})
+
+
+class TestRecoveryFromCheckpoint:
+    async def test_resume_after_migration_done_keeps_tracking_the_transfer(self):
+        c = Coordinator(MagicMock(), MagicMock())
+        c.worker_snapshot_ids = {0: 7, 1: 7}
+        svc = _service(c)
+        # MigrationDone already processed; the latest snapshot still has the checkpoint.
+        svc._read_migration_blob_from_s3 = MagicMock(return_value=_blob(_graph(8)))
+        state_when_workers_released = {}
+
+        async def notify() -> None:
+            state_when_workers_released["in_progress"] = svc.migration_in_progress
+            state_when_workers_released["blob"] = c._migration_checkpoint_blob
+
+        c.notify_cluster_healthy = AsyncMock(side_effect=notify)
+        await svc._perform_recovery({MagicMock(name="dead_worker")})
+
+        svc._read_migration_blob_from_s3.assert_called_once_with(7)
+        assert c.submitted_graph.nodes["ycsb"].n_partitions == 8
+        assert state_when_workers_released["in_progress"] is True
+        assert state_when_workers_released["blob"] is not None
+
+    async def test_newer_migration_without_checkpoint_is_retried_after_resume(self):
+        c = Coordinator(MagicMock(), MagicMock())
+        c.worker_snapshot_ids = {0: 7, 1: 7}
+        newer = _graph(16)
+        c._pending_graph = newer
+        svc = _service(c)
+        svc.migration_in_progress = True
+        svc._read_migration_blob_from_s3 = MagicMock(return_value=_blob(_graph(8)))
+
+        await svc._perform_recovery({MagicMock(name="dead_worker")})
+
+        assert svc._deferred_migration_graph is newer
+        assert c.submitted_graph.nodes["ycsb"].n_partitions == 8
+        c.revert_worker_pool_to_submitted_graph.assert_called_once()
+
+    async def test_crash_before_checkpoint_reverts_and_retries(self):
+        c = Coordinator(MagicMock(), MagicMock())
+        c.worker_snapshot_ids = {0: 7, 1: 7}
+        pending = _graph(8)
+        c._pending_graph = pending
+        svc = _service(c)
+        svc.migration_in_progress = True
+        svc._read_migration_blob_from_s3 = MagicMock(return_value=None)
+
+        await svc._perform_recovery({MagicMock(name="dead_worker")})
+
+        assert svc.migration_in_progress is False
+        assert svc._deferred_migration_graph is pending
+        assert c._migration_checkpoint_blob is None
+        c.revert_worker_pool_to_submitted_graph.assert_called_once()
+
+    async def test_ordinary_recovery_stays_ordinary(self):
+        c = Coordinator(MagicMock(), MagicMock())
+        c.worker_snapshot_ids = {0: 7, 1: 7}
+        svc = _service(c)
+        svc._read_migration_blob_from_s3 = MagicMock(return_value=None)
+
+        await svc._perform_recovery({MagicMock(name="dead_worker")})
+
+        assert svc.migration_in_progress is False
+        assert svc._deferred_migration_graph is None
+        c.revert_worker_pool_to_submitted_graph.assert_not_called()

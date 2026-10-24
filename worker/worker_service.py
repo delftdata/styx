@@ -610,6 +610,10 @@ class Worker:
         # Lock-free: no awaits.
         del msg_type
         operator_partition, key, value = self.networking.decode_message(data)
+        if value is None:
+            # The source's async sender already took the key into a batch; the
+            # batch wakes the waiting transaction when it lands here.
+            return
         self.local_state.set_data_from_migration(operator_partition, key, value)
         # Guard: the event may have been already signaled by the async
         # migration handler, or may not exist if no transaction requested it.

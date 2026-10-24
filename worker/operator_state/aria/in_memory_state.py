@@ -82,13 +82,12 @@ class InMemoryOperatorState(BaseAriaState):
         new_partition: int,
         key: K,
         old_partition: int,
-    ) -> None:
+    ) -> bool:
         new_operator_partition: OperatorPartition = (operator_name, new_partition)
-        self.set_data_from_migration(
-            new_operator_partition,
-            key,
-            self.get_key_to_migrate(new_operator_partition, key, old_partition),
-        )
+        data = self.get_key_to_migrate(new_operator_partition, key, old_partition)
+        # None: the async sender already took the key into a batch to this worker.
+        self.set_data_from_migration(new_operator_partition, key, data)
+        return data is not None
 
     def keys_remaining_to_remote(self) -> int:
         c = 0

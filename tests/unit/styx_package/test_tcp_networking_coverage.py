@@ -377,3 +377,29 @@ class TestSendMessageRequestResponse:
 
         with pytest.raises(ConnectionError):
             await nm.send_message_request_response("10.0.0.2", 6001, ("hello",), MessageType.ClientMsg)
+
+    @pytest.mark.asyncio
+    async def test_two_waiters_on_same_key_both_wake(self):
+        nm = _nm()
+        nm.expect_remote_key("users", 0, "k1")
+        waiters = [asyncio.create_task(nm.wait_for_remote_key_event("users", 0, "k1")) for _ in range(2)]
+        await asyncio.sleep(0)
+        nm.wait_remote_key_event[("users", 0)]["k1"].set()
+        await asyncio.wait_for(asyncio.gather(*waiters), timeout=1)
+        assert ("users", 0) not in nm.wait_remote_key_event
+
+
+class TestExpectRemoteKey:
+    def test_registers_wait_without_sending(self):
+        nm = _nm()
+        nm.send_message = AsyncMock()
+        nm.expect_remote_key("users", 0, "k1")
+        assert isinstance(nm.wait_remote_key_event[("users", 0)]["k1"], asyncio.Event)
+        nm.send_message.assert_not_called()
+
+    def test_keeps_an_existing_wait(self):
+        nm = _nm()
+        ev = asyncio.Event()
+        nm.wait_remote_key_event[("users", 0)] = {"k1": ev}
+        nm.expect_remote_key("users", 0, "k1")
+        assert nm.wait_remote_key_event[("users", 0)]["k1"] is ev
