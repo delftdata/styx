@@ -586,10 +586,10 @@ class Worker:
         msg_type: MessageType,
     ) -> None:
         # Lock-free: pop() is atomic in CPython; concurrent requests for the same
-        # key are race-safe (loser gets None, which the requester handles).
+        # key are race-safe (the loser gets found=False, which the requester handles).
         del msg_type
         operator_partition, key, old_partition, host, port = self.networking.decode_message(data)
-        value = self.local_state.get_key_to_migrate(
+        found, value = self.local_state.get_key_to_migrate(
             operator_partition,
             key,
             old_partition,
@@ -597,7 +597,7 @@ class Worker:
         await self.networking.send_message(
             host,
             port,
-            msg=(operator_partition, key, value),
+            msg=(operator_partition, key, found, value),
             msg_type=MessageType.ReceiveRemoteKey,
             serializer=Serializer.MSGPACK,
         )
@@ -609,8 +609,8 @@ class Worker:
     ) -> None:
         # Lock-free: no awaits.
         del msg_type
-        operator_partition, key, value = self.networking.decode_message(data)
-        if value is None:
+        operator_partition, key, found, value = self.networking.decode_message(data)
+        if not found:
             # The source's async sender already took the key into a batch; the
             # batch wakes the waiting transaction when it lands here.
             return

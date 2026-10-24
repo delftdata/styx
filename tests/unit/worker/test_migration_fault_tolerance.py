@@ -34,10 +34,12 @@ class TestSetDataFromMigrationDeltaMap:
         s.set_data_from_migration(OP_PART_1, "k1", "v1")
         assert s.delta_map[OP_PART_1]["k1"] == "v1"
 
-    def test_none_data_not_written_to_delta_map(self):
+    def test_none_value_written_to_delta_map(self):
+        # A key may hold None; it migrates like any value (and snapshots as a tombstone).
         s = _state(OP_PART_0, OP_PART_1)
         s.set_data_from_migration(OP_PART_1, "k1", None)
-        assert "k1" not in s.delta_map[OP_PART_1]
+        assert s.data[OP_PART_1] == {"k1": None}
+        assert s.delta_map[OP_PART_1] == {"k1": None}
 
     def test_data_written_to_both_data_and_delta_map(self):
         s = _state(OP_PART_0, OP_PART_1)
@@ -81,14 +83,14 @@ class TestGetKeyToMigrateTombstone:
         s = _state(OP_PART_0, OP_PART_1)
         s.data[OP_PART_0]["k1"] = "v1"
         result = s.get_key_to_migrate(OP_PART_1, "k1", PART_0)
-        assert result == "v1"
+        assert result == (True, "v1")
         assert s.delta_map[OP_PART_0]["k1"] is None
 
     def test_no_tombstone_when_key_already_gone(self):
         s = _state(OP_PART_0, OP_PART_1)
         # key not in data
         result = s.get_key_to_migrate(OP_PART_1, "k1", PART_0)
-        assert result is None
+        assert result == (False, None)
         assert "k1" not in s.delta_map[OP_PART_0]
 
 
@@ -103,6 +105,16 @@ class TestGetAsyncMigrateBatchTombstone:
             assert s.delta_map[OP_PART_0][key] is None
         # The batch should contain the values for the destination
         assert len(batch[(OP, PART_1)]) == 3
+
+    def test_none_valued_key_is_sent(self):
+        # The destination expects every key in keys_to_send, whatever its value.
+        s = _state(OP_PART_0, OP_PART_1)
+        s.data[OP_PART_0] = {"k1": None}
+        s.keys_to_send = {OP_PART_0: {("k1", PART_1)}}
+        batch = s.get_async_migrate_batch(batch_size=10)
+        assert batch[(OP, PART_1)] == {"k1": None}
+        assert s.delta_map[OP_PART_0]["k1"] is None
+        assert "k1" not in s.data[OP_PART_0]
 
     def test_no_tombstone_for_already_deleted_key(self):
         s = _state(OP_PART_0, OP_PART_1)

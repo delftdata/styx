@@ -440,10 +440,19 @@ class TestGetKeyToMigrate:
         s = _state()
         s.data[OP_PART]["k1"] = "v1"
         s.keys_to_send[OP_PART] = {("k1", 2)}
-        val = s.get_key_to_migrate((OP, 2), "k1", PART)
-        assert val == "v1"
+        assert s.get_key_to_migrate((OP, 2), "k1", PART) == (True, "v1")
         assert "k1" not in s.data[OP_PART]
         assert ("k1", 2) not in s.keys_to_send[OP_PART]
+
+    def test_none_value_is_found(self):
+        s = _state()
+        s.data[OP_PART]["k1"] = None
+        assert s.get_key_to_migrate((OP, 2), "k1", PART) == (True, None)
+        assert "k1" not in s.data[OP_PART]
+
+    def test_absent_key_is_not_found(self):
+        s = _state()
+        assert s.get_key_to_migrate((OP, 2), "k1", PART) == (False, None)
 
 
 # ---------------------------------------------------------------------------
@@ -481,6 +490,14 @@ class TestMigrateWithinSameWorker:
         assert s.migrate_within_the_same_worker(OP, 1, "k1", 0) is True
         assert "k1" not in s.data[(OP, 0)]
         assert s.data[(OP, 1)]["k1"] == "val"
+
+    def test_key_with_none_value_is_moved(self):
+        s = InMemoryOperatorState({(OP, 0), (OP, 1)})
+        s.data[(OP, 0)]["k1"] = None
+        s.remote_keys[(OP, 1)] = {"k1": (0, 0)}
+        assert s.migrate_within_the_same_worker(OP, 1, "k1", 0) is True
+        assert s.data[(OP, 1)] == {"k1": None}
+        assert not s.in_remote_keys("k1", OP, 1)
 
     def test_key_already_in_a_migration_batch_is_not_moved(self):
         s = InMemoryOperatorState({(OP, 0), (OP, 1)})

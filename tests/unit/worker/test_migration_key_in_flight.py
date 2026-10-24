@@ -20,10 +20,10 @@ OP = "op"
 DST = (OP, 1)
 
 
-def _receive_remote_key_msg(key, value) -> bytes:
+def _receive_remote_key_msg(key, found, value) -> bytes:
     # Drop the 8-byte length prefix, as the receiving TCP reader does.
     return NetworkingManager.encode_message(
-        msg=(DST, key, value),
+        msg=(DST, key, found, value),
         msg_type=MessageType.ReceiveRemoteKey,
         serializer=Serializer.MSGPACK,
     )[8:]
@@ -40,15 +40,22 @@ def _worker():
 
 
 class TestRemoteKeyResponse:
-    async def test_none_response_leaves_waiter_for_the_batch(self):
+    async def test_not_found_response_leaves_waiter_for_the_batch(self):
         w = _worker()
-        await w._handle_receive_remote_key(_receive_remote_key_msg("k1", None), MessageType.ReceiveRemoteKey)
+        await w._handle_receive_remote_key(_receive_remote_key_msg("k1", False, None), MessageType.ReceiveRemoteKey)
         w.protocol_networking.key_received.assert_not_called()
         assert w.local_state.in_remote_keys("k1", OP, 1)
 
     async def test_value_response_installs_key_and_wakes_waiter(self):
         w = _worker()
-        await w._handle_receive_remote_key(_receive_remote_key_msg("k1", "v1"), MessageType.ReceiveRemoteKey)
+        await w._handle_receive_remote_key(_receive_remote_key_msg("k1", True, "v1"), MessageType.ReceiveRemoteKey)
         w.protocol_networking.key_received.assert_called_once_with(DST, "k1")
         assert w.local_state.data[DST]["k1"] == "v1"
+        assert not w.local_state.in_remote_keys("k1", OP, 1)
+
+    async def test_found_none_value_installs_key_and_wakes_waiter(self):
+        w = _worker()
+        await w._handle_receive_remote_key(_receive_remote_key_msg("k1", True, None), MessageType.ReceiveRemoteKey)
+        w.protocol_networking.key_received.assert_called_once_with(DST, "k1")
+        assert w.local_state.data[DST] == {"k1": None}
         assert not w.local_state.in_remote_keys("k1", OP, 1)

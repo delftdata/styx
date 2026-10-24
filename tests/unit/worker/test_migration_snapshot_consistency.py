@@ -240,3 +240,15 @@ class TestWaitingTransactionWokenByBatch:
         await asyncio.wait_for(waiter.wait(), timeout=2)
         assert dst.local_state.data[DST][1] == "v1"
         await asyncio.wait_for(sender, timeout=2)
+
+    async def test_waiter_for_none_valued_key_wakes(self):
+        # A key can hold None; it must still be delivered and wake its waiter.
+        _link, src, dst = _two_workers(3)
+        src.local_state.data[SRC][1] = None
+        waiter = asyncio.Event()
+        dst.networking.wait_remote_key_event[DST] = {1: waiter}
+
+        sender = asyncio.create_task(src._continuous_migration_sender())
+        await asyncio.wait_for(waiter.wait(), timeout=2)
+        assert dst.local_state.data[DST][1] is None
+        await asyncio.wait_for(sender, timeout=2)

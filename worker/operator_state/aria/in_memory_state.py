@@ -15,6 +15,10 @@ from worker.operator_state.aria.fast_copy import fast_deepcopy
 if TYPE_CHECKING:
     from styx.common.types import K, KVPairs, OperatorPartition, V
 
+# Marks a key that is not in a partition at all. A key can hold None as its value,
+# so migration cannot use None to mean "already left in a batch".
+_ABSENT = object()
+
 
 class InMemoryOperatorState(BaseAriaState):
     data: dict[OperatorPartition, KVPairs]
@@ -45,36 +49,37 @@ class InMemoryOperatorState(BaseAriaState):
         new_operator_partition: OperatorPartition,
         key: K,
         old_partition: int,
-    ) -> K | None:
+    ) -> tuple[bool, V]:
+        """Take the key out of old_partition on its way to new_operator_partition.
+
+        Returns (found, value): found is False when the key already left in a
+        migration batch. The value itself may be None.
+        """
         operator_name, new_partition = new_operator_partition
         operator_partition: OperatorPartition = (operator_name, old_partition)
-        data_to_send = self.data[operator_partition].pop(key, None)
-        if data_to_send is None:
+        data_to_send = self.data[operator_partition].pop(key, _ABSENT)
+        if data_to_send is _ABSENT:
             # Key was already transferred via async migration batch
-            return None
+            return False, None
         # Record source-side key removal as tombstone for snapshotting
         self.delta_map[operator_partition][key] = None
         if operator_partition in self.keys_to_send:
             self.keys_to_send[operator_partition].discard((key, new_partition))
-        return data_to_send
+        return True, data_to_send
 
     def set_data_from_migration(
         self,
         operator_partition: OperatorPartition,
         key: K,
-        data: KVPairs,
+        data: V,
     ) -> None:
         operator_partition = tuple(operator_partition)
-        if data is not None:
-            self.data[operator_partition][key] = data
-            self.delta_map[operator_partition][key] = data
-            # Only remove from remote_keys when we actually received the data.
-            # A None response means the async migration batch already transferred
-            # this key — the batch will arrive and set it via set_batch_data_from_migration.
-            if operator_partition in self.remote_keys:
-                self.remote_keys[operator_partition].pop(key, None)
-                if not self.remote_keys[operator_partition]:
-                    del self.remote_keys[operator_partition]
+        self.data[operator_partition][key] = data
+        self.delta_map[operator_partition][key] = data
+        if operator_partition in self.remote_keys:
+            self.remote_keys[operator_partition].pop(key, None)
+            if not self.remote_keys[operator_partition]:
+                del self.remote_keys[operator_partition]
 
     def migrate_within_the_same_worker(
         self,
@@ -84,10 +89,11 @@ class InMemoryOperatorState(BaseAriaState):
         old_partition: int,
     ) -> bool:
         new_operator_partition: OperatorPartition = (operator_name, new_partition)
-        data = self.get_key_to_migrate(new_operator_partition, key, old_partition)
-        # None: the async sender already took the key into a batch to this worker.
-        self.set_data_from_migration(new_operator_partition, key, data)
-        return data is not None
+        found, data = self.get_key_to_migrate(new_operator_partition, key, old_partition)
+        if found:
+            self.set_data_from_migration(new_operator_partition, key, data)
+        # Not found: the async sender already took the key into a batch to this worker.
+        return found
 
     def keys_remaining_to_remote(self) -> int:
         c = 0
@@ -112,10 +118,11 @@ class InMemoryOperatorState(BaseAriaState):
             operator_name, _ = operator_partition
             while keys and c < batch_size:
                 key, new_partition = keys.pop()
-                value = self.data[operator_partition].pop(key, None)
-                if value is None:
-                    # Key was deleted between rehash and transfer — skip it
+                value = self.data[operator_partition].pop(key, _ABSENT)
+                if value is _ABSENT:
+                    # Key already left via get_key_to_migrate — skip it
                     continue
+                # A None value is sent too: the destination still expects the key.
                 # Record source-side key removal as tombstone for snapshotting
                 self.delta_map[operator_partition][key] = None
                 batch_to_send[(operator_name, new_partition)][key] = value

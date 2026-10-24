@@ -129,6 +129,7 @@ def ycsb_init(styx: SyncStyxClient, operator: Operator, num_workers: int = None)
     print("Data ready")
     for partition, partition_data in partitions.items():
         styx.init_data(operator, partition, partition_data)
+    styx.notify_init_data_complete()
     print("Data loaded")
     time.sleep(5)
     submit_graph(styx)
