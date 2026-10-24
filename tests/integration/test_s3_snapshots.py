@@ -38,7 +38,7 @@ class TestRetrieveSnapshot:
         from worker.fault_tolerance.async_snapshots import AsyncSnapshotsS3
 
         snap = AsyncSnapshotsS3(worker_id=0, n_assigned_partitions=1)
-        data, off_in, off_out, ep, tc = snap.retrieve_snapshot(-1, [("any_op", 0)])
+        data, off_in, off_out, ep, tc, _migration_blob = snap.retrieve_snapshot(-1, [("any_op", 0)])
         assert data == {}
         assert off_in == {}
         assert off_out == {}
@@ -68,7 +68,9 @@ class TestRetrieveSnapshot:
 
         # Retrieve
         snap = AsyncSnapshotsS3(worker_id=0, n_assigned_partitions=1)
-        data, _off_in, _off_out, ep, tc = snap.retrieve_snapshot(snapshot_id, [(operator_name, partition)])
+        data, _off_in, _off_out, ep, tc, _migration_blob = snap.retrieve_snapshot(
+            snapshot_id, [(operator_name, partition)]
+        )
         assert data[(operator_name, partition)] == state_data
         assert ep == epoch
         assert tc == t_counter
@@ -101,7 +103,7 @@ class TestRetrieveSnapshot:
         )
 
         snap = AsyncSnapshotsS3(worker_id=0, n_assigned_partitions=1)
-        data, _off_in, _off_out, ep, tc = snap.retrieve_snapshot(2, [(op, partition)])
+        data, _off_in, _off_out, ep, tc, _migration_blob = snap.retrieve_snapshot(2, [(op, partition)])
 
         # b should be overwritten by snapshot 2
         assert data[(op, partition)]["a"] == 1

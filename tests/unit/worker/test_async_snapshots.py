@@ -158,12 +158,13 @@ class TestStoreSnapshot:
 class TestRetrieveSnapshot:
     def test_snapshot_id_negative_one_returns_empty(self):
         s = _snap()
-        data, tp_off, tp_out_off, epoch, t_counter = s.retrieve_snapshot(-1, [])
+        data, tp_off, tp_out_off, epoch, t_counter, migration_blob = s.retrieve_snapshot(-1, [])
         assert data == {}
         assert tp_off == {}
         assert tp_out_off == {}
         assert epoch == 0
         assert t_counter == 0
+        assert migration_blob is None
         assert s.snapshot_id == 0  # -1 + 1
 
     @patch("worker.fault_tolerance.async_snapshots._get_s3_client")
@@ -176,7 +177,7 @@ class TestRetrieveSnapshot:
         mock_s3.get_paginator.return_value = paginator
 
         s = _snap()
-        data, _tp_off, _tp_out_off, _epoch, _t_counter = s.retrieve_snapshot(
+        data, _tp_off, _tp_out_off, _epoch, _t_counter, _migration_blob = s.retrieve_snapshot(
             0,
             [("users", 0)],
         )
@@ -267,3 +268,161 @@ class TestListBinKeys:
         s = _snap()
         result = s._list_bin_keys(mock_s3, "data/op/0/")
         assert result == []
+
+
+# ---------------------------------------------------------------------------
+# _load_operator_state — tombstone handling
+# ---------------------------------------------------------------------------
+
+
+class TestLoadOperatorStateTombstones:
+    @patch("worker.fault_tolerance.async_snapshots._get_s3_client")
+    def test_tombstone_removes_key_from_previous_delta(self, mock_mk):
+        """A None value in a subsequent delta should delete the key."""
+        mock_s3 = MagicMock()
+        mock_mk.return_value = mock_s3
+
+        s = _snap()
+        # Simulate two snapshot files for the same partition
+        paginator = MagicMock()
+        paginator.paginate.return_value = [
+            {
+                "Contents": [
+                    {"Key": "data/users/0/1.bin"},  # base snapshot
+                    {"Key": "data/users/0/2.bin"},  # delta with tombstone
+                ]
+            }
+        ]
+        mock_s3.get_paginator.return_value = paginator
+
+        # First call returns base data, second returns delta with tombstone
+        call_count = [0]
+
+        def fake_get_zstd_msgpack(_s3_client, _key):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                return {"key_a": "val_a", "key_b": "val_b"}
+            return {"key_b": None, "key_c": "val_c"}  # tombstone key_b, add key_c
+
+        s._get_zstd_msgpack = fake_get_zstd_msgpack
+
+        data = s._load_operator_state(mock_s3, 2, [("users", 0)])
+        assert "key_a" in data[("users", 0)]
+        assert "key_b" not in data[("users", 0)]  # tombstoned
+        assert data[("users", 0)]["key_c"] == "val_c"
+
+    @patch("worker.fault_tolerance.async_snapshots._get_s3_client")
+    def test_first_delta_filters_tombstones(self, mock_mk):
+        """First delta for a partition should filter out None values."""
+        mock_s3 = MagicMock()
+        mock_mk.return_value = mock_s3
+
+        s = _snap()
+        paginator = MagicMock()
+        paginator.paginate.return_value = [{"Contents": [{"Key": "data/users/0/1.bin"}]}]
+        mock_s3.get_paginator.return_value = paginator
+
+        s._get_zstd_msgpack = lambda _s3_client, _key: {"key_a": "val_a", "key_b": None}
+
+        data = s._load_operator_state(mock_s3, 1, [("users", 0)])
+        assert "key_a" in data[("users", 0)]
+        assert "key_b" not in data[("users", 0)]
+
+
+# ---------------------------------------------------------------------------
+# _load_sequencer_state — 5-element and 4-element tuple formats
+# ---------------------------------------------------------------------------
+
+
+class TestLoadSequencerStateTupleFormats:
+    @patch("worker.fault_tolerance.async_snapshots._get_s3_client")
+    def test_5_element_tuple_with_migration_blob(self, mock_mk):
+        """Sequencer file with migration checkpoint blob (5 elements)."""
+        mock_s3 = MagicMock()
+        mock_mk.return_value = mock_s3
+
+        s = _snap()
+        paginator = MagicMock()
+        paginator.paginate.return_value = [{"Contents": [{"Key": "sequencer/1.bin"}]}]
+        mock_s3.get_paginator.return_value = paginator
+
+        blob = b"migration_data"
+        s._get_zstd_msgpack = lambda _s3_client, _key: (
+            {("users", 0): 10},
+            {("users", 0): 5},
+            3,
+            42,
+            blob,
+        )
+
+        tp_off, tp_out, epoch, t_counter, migration_blob = s._load_sequencer_state(mock_s3, 1)
+        assert tp_off == {("users", 0): 10}
+        assert tp_out == {("users", 0): 5}
+        assert epoch == 3
+        assert t_counter == 42
+        assert migration_blob == blob
+
+    @patch("worker.fault_tolerance.async_snapshots._get_s3_client")
+    def test_4_element_tuple_legacy_format(self, mock_mk):
+        """Legacy sequencer file without migration blob (4 elements)."""
+        mock_s3 = MagicMock()
+        mock_mk.return_value = mock_s3
+
+        s = _snap()
+        paginator = MagicMock()
+        paginator.paginate.return_value = [{"Contents": [{"Key": "sequencer/1.bin"}]}]
+        mock_s3.get_paginator.return_value = paginator
+
+        s._get_zstd_msgpack = lambda _s3_client, _key: (
+            {("users", 0): 10},
+            {("users", 0): 5},
+            3,
+            42,
+        )
+
+        tp_off, tp_out, epoch, t_counter, migration_blob = s._load_sequencer_state(mock_s3, 1)
+        assert tp_off == {("users", 0): 10}
+        assert tp_out == {("users", 0): 5}
+        assert epoch == 3
+        assert t_counter == 42
+        assert migration_blob is None
+
+    @patch("worker.fault_tolerance.async_snapshots._get_s3_client")
+    def test_5_element_with_none_migration_blob(self, mock_mk):
+        """5-element tuple with None migration blob (normal snapshot after migration cleared)."""
+        mock_s3 = MagicMock()
+        mock_mk.return_value = mock_s3
+
+        s = _snap()
+        paginator = MagicMock()
+        paginator.paginate.return_value = [{"Contents": [{"Key": "sequencer/1.bin"}]}]
+        mock_s3.get_paginator.return_value = paginator
+
+        s._get_zstd_msgpack = lambda _s3_client, _key: (
+            {("users", 0): 10},
+            {("users", 0): 5},
+            3,
+            42,
+            None,
+        )
+
+        *_, migration_blob = s._load_sequencer_state(mock_s3, 1)
+        assert migration_blob is None
+
+    @patch("worker.fault_tolerance.async_snapshots._get_s3_client")
+    def test_no_sequencer_files_returns_defaults(self, mock_mk):
+        """When no sequencer files exist, defaults are returned."""
+        mock_s3 = MagicMock()
+        mock_mk.return_value = mock_s3
+
+        s = _snap()
+        paginator = MagicMock()
+        paginator.paginate.return_value = [{"Contents": []}]
+        mock_s3.get_paginator.return_value = paginator
+
+        tp_off, tp_out, epoch, t_counter, migration_blob = s._load_sequencer_state(mock_s3, 1)
+        assert tp_off == {}
+        assert tp_out == {}
+        assert epoch == 0
+        assert t_counter == 0
+        assert migration_blob is None

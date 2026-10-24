@@ -28,6 +28,9 @@ S3_REGION: str = os.getenv("S3_REGION", "us-east-1")
 
 SNAPSHOT_BUCKET_NAME: str = os.getenv("SNAPSHOT_BUCKET_NAME", "styx-snapshots")
 SEQUENCER_PREFIX = "sequencer/"
+# Number of elements in sequencer tuple (with/without migration checkpoint blob)
+_SEQUENCER_TUPLE_LEN_WITH_MIGRATION = 5
+_SEQUENCER_TUPLE_LEN_LEGACY = 4
 
 # Per-process cached S3 client (avoids re-creating boto3 client on every call)
 _s3_client: S3Client | None = None
@@ -141,15 +144,16 @@ class AsyncSnapshotsS3(BaseSnapshotter):
         dict[OperatorPartition, int],
         int,
         int,
+        bytes | None,
     ]:
         self.snapshot_id = snapshot_id + 1
         if snapshot_id == -1:
-            return {}, {}, {}, 0, 0
+            return {}, {}, {}, 0, 0, None
 
         s3 = _get_s3_client()
         data = self._load_operator_state(s3, snapshot_id, registered_operators)
-        tp_offsets, tp_out_offsets, epoch, t_counter = self._load_sequencer_state(s3, snapshot_id)
-        return data, tp_offsets, tp_out_offsets, epoch, t_counter
+        tp_offsets, tp_out_offsets, epoch, t_counter, migration_blob = self._load_sequencer_state(s3, snapshot_id)
+        return data, tp_offsets, tp_out_offsets, epoch, t_counter, migration_blob
 
     def _load_operator_state(
         self,
@@ -165,7 +169,14 @@ class AsyncSnapshotsS3(BaseSnapshotter):
             for _, key in self._iter_snapshot_files(s3, prefix, snapshot_id):
                 partition_data = self._get_zstd_msgpack(s3, key)
                 if operator_partition in data and partition_data:
-                    data[operator_partition].update(partition_data)
+                    for k, v in partition_data.items():
+                        if v is None:
+                            data[operator_partition].pop(k, None)
+                        else:
+                            data[operator_partition][k] = v
+                elif partition_data:
+                    # First delta for this partition — filter out any tombstones
+                    data[operator_partition] = {k: v for k, v in partition_data.items() if v is not None}
                 else:
                     data[operator_partition] = partition_data
         return data
@@ -174,21 +185,33 @@ class AsyncSnapshotsS3(BaseSnapshotter):
         self,
         s3: S3Client,
         snapshot_id: int,
-    ) -> tuple[dict[OperatorPartition, int], dict[OperatorPartition, int], int, int]:
+    ) -> tuple[dict[OperatorPartition, int], dict[OperatorPartition, int], int, int, bytes | None]:
         topic_partition_offsets: dict[OperatorPartition, int] = {}
         topic_partition_output_offsets: dict[OperatorPartition, int] = {}
         epoch = 0
         t_counter = 0
+        migration_blob: bytes | None = None
 
         for _, key in self._iter_snapshot_files(s3, SEQUENCER_PREFIX, snapshot_id):
-            (
-                topic_partition_offsets,
-                topic_partition_output_offsets,
-                epoch,
-                t_counter,
-            ) = self._get_zstd_msgpack(s3, key)
+            loaded = self._get_zstd_msgpack(s3, key)
+            if isinstance(loaded, (tuple, list)) and len(loaded) == _SEQUENCER_TUPLE_LEN_WITH_MIGRATION:
+                (
+                    topic_partition_offsets,
+                    topic_partition_output_offsets,
+                    epoch,
+                    t_counter,
+                    migration_blob,
+                ) = loaded
+            elif isinstance(loaded, (tuple, list)) and len(loaded) == _SEQUENCER_TUPLE_LEN_LEGACY:
+                (
+                    topic_partition_offsets,
+                    topic_partition_output_offsets,
+                    epoch,
+                    t_counter,
+                ) = loaded
+                migration_blob = None
 
-        return topic_partition_offsets, topic_partition_output_offsets, epoch, t_counter
+        return topic_partition_offsets, topic_partition_output_offsets, epoch, t_counter, migration_blob
 
     def _iter_snapshot_files(
         self,

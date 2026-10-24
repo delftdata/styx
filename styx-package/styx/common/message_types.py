@@ -45,3 +45,4 @@ class MessageType(IntEnum):
     UpdateExecutionGraph = 41
     RunFunRemoteBatch = 42
     AckBatch = 43
+    SnapMigrationReassign = 44

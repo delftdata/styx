@@ -10,13 +10,15 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  e2e-tests:
+  e2e-base:
+    name: "E2E — base (non-migration)"
+    # Provides the legacy "e2e-tests" status check via the summary job below.
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6.0.2
 
       - name: Docker info
         run: |
@@ -24,7 +26,7 @@ jobs:
           docker compose version
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6.2.0
         with:
           python-version: "3.14"
           cache: "pip"
@@ -34,37 +36,100 @@ jobs:
           python -m pip install --upgrade pip setuptools Cython
           cd styx-package && python setup.py build_ext --inplace && cd ..
           python -m pip install -r requirements.txt
-          # Install Styx package from repo root
           python -m pip install -e styx-package/
 
       - name: Make scripts executable
         run: |
           chmod +x scripts/start_styx_cluster.sh scripts/stop_styx_cluster.sh || true
 
-      # Needed so Kafka advertises a reachable external listener
       - name: Set DOCKER_HOST_IP
         run: echo "DOCKER_HOST_IP=127.0.0.1" >> $GITHUB_ENV
 
-      - name: Run e2e tests
+      - name: Run non-migration e2e tests
         env:
           PYTHONUNBUFFERED: "1"
         run: |
-          pytest tests/e2e/ -m e2e -q
+          pytest tests/e2e/ -m "e2e" -q --log-level=DEBUG
 
-      - name: Collect worker and coordinator logs (always)
+      - name: Collect logs
         if: always()
         run: |
           mkdir -p artifacts
-          if [ -d logs ]; then
-            cp -r logs artifacts/
-          else
-            echo "No logs folder found to copy."
-          fi
+          if [ -d logs ]; then cp -r logs artifacts/; fi
 
-      - name: Upload artifacts (always)
+      - name: Upload artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.0
         with:
-          name: e2e-artifacts
+          name: e2e-base-artifacts
           path: artifacts
           if-no-files-found: ignore
+
+  e2e-migration:
+    name: "E2E — migration"
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Docker info
+        run: |
+          docker version
+          docker compose version
+
+      - name: Set up Python
+        uses: actions/setup-python@v6.2.0
+        with:
+          python-version: "3.14"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools Cython
+          cd styx-package && python setup.py build_ext --inplace && cd ..
+          python -m pip install -r requirements.txt
+          python -m pip install -e styx-package/
+
+      - name: Make scripts executable
+        run: |
+          chmod +x scripts/start_styx_cluster.sh scripts/stop_styx_cluster.sh || true
+
+      - name: Set DOCKER_HOST_IP
+        run: echo "DOCKER_HOST_IP=127.0.0.1" >> $GITHUB_ENV
+
+      - name: Run migration e2e tests
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          pytest tests/e2e/ -m "e2e_migration" -q --log-level=DEBUG
+
+      - name: Collect logs
+        if: always()
+        run: |
+          mkdir -p artifacts
+          if [ -d logs ]; then cp -r logs artifacts/; fi
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v7.0.0
+        with:
+          name: e2e-migration-artifacts
+          path: artifacts
+          if-no-files-found: ignore
+
+  # Legacy summary job — provides the "e2e-tests" status check that branch
+  # protection rules may reference from before the split into two jobs.
+  e2e-tests:
+    name: "e2e-tests"
+    if: always()
+    needs: [e2e-base, e2e-migration]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check results
+        run: |
+          if [[ "${{ needs.e2e-base.result }}" == "failure" || "${{ needs.e2e-migration.result }}" == "failure" ]]; then
+            echo "One or more E2E jobs failed"
+            exit 1
+          fi

@@ -52,6 +52,8 @@ class InMemoryOperatorState(BaseAriaState):
         if data_to_send is None:
             # Key was already transferred via async migration batch
             return None
+        # Record source-side key removal as tombstone for snapshotting
+        self.delta_map[operator_partition][key] = None
         if operator_partition in self.keys_to_send:
             self.keys_to_send[operator_partition].discard((key, new_partition))
         return data_to_send
@@ -65,6 +67,7 @@ class InMemoryOperatorState(BaseAriaState):
         operator_partition = tuple(operator_partition)
         if data is not None:
             self.data[operator_partition][key] = data
+            self.delta_map[operator_partition][key] = data
             # Only remove from remote_keys when we actually received the data.
             # A None response means the async migration batch already transferred
             # this key — the batch will arrive and set it via set_batch_data_from_migration.
@@ -114,6 +117,8 @@ class InMemoryOperatorState(BaseAriaState):
                 if value is None:
                     # Key was deleted between rehash and transfer — skip it
                     continue
+                # Record source-side key removal as tombstone for snapshotting
+                self.delta_map[operator_partition][key] = None
                 batch_to_send[(operator_name, new_partition)][key] = value
                 c += 1
             if not keys:
@@ -132,6 +137,7 @@ class InMemoryOperatorState(BaseAriaState):
     ) -> None:
         operator_partition = tuple(operator_partition)  # new partitioning
         self.data[operator_partition].update(kv_pairs)
+        self.delta_map[operator_partition].update(kv_pairs)
         # Guard: remote_keys may not have entries if async batch arrived
         # before hash metadata, or entries were already removed.
         if operator_partition in self.remote_keys:
