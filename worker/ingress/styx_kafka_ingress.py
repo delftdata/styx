@@ -7,7 +7,6 @@ from aiokafka.errors import KafkaConnectionError, UnknownTopicOrPartitionError
 from styx.common.logging import logging
 from styx.common.message_types import MessageType
 from styx.common.run_func_payload import RunFuncPayload
-from styx.common.serialization import Serializer
 
 from worker.ingress.base_ingress import BaseIngress
 
@@ -40,7 +39,6 @@ class StyxKafkaIngress(BaseIngress):
         self.kafka_url = kafka_url
         self.epoch_interval_ms = epoch_interval_ms
         self.sequence_max_size = sequence_max_size
-        self.send_message_tasks: list[typing.Coroutine] = []
 
         self.started: asyncio.Event = asyncio.Event()
         self.messages_available: asyncio.Event = asyncio.Event()
@@ -113,42 +111,12 @@ class StyxKafkaIngress(BaseIngress):
                 # Message received in the correct partition, but it was an insert operation (didn't exist in the state)
                 self.sequencer.sequence(run_func_payload)
             else:
-                # In flight message during migration, currently the state belongs to another partition
-                dns = self.registered_operators[(operator_name, msg.partition)].dns
-                operator_host = dns[operator_name][true_partition][0]
-                operator_port = dns[operator_name][true_partition][2]
-                if self.networking.in_the_same_network(operator_host, operator_port):
-                    run_func_payload = RunFuncPayload(
-                        request_id=msg.key,
-                        key=key,
-                        operator_name=operator_name,
-                        partition=true_partition,
-                        function_name=fun_name,
-                        kafka_offset=msg.offset,
-                        params=params,
-                        kafka_ingress_partition=msg.partition,
-                    )
-                    self.sequencer.sequence(run_func_payload)
-                else:
-                    payload = (
-                        msg.key,
-                        operator_name,
-                        fun_name,
-                        key,
-                        true_partition,
-                        msg.partition,
-                        msg.offset,
-                        params,
-                    )
-                    self.send_message_tasks.append(
-                        self.networking.send_message(
-                            operator_host,
-                            operator_port,
-                            msg=payload,
-                            msg_type=MessageType.WrongPartitionRequest,
-                            serializer=Serializer.MSGPACK,
-                        ),
-                    )
+                # In flight message during migration: the key now belongs to another
+                # partition. It still runs in this worker's epoch, as a remote call
+                # if that partition is on a peer (AriaProtocol.run_function), so the
+                # ingress partition's offset only ever advances here, in order.
+                run_func_payload.partition = true_partition
+                self.sequencer.sequence(run_func_payload)
         else:
             logging.error(f"Invalid message type: {message_type} passed to KAFKA")
 
@@ -230,9 +198,6 @@ class StyxKafkaIngress(BaseIngress):
                                 s_messages = sorted(messages, key=lambda msg: msg.offset)
                                 for message in s_messages:
                                     self.handle_message_from_kafka(message)
-                        if self.send_message_tasks:
-                            await asyncio.gather(*self.send_message_tasks)
-                            self.send_message_tasks = []
                     self.messages_available.set()
         finally:
             if not self._keep_consumer:

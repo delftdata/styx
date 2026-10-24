@@ -10,17 +10,18 @@ class TestMessageType:
         assert issubclass(MessageType, IntEnum)
 
     def test_total_count(self):
-        assert len(MessageType) == 46
+        assert len(MessageType) == 47
 
     def test_all_values_unique(self):
         values = [m.value for m in MessageType]
         assert len(values) == len(set(values))
 
     def test_values_in_expected_range(self):
-        # 25 (AckCache) was removed when the fallback cache was dropped; the
-        # remaining IDs are preserved to keep wire-format stability.
+        # 25 (AckCache) was removed when the fallback cache was dropped, and 26
+        # (WrongPartitionRequest) when mis-routed requests became proxied calls;
+        # the remaining IDs are preserved to keep wire-format stability.
         values = sorted(m.value for m in MessageType)
-        assert values == [v for v in range(47) if v != 25]
+        assert values == [v for v in range(49) if v not in {25, 26}]
 
     def test_known_values(self):
         assert MessageType.RunFunRemote == 0
@@ -33,6 +34,8 @@ class TestMessageType:
         assert MessageType.SnapMigrationReassign == 44
         assert MessageType.AsyncMigrationAck == 45
         assert MessageType.RecoveryMigrationHashes == 46
+        assert MessageType.RunFunProxy == 47
+        assert MessageType.ProxyResult == 48
 
     def test_int_comparison(self):
         assert MessageType.ClientMsg == 16

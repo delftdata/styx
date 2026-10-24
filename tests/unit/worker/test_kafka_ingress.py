@@ -68,7 +68,6 @@ class TestKafkaIngressInit:
         assert ingress.kafka_url == "localhost:9092"
         assert ingress.epoch_interval_ms == 1
         assert ingress.sequence_max_size == 1000
-        assert ingress.send_message_tasks == []
         assert not ingress.started.is_set()
         assert ingress.kafka_consumer is None
 
@@ -126,7 +125,9 @@ class TestHandleMessageFromKafka:
         assert payload.partition == 1  # rerouted to correct partition
 
     def test_key_not_in_state_wrong_partition_remote(self):
-        """Key migrated to different partition on a remote worker."""
+        """Key migrated to a partition on a remote worker: the request is still
+        sequenced here (it runs as a proxied call), so this worker alone advances
+        the ingress partition's offset."""
         ingress, networking, sequencer, state = _make_ingress()
         state.exists.return_value = False
         networking.decode_message.return_value = ("users", "key1", "my_func", (1,), 0)
@@ -134,10 +135,14 @@ class TestHandleMessageFromKafka:
         networking.in_the_same_network.return_value = False
         ingress.registered_operators[("users", 0)].dns = {"users": {1: ("remote_host", 5001, 6001)}}
 
-        msg = _make_msg()
+        msg = _make_msg(offset=7)
         ingress.handle_message_from_kafka(msg)
-        sequencer.sequence.assert_not_called()
-        assert len(ingress.send_message_tasks) == 1
+        sequencer.sequence.assert_called_once()
+        payload = sequencer.sequence.call_args[0][0]
+        assert payload.partition == 1
+        assert payload.kafka_ingress_partition == 0
+        assert payload.kafka_offset == 7
+        networking.send_message.assert_not_called()
 
     async def test_invalid_message_type(self):
         """Non-ClientMsg types should be logged as errors."""
@@ -229,8 +234,8 @@ class TestShadowPartitionRedirect:
         assert payload.partition == 0  # redirected to active partition
 
     def test_message_on_shadow_partition_redirected_remotely(self):
-        """Message on shadow partition redirected to remote worker via
-        WrongPartitionRequest."""
+        """Message on shadow partition whose key is on a remote worker: sequenced
+        here with the active partition, to run there as a proxied call."""
         ingress, networking, sequencer, _state = _make_ingress_with_shadow_partitions()
         networking.decode_message.return_value = ("ycsb", "test_key", "read", (), 5)
         ingress.registered_operators[("ycsb", 5)].which_partition = MagicMock(return_value=1)
@@ -239,8 +244,11 @@ class TestShadowPartitionRedirect:
         msg = _make_msg(partition=5)
         ingress.handle_message_from_kafka(msg)
 
-        sequencer.sequence.assert_not_called()
-        assert len(ingress.send_message_tasks) == 1
+        sequencer.sequence.assert_called_once()
+        payload = sequencer.sequence.call_args[0][0]
+        assert payload.partition == 1
+        assert payload.kafka_ingress_partition == 5
+        networking.send_message.assert_not_called()
 
     def test_message_on_active_partition_not_redirected(self):
         """Message on active partition 0 with existing key is processed normally."""

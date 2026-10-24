@@ -185,10 +185,17 @@ class AriaProtocol(BaseTransactionalProtocol):
         self.migrating_state: bool = restart_after_migration
         self._init_async_migration_state()
 
+        # Requests consumed here whose key now lives on a peer run there as proxied
+        # calls: t_id -> the future their ProxyResult resolves.
+        self._proxy_results: dict[int, asyncio.Future] = {}
+        # Proxied transactions whose read/write set changed in their fallback run.
+        self._proxy_rw_changed: set[int] = set()
+
         self.protocol_handlers_map: dict[MessageType, Callable[[bytes], Awaitable[None]]] = {
             MessageType.RunFunRemote: self._handle_run_fun_remote,
             MessageType.RunFunRemoteBatch: self._handle_run_fun_remote_batch,
-            MessageType.WrongPartitionRequest: self._handle_wrong_partition_request,
+            MessageType.RunFunProxy: self._handle_run_fun_proxy,
+            MessageType.ProxyResult: self._handle_proxy_result,
             MessageType.RunFunRqRsRemote: self._handle_deprecated_rqrs,
             MessageType.AriaCommit: self._handle_aria_commit,
             MessageType.AriaFallbackDone: self._handle_sync_event_only,
@@ -280,7 +287,10 @@ class AriaProtocol(BaseTransactionalProtocol):
         # logging.info(f"Running function: {payload.function_name} with T_ID {t_id} with params {payload.params}"
         #              f" and ack payload {payload.ack_payload}")
 
-        operator_partition = self.registered_operators[(payload.operator_name, payload.partition)]
+        operator_partition = self.registered_operators.get((payload.operator_name, payload.partition))
+        if operator_partition is None and payload.ack_payload is None:
+            # A request consumed here for a key that migrated to a peer's partition.
+            return await self._run_proxied(t_id, payload, fallback_mode)
 
         success: bool = await operator_partition.run_function(
             payload.key,
@@ -410,23 +420,66 @@ class AriaProtocol(BaseTransactionalProtocol):
             else:
                 self.background_functions.create_task(self.run_function(t_id, payload))
 
-    async def _handle_wrong_partition_request(self, data: bytes) -> None:
+    async def _run_proxied(self, t_id: int, payload: RunFuncPayload, fallback_mode: bool) -> bool:
+        """Run a request consumed here on the peer whose partition now holds its key,
+        and take its outcome as this root's own.
+
+        The request stays in this worker's epoch, so its ingress offset advances only
+        here and in consumption order: every snapshot or migration stop cuts each
+        ingress partition at one offset. (Forwarding it into the peer's epoch let two
+        workers advance one partition's offset, each by max, past requests the other
+        had not run yet.)
+        """
+        host, _, protocol_port = self.dns[payload.operator_name][payload.partition]
+        result: asyncio.Future = asyncio.get_running_loop().create_future()
+        self._proxy_results[t_id] = result
+        await self.networking.send_message(
+            host,
+            protocol_port,
+            msg=(
+                t_id,
+                self.id,
+                payload.request_id,
+                payload.operator_name,
+                payload.function_name,
+                payload.key,
+                payload.partition,
+                fallback_mode,
+                payload.params,
+                self.incarnation,
+            ),
+            msg_type=MessageType.RunFunProxy,
+            serializer=Serializer.MSGPACK,
+        )
+        response, abort, participants, rw_changed = await result
+        self.networking.add_chain_participants(t_id, participants)
+        if abort is not None:
+            self.networking.abort_chain(t_id, abort)
+            return False
+        if rw_changed:
+            self._proxy_rw_changed.add(t_id)
+        if response is not None:
+            self.networking.add_response(t_id, response)
+        return True
+
+    async def _handle_run_fun_proxy(self, data: bytes) -> None:
         # Lock-free: no awaits.
         (
+            t_id,
+            root_id,
             request_id,
             operator_name,
             function_name,
             key,
             partition,
-            kafka_ingress_partition,
-            kafka_offset,
+            fallback_mode,
             params,
+            incarnation,
         ) = self.networking.decode_message(data)
-
-        logging.debug(
-            f"Aria WrongPartitionRequest: {request_id}:{operator_name}:{kafka_ingress_partition}",
-        )
-
+        if incarnation != self.incarnation:
+            # Sent before a recovery; the root replays it with the same t_id.
+            logging.warning(f"Dropping proxied call {t_id} from W{root_id} of incarnation {incarnation}")
+            return
         payload = RunFuncPayload(
             request_id=request_id,
             key=key,
@@ -434,10 +487,71 @@ class AriaProtocol(BaseTransactionalProtocol):
             partition=partition,
             function_name=function_name,
             params=params,
-            kafka_ingress_partition=kafka_ingress_partition,
-            kafka_offset=kafka_offset,
         )
-        self.sequencer.sequence(payload)
+        # Unbounded: the call holds its task until its whole chain is done, and
+        # that chain may need bounded slots on this worker.
+        self.background_functions.create_unbounded_task(
+            self._run_proxied_call(t_id, root_id, payload, fallback_mode),
+        )
+
+    async def _run_proxied_call(
+        self,
+        t_id: int,
+        root_id: int,
+        payload: RunFuncPayload,
+        fallback_mode: bool,
+    ) -> None:
+        """Run a peer's request here on its behalf. The chain acknowledges, answers
+        and aborts to this worker, and one ProxyResult then carries the outcome to
+        the root, so the root cannot commit before it has the response."""
+        networking = self.networking
+        networking.prepare_function_chain(t_id)
+        payload.ack_payload = (networking.host_name, networking.host_port, t_id, "1.0", [])
+        try:
+            if fallback_mode:
+                await self.run_fallback_function(t_id, payload, internal=True)
+            else:
+                await self.run_function(t_id, payload)
+            await networking.waited_ack_events[t_id].wait()
+        except Exception as e:
+            logging.exception(f"Proxied call {t_id} from W{root_id} failed")
+            networking.abort_chain(t_id, str(e))
+        host, _, protocol_port = self.peers[root_id]
+        await networking.send_message(
+            host,
+            protocol_port,
+            msg=(
+                t_id,
+                networking.client_responses.get(t_id),
+                networking.aborted_events.get(t_id),
+                [self.id, *networking.chain_participants.get(t_id, ())],
+                fallback_mode and self.local_state.has_fallback_rw_set_changed(t_id),
+                self.incarnation,
+            ),
+            msg_type=MessageType.ProxyResult,
+            serializer=Serializer.MSGPACK,
+        )
+
+    async def _handle_proxy_result(self, data: bytes) -> None:
+        # Lock-free: no awaits.
+        t_id, response, abort, participants, rw_changed, incarnation = self.networking.decode_message(data)
+        if incarnation != self.incarnation:
+            # From before a recovery: a replayed request may have the same t_id.
+            logging.warning(f"Dropping ProxyResult for T_ID {t_id} of incarnation {incarnation}")
+            return
+        result = self._proxy_results.pop(t_id, None)
+        if result is None or result.done():
+            logging.debug(f"Dropping ProxyResult for unknown T_ID {t_id}")
+            return
+        result.set_result((response, abort, participants, rw_changed))
+
+    def _response_partition(self, payload: RunFuncPayload) -> int:
+        """Output partition for a root's response: its own partition, or for a
+        proxied request (partition on a peer) the ingress partition it came from,
+        which this worker owns."""
+        if (payload.operator_name, payload.partition) in self.registered_operators:
+            return payload.partition
+        return payload.kafka_ingress_partition
 
     async def _handle_deprecated_rqrs(self, _: bytes) -> None:
         logging.error("REQUEST RESPONSE HAS BEEN DEPRECATED")
@@ -1042,6 +1156,7 @@ class AriaProtocol(BaseTransactionalProtocol):
         self.concurrency_aborts_everywhere.clear()
         self.t_ids_to_reschedule.clear()
         self.fallback_rescheduled_t_ids.clear()
+        self._proxy_rw_changed.clear()
         self.wait_responses_to_be_sent.clear()
         self.networking.cleanup_after_epoch()
         self.local_state.cleanup()
@@ -1076,7 +1191,7 @@ class AriaProtocol(BaseTransactionalProtocol):
             # Per the Aria paper: if the rw-set changed during fallback
             # re-execution, the dependency graph is invalid — reschedule
             # the transaction to the next epoch instead of committing.
-            rw_changed = self.local_state.has_fallback_rw_set_changed(t_id)
+            rw_changed = self.local_state.has_fallback_rw_set_changed(t_id) or t_id in self._proxy_rw_changed
             if not transaction_failed and not rw_changed:
                 self.local_state.commit_fallback_transaction(t_id)
             elif rw_changed:
@@ -1103,14 +1218,14 @@ class AriaProtocol(BaseTransactionalProtocol):
                     key=payload.request_id,
                     value=msgpack_serialization(self.networking.aborted_events[t_id]),
                     operator_name=payload.operator_name,
-                    partition=payload.partition,
+                    partition=self._response_partition(payload),
                 )
             elif t_id in self.networking.client_responses:
                 await self.egress.send(
                     key=payload.request_id,
                     value=msgpack_serialization(self.networking.client_responses[t_id]),
                     operator_name=payload.operator_name,
-                    partition=payload.partition,
+                    partition=self._response_partition(payload),
                 )
 
     async def run_fallback_strategy(self) -> None:
@@ -1176,7 +1291,7 @@ class AriaProtocol(BaseTransactionalProtocol):
             t_id = sequenced_item.t_id
             request_id = sequenced_item.payload.request_id
             operator_name = sequenced_item.payload.operator_name
-            partition = sequenced_item.payload.partition
+            partition = self._response_partition(sequenced_item.payload)
             if t_id in aborted_events:
                 await self.egress.send(
                     key=request_id,
