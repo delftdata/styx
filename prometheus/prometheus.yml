@@ -1,5 +1,8 @@
 global:
-  scrape_interval: 1s
+  # Grafana refuses to refresh dashboards faster than 5s (min_refresh_interval),
+  # and all epoch metrics are counters, so a faster scrape only adds samples
+  # nobody sees. Keep in sync with jsonData.timeInterval in the Grafana datasource.
+  scrape_interval: 5s
 
 scrape_configs:
   - job_name: "coordinator"

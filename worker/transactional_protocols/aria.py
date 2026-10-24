@@ -601,20 +601,24 @@ class AriaProtocol(BaseTransactionalProtocol):
         concurrency_aborts = await self._compute_concurrency_aborts()
         conflict_resolution_end = timer()
 
-        local_abort_rate = (len(concurrency_aborts) / len(sequence)) if sequence else 0.0
-
         # Notify peers that we are ready to commit
         sync_time += await self._sync_commit(sequence, concurrency_aborts)
 
         # HERE WE KNOW ALL THE CONCURRENCY ABORTS
         commit_start = timer()
-        self._commit_and_prepare_responses(sequence)
+        n_committed = self._commit_and_prepare_responses(sequence)
         await self.send_delta_to_snapshotting_proc()
         commit_end = timer()
+        n_aborted = len(sequence) - n_committed
 
         fallback_start = timer()
         abort_rate = await self._maybe_run_fallback()
         fallback_end = timer()
+        if abort_rate > FALLBACK_STRATEGY_PERCENTAGE:
+            # The fallback re-executed this epoch's aborts; only those it
+            # rescheduled are still pending (t_ids_to_reschedule is cleared below).
+            rescheduled = self.t_ids_to_reschedule
+            n_committed = len(sequence) - (sum(item.t_id in rescheduled for item in sequence) if rescheduled else 0)
 
         self._advance_offsets(sequence)
 
@@ -632,7 +636,8 @@ class AriaProtocol(BaseTransactionalProtocol):
             sequence=sequence,
             epoch_start=epoch_start,
             epoch_end=epoch_end,
-            local_abort_rate=local_abort_rate,
+            n_committed=n_committed,
+            n_aborted=n_aborted,
             abort_rate=abort_rate,
             timings=timings,
             sync_time=sync_time,
@@ -747,7 +752,8 @@ class AriaProtocol(BaseTransactionalProtocol):
 
         return end - start
 
-    def _commit_and_prepare_responses(self, sequence: list[SequencedItem]) -> None:
+    def _commit_and_prepare_responses(self, sequence: list[SequencedItem]) -> int:
+        """Commit the epoch and schedule its responses; returns how many of ``sequence`` committed."""
         logging.debug(
             f"{self.id} ||| Starting commit! {self.concurrency_aborts_everywhere}",
         )
@@ -776,6 +782,7 @@ class AriaProtocol(BaseTransactionalProtocol):
             f"{self.id} ||| Sequence committed! | "
             f"{len(self.concurrency_aborts_everywhere)} / {self.total_processed_seq_size}",
         )
+        return len(current_completed_t_ids)
 
     async def _maybe_run_fallback(self) -> float:
         abort_rate: float = (
@@ -817,7 +824,8 @@ class AriaProtocol(BaseTransactionalProtocol):
         sequence: list[SequencedItem],
         epoch_start: float,
         epoch_end: float,
-        local_abort_rate: float,
+        n_committed: int,
+        n_aborted: int,
         abort_rate: float,
         timings: dict[str, float],
         sync_time: float,
@@ -826,8 +834,7 @@ class AriaProtocol(BaseTransactionalProtocol):
         fallback_ms: float,
         snap_ms: float,
     ) -> None:
-        epoch_latency = max(round((epoch_end - epoch_start) * 1000, 4), 1)
-        epoch_throughput = ((len(sequence) - len(self.concurrency_aborts_everywhere)) * 1000) // epoch_latency  # TPS
+        epoch_latency = round((epoch_end - epoch_start) * 1000, 4)
 
         logging.debug(
             f"{self.id} ||| Epoch: {self.sequencer.epoch_counter - 1} done in "
@@ -841,9 +848,10 @@ class AriaProtocol(BaseTransactionalProtocol):
             msg_type=MessageType.SyncCleanup,
             message=(
                 self.id,
-                epoch_throughput,
+                len(sequence),
+                n_committed,
+                n_aborted,
                 epoch_latency,
-                local_abort_rate,
                 round(timings["wal_ms"], 4),
                 round(timings["func_ms"], 4),
                 round(timings["chain_ms"], 4),

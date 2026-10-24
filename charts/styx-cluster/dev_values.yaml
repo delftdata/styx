@@ -123,7 +123,7 @@ prometheus:
     type: ClusterIP
     port: 9090
   resources: {}
-  scrapeInterval: 1s
+  scrapeInterval: 5s  # Keep in sync with grafana.scrapeInterval
   scrapeTargets: []
 
 # grafana values are wired to provision dashboards/datasources from files/grafana
@@ -138,6 +138,7 @@ grafana:
     type: ClusterIP
     port: 3000
   resources: {}
+  scrapeInterval: 5s  # Must match prometheus.scrapeInterval
   env:
     GF_AUTH_ANONYMOUS_ENABLED: "true"
     GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"

@@ -1,695 +1,643 @@
 {
-    "annotations": {
-      "list": [
+  "uid": "decjikxh4zoqoc",
+  "title": "Styx Worker Specific",
+  "tags": [
+    "Styx",
+    "Worker"
+  ],
+  "timezone": "browser",
+  "editable": true,
+  "graphTooltip": 1,
+  "refresh": "5s",
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": [
+      "5s",
+      "10s",
+      "30s",
+      "1m",
+      "5m"
+    ]
+  },
+  "schemaVersion": 40,
+  "version": 1,
+  "links": [
+    {
+      "type": "dashboards",
+      "tags": [
+        "Styx"
+      ],
+      "asDropdown": false,
+      "includeVars": false,
+      "keepTime": true,
+      "title": "Styx dashboards"
+    }
+  ],
+  "annotations": {
+    "list": []
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "worker",
+        "label": "Worker",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "definition": "label_values(styx_worker_cpu_percent, worker_id)",
+        "query": {
+          "qryType": 1,
+          "query": "label_values(styx_worker_cpu_percent, worker_id)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 2,
+        "sort": 3,
+        "multi": true,
+        "includeAll": true,
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "options": []
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "CPU Utilization",
+      "description": "CPU usage of each worker's main process (100% = one core).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisSoftMin": 0
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
         {
-          "builtIn": 1,
           "datasource": {
-            "type": "grafana",
-            "uid": "-- Grafana --"
+            "type": "prometheus",
+            "uid": "prometheus"
           },
-          "enable": true,
-          "hide": true,
-          "iconColor": "rgba(0, 211, 255, 1)",
-          "name": "Annotations & Alerts",
-          "type": "dashboard"
+          "expr": "styx_worker_cpu_percent{worker_id=~\"$worker\"}",
+          "legendFormat": "worker {{worker_id}}",
+          "refId": "A",
+          "instant": false,
+          "range": true
         }
       ]
     },
-    "editable": true,
-    "fiscalYearStartMonth": 0,
-    "graphTooltip": 0,
-    "id": 5,
-    "links": [
-      {
-        "asDropdown": false,
-        "icon": "external link",
-        "includeVars": false,
-        "keepTime": false,
-        "tags": [],
-        "targetBlank": false,
-        "title": "Styx",
-        "tooltip": "",
-        "type": "dashboards",
-        "url": ""
-      }
-    ],
-    "panels": [
-      {
-        "datasource": {
-          "type": "prometheus",
-          "uid": "PBFA97CFB590B2093"
-        },
-        "fieldConfig": {
-          "defaults": {
-            "max": 100,
-            "min": 0,
-            "mappings": [],
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                {
-                  "color": "red",
-                  "value": null
-                },
-                {
-                  "color": "orange",
-                  "value": 75
-                },
-                {
-                  "color": "green",
-                  "value": 100
-                }
-              ]
-            },
-            "unit": "percent"
-          },
-          "overrides": []
-        },
-        "gridPos": {
-          "h": 4,
-          "w": 6,
-          "x": 0,
-          "y": 0
-        },
-        "id": 1,
-        "options": {
-          "colorMode": "value",
-          "graphMode": "area",
-          "justifyMode": "auto",
-          "legend": {
-            "showLegend": false
-          },
-          "orientation": "auto",
-          "percentChangeColorMode": "standard",
-          "reduceOptions": {
-            "calcs": [
-              "lastNotNull"
-            ],
-            "fields": "",
-            "values": false
-          },
-          "showPercentChange": false,
-          "textMode": "auto",
-          "wideLayout": true
-        },
-        "pluginVersion": "11.5.0-pre",
-        "targets": [
-          {
-            "expr": "worker_cpu_usage_percent{exported_instance=~\"$Worker\"}",
-            "refId": "A"
-          }
-        ],
-        "title": "CPU Utilization (%)",
-        "type": "timeseries"
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Memory Utilization",
+      "description": "Resident memory of each worker's main process.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
       },
-      {
-        "datasource": {
-          "type": "prometheus",
-          "uid": "PBFA97CFB590B2093"
-        },
-        "fieldConfig": {
-          "defaults": {
-            "min": 0,
-            "mappings": [],
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                {
-                  "color": "red",
-                  "value": null
-                },
-                {
-                  "color": "orange",
-                  "value": 75
-                },
-                {
-                  "color": "green",
-                  "value": 100
-                }
-              ]
-            },
-            "unit": "bytes"
-          },
-          "overrides": []
-        },
-        "gridPos": {
-          "h": 4,
-          "w": 6,
-          "x": 6,
-          "y": 0
-        },
-        "id": 2,
-        "options": {
-          "colorMode": "value",
-          "graphMode": "area",
-          "justifyMode": "auto",
-          "legend": {
-            "showLegend": false
-          },
-          "orientation": "auto",
-          "percentChangeColorMode": "standard",
-          "reduceOptions": {
-            "calcs": [
-              "lastNotNull"
-            ],
-            "fields": "",
-            "values": false
-          },
-          "showPercentChange": false,
-          "textMode": "auto",
-          "wideLayout": true
-        },
-        "pluginVersion": "11.5.0-pre",
-        "targets": [
-          {
-            "expr": "worker_memory_usage_mb{exported_instance=~\"$Worker\"} * 1000000",
-            "refId": "A"
-          }
-        ],
-        "title": "Memory Utilization (Mb)",
-        "type": "timeseries"
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 6,
+        "y": 0
       },
-      {
-        "datasource": {
-          "type": "prometheus",
-          "uid": "PBFA97CFB590B2093"
-        },
-        "fieldConfig": {
-          "defaults": {
-            "min": 0,
-            "mappings": [],
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                {
-                  "color": "red",
-                  "value": null
-                },
-                {
-                  "color": "orange",
-                  "value": 75
-                },
-                {
-                  "color": "green",
-                  "value": 100
-                }
-              ]
-            },
-            "unit": "bytes"
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisSoftMin": 0
           },
-          "overrides": []
+          "unit": "bytes"
         },
-        "gridPos": {
-          "h": 4,
-          "w": 6,
-          "x": 12,
-          "y": 0
-        },
-        "id": 3,
-        "options": {
-          "colorMode": "value",
-          "graphMode": "area",
-          "justifyMode": "auto",
-          "legend": {
-            "showLegend": false
-          },
-          "orientation": "auto",
-          "percentChangeColorMode": "standard",
-          "reduceOptions": {
-            "calcs": [
-              "lastNotNull"
-            ],
-            "fields": "",
-            "values": false
-          },
-          "showPercentChange": false,
-          "textMode": "auto",
-          "wideLayout": true
-        },
-        "pluginVersion": "11.5.0-pre",
-        "targets": [
-          {
-            "expr": "rate(worker_network_rx_kb{exported_instance=~\"$Worker\"}[5s]) * 1000",
-            "refId": "A"
-          }
-        ],
-        "title": "Ingress Network (bytes/s)",
-        "type": "timeseries"
+        "overrides": []
       },
-      {
-        "datasource": {
-          "type": "prometheus",
-          "uid": "PBFA97CFB590B2093"
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
         },
-        "fieldConfig": {
-          "defaults": {
-            "min": 0,
-            "mappings": [],
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                {
-                  "color": "red",
-                  "value": null
-                },
-                {
-                  "color": "orange",
-                  "value": 75
-                },
-                {
-                  "color": "green",
-                  "value": 100
-                }
-              ]
-            },
-            "unit": "bytes"
-          },
-          "overrides": []
-        },
-        "gridPos": {
-          "h": 4,
-          "w": 6,
-          "x": 18,
-          "y": 0
-        },
-        "id": 4,
-        "options": {
-          "colorMode": "value",
-          "graphMode": "area",
-          "justifyMode": "auto",
-          "legend": {
-            "showLegend": false
-          },
-          "orientation": "auto",
-          "percentChangeColorMode": "standard",
-          "reduceOptions": {
-            "calcs": [
-              "lastNotNull"
-            ],
-            "fields": "",
-            "values": false
-          },
-          "showPercentChange": false,
-          "textMode": "auto",
-          "wideLayout": true
-        },
-        "pluginVersion": "11.5.0-pre",
-        "targets": [
-          {
-            "expr": "rate(worker_network_tx_kb{exported_instance=~\"$Worker\"}[5s]) * 1000",
-            "refId": "A"
-          }
-        ],
-        "title": "Egress Network (bytes/s)",
-        "type": "timeseries"
-      },
-      {
-        "datasource": {
-          "type": "prometheus",
-          "uid": "PBFA97CFB590B2093"
-        },
-        "fieldConfig": {
-          "defaults": {
-            "min": 0,
-            "mappings": [],
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                {
-                  "color": "red",
-                  "value": null
-                },
-                {
-                  "color": "orange",
-                  "value": 75
-                },
-                {
-                  "color": "green",
-                  "value": 100
-                }
-              ]
-            },
-            "unit": "short"
-          },
-          "overrides": []
-        },
-        "gridPos": {
-          "h": 6,
-          "w": 8,
-          "x": 0,
-          "y": 4
-        },
-        "id": 5,
-        "options": {
-          "colorMode": "value",
-          "graphMode": "area",
-          "justifyMode": "auto",
-          "legend": {
-            "showLegend": false
-          },
-          "orientation": "auto",
-          "percentChangeColorMode": "standard",
-          "reduceOptions": {
-            "calcs": [
-              "lastNotNull"
-            ],
-            "fields": "",
-            "values": false
-          },
-          "showPercentChange": false,
-          "textMode": "auto",
-          "wideLayout": true
-        },
-        "pluginVersion": "11.5.0-pre",
-        "targets": [
-          {
-            "expr": "rate(worker_epoch_throughput_tps{exported_instance=~\"$Worker\"}[30s])",
-            "refId": "A"
-          }
-        ],
-        "title": "TPS (committed)",
-        "description": "Throughput per epoch of the committed transactions",
-        "type": "timeseries"
-      },
-      {
-        "datasource": {
-          "type": "prometheus",
-          "uid": "PBFA97CFB590B2093"
-        },
-        "fieldConfig": {
-          "defaults": {
-            "min": 0,
-            "max": 1000,
-            "mappings": [],
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                {
-                  "color": "green",
-                  "value": null
-                },
-                {
-                  "color": "orange",
-                  "value": 250
-                },
-                {
-                  "color": "red",
-                  "value": 500
-                }
-              ]
-            },
-            "custom": {
-              "thresholdsStyle": {
-                "mode": "area"
-              }
-            },
-            "unit": "ms"
-          },
-          "overrides": []
-        },
-        "gridPos": {
-          "h": 6,
-          "w": 8,
-          "x": 8,
-          "y": 4
-        },
-        "id": 6,
-        "options": {
-          "colorMode": "value",
-          "graphMode": "area",
-          "justifyMode": "auto",
-          "legend": {
-            "showLegend": false
-          },
-          "orientation": "auto",
-          "percentChangeColorMode": "standard",
-          "reduceOptions": {
-            "calcs": [
-              "lastNotNull"
-            ],
-            "fields": "",
-            "values": false
-          },
-          "showPercentChange": false,
-          "textMode": "auto",
-          "wideLayout": true
-        },
-        "pluginVersion": "11.5.0-pre",
-        "targets": [
-          {
-            "expr": "(worker_epoch_latency_ms{exported_instance=~\"$Worker\"})",
-            "refId": "A"
-          }
-        ],
-        "title": "Transaction Latency",
-        "description": "Total latency of commited transactions",
-        "type": "timeseries"
-      },
-      {
-        "datasource": {
-          "type": "prometheus",
-          "uid": "PBFA97CFB590B2093"
-        },
-        "fieldConfig": {
-          "defaults": {
-            "max": 100,
-            "min": 0,
-            "mappings": [],
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                {
-                  "color": "green",
-                  "value": null
-                },
-                {
-                  "color": "orange",
-                  "value": 25
-                },
-                {
-                  "color": "red",
-                  "value": 50
-                }
-              ]
-            },
-            "custom": {
-              "thresholdsStyle": {
-                "mode": "area"
-              }
-            },  
-            "unit": "percent"
-          },
-          "overrides": []
-        },
-        "gridPos": {
-          "h": 6,
-          "w": 8,
-          "x": 16,
-          "y": 4
-        },
-        "id": 7,
-        "options": {
-          "colorMode": "value",
-          "graphMode": "area",
-          "justifyMode": "auto",
-          "legend": {
-            "showLegend": false
-          },
-          "orientation": "auto",
-          "percentChangeColorMode": "standard",
-          "reduceOptions": {
-            "calcs": [
-              "lastNotNull"
-            ],
-            "fields": "",
-            "values": false
-          },
-          "showPercentChange": false,
-          "textMode": "auto",
-          "wideLayout": true
-        },
-        "pluginVersion": "11.5.0-pre",
-        "targets": [
-          {
-            "expr": "(worker_abort_percent{exported_instance=~\"$Worker\"})",
-            "refId": "A"
-          }
-        ],
-        "title": "Abort Rate (%)",
-        "description": "Percentage of aborted transactions",
-        "type": "timeseries"
-      },
-      {
-        "id": 8,
-        "type": "piechart",
-        "title": "Latency Breakdown",
-        "description": "A breakdown of the transaction latency by component.",
-        "gridPos": {
-          "h": 10,
-          "w": 8,
-          "x": 0,
-          "y": 10
-        },
-        "fieldConfig": {
-          "defaults": {
-            "custom": {
-              "hideFrom": {
-                "tooltip": false,
-                "viz": false,
-                "legend": false
-              }
-            },
-            "color": {
-              "mode": "palette-classic"
-            },
-            "mappings": []
-          },
-          "overrides": []
-        },
-        "pluginVersion": "11.5.0-pre",
-        "targets": [
-          {
-            "refId": "A",
-            "editorMode": "code",
-            "expr": "latency_breakdown{exported_instance=~\"$Worker\"}",
-            "legendFormat": "{{component}}",
-            "range": true
-          }
-        ],
-        "datasource": {
-          "uid": "PBFA97CFB590B2093",
-          "type": "prometheus"
-        },
-        "options": {
-          "reduceOptions": {
-            "values": false,
-            "calcs": [
-              "lastNotNull"
-            ],
-            "fields": ""
-          },
-          "pieType": "pie",
-          "tooltip": {
-            "mode": "single",
-            "sort": "none",
-            "hideZeros": false
-          },
-          "legend": {
-            "showLegend": true,
-            "displayMode": "list",
-            "placement": "bottom"
-          }
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
         }
       },
-      {
-        "datasource": {
-          "type": "prometheus",
-          "uid": "PBFA97CFB590B2093"
-        },
-        "fieldConfig": {
-          "defaults": {
-            "min": 0,
-            "max": 1000,
-            "mappings": [],
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                {
-                  "color": "green",
-                  "value": null
-                },
-                {
-                  "color": "orange",
-                  "value": 250
-                },
-                {
-                  "color": "red",
-                  "value": 500
-                }
-              ]
-            },
-            "custom": {
-              "thresholdsStyle": {
-                "mode": "area"
-              }
-            },  
-            "unit": "ms"
-          },
-          "overrides": []
-        },
-        "gridPos": {
-          "h": 6,
-          "w": 16,
-          "x": 8,
-          "y": 10
-        },
-        "id": 9,
-        "options": {
-          "colorMode": "value",
-          "graphMode": "area",
-          "justifyMode": "auto",
-          "legend": {
-            "showLegend": false
-          },
-          "orientation": "auto",
-          "percentChangeColorMode": "standard",
-          "reduceOptions": {
-            "calcs": [
-              "lastNotNull"
-            ],
-            "fields": "",
-            "values": false
-          },
-          "showPercentChange": false,
-          "textMode": "auto",
-          "wideLayout": true
-        },
-        "pluginVersion": "11.5.0-pre",
-        "targets": [
-          {
-            "expr": "(worker_total_snapshotting_time_ms{exported_instance=~\"$Worker\"})",
-            "refId": "A"
-          }
-        ],
-        "title": "Snapshot Latency",
-        "description": "Total latency for taking a snapshot",
-        "type": "timeseries"
-      }
-    ],
-    "preload": false,
-    "refresh": "1s",
-    "schemaVersion": 40,
-    "tags": ["Styx", "Worker"],
-    "templating": {
-      "list": [
+      "targets": [
         {
-          "current": {
-            "text": "3",
-            "value": "3"
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
           },
-          "definition": "label_values(worker_epoch_latency_ms,exported_instance)",
-          "name": "Worker",
-          "options": [],
-          "query": {
-            "qryType": 1,
-            "query": "label_values(worker_epoch_latency_ms,exported_instance)",
-            "refId": "PrometheusVariableQueryEditor-VariableQuery"
-          },
-          "refresh": 1,
-          "regex": "",
-          "type": "query"
+          "expr": "styx_worker_memory_bytes{worker_id=~\"$worker\"}",
+          "legendFormat": "worker {{worker_id}}",
+          "refId": "A",
+          "instant": false,
+          "range": true
         }
       ]
     },
-    "time": {
-      "from": "now-15m",
-      "to": "now"
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Ingress Network",
+      "description": "Bytes received per second, excluding loopback.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisSoftMin": 0
+          },
+          "unit": "Bps"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (worker_id) (rate(styx_worker_network_receive_bytes_total{worker_id=~\"$worker\"}[$__rate_interval]))",
+          "legendFormat": "worker {{worker_id}}",
+          "refId": "A",
+          "instant": false,
+          "range": true
+        }
+      ]
     },
-    "timepicker": {},
-    "timezone": "",
-    "title": "Styx Worker Specific",
-    "uid": "decjikxh4zoqoc",
-    "version": 2,
-    "weekStart": ""
-  }
-  
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Egress Network",
+      "description": "Bytes transmitted per second, excluding loopback.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisSoftMin": 0
+          },
+          "unit": "Bps"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (worker_id) (rate(styx_worker_network_transmit_bytes_total{worker_id=~\"$worker\"}[$__rate_interval]))",
+          "legendFormat": "worker {{worker_id}}",
+          "refId": "A",
+          "instant": false,
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Throughput (committed TPS)",
+      "description": "Committed transactions per second. 'Sequenced' also counts re-executions of aborted transactions.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 5
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisSoftMin": 0
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (worker_id) (rate(styx_transactions_committed_total{worker_id=~\"$worker\"}[$__rate_interval]))",
+          "legendFormat": "worker {{worker_id}}",
+          "refId": "A",
+          "instant": false,
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Epoch Latency (avg)",
+      "description": "Average duration of a transactional epoch over the rate window.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 8,
+        "y": 5
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisSoftMin": 0
+          },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (worker_id) (rate(styx_epoch_duration_ms_sum{worker_id=~\"$worker\"}[$__rate_interval])) / sum by (worker_id) (rate(styx_epoch_duration_ms_count{worker_id=~\"$worker\"}[$__rate_interval]))",
+          "legendFormat": "worker {{worker_id}}",
+          "refId": "A",
+          "instant": false,
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Concurrency Abort Rate",
+      "description": "Share of sequenced transactions aborted by Aria conflict detection (before fallback).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 5
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisSoftMin": 0
+          },
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (worker_id) (rate(styx_transactions_concurrency_aborted_total{worker_id=~\"$worker\"}[$__rate_interval])) / sum by (worker_id) (rate(styx_transactions_sequenced_total{worker_id=~\"$worker\"}[$__rate_interval]))",
+          "legendFormat": "worker {{worker_id}}",
+          "refId": "A",
+          "instant": false,
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "piechart",
+      "title": "Latency Breakdown",
+      "description": "Share of epoch time spent in each protocol phase over the selected time range.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 8,
+        "x": 0,
+        "y": 12
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "pieType": "pie",
+        "displayLabels": [],
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "bottom",
+          "values": [
+            "percent"
+          ]
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (phase) (increase(styx_epoch_phase_ms_total{worker_id=~\"$worker\"}[$__range]))",
+          "legendFormat": "{{phase}}",
+          "refId": "A",
+          "instant": true,
+          "range": false
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Snapshot Latency",
+      "description": "Duration of the most recent snapshot.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 16,
+        "x": 8,
+        "y": 12
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisSoftMin": 0
+          },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "styx_worker_snapshot_duration_ms{worker_id=~\"$worker\"}",
+          "legendFormat": "worker {{worker_id}}",
+          "refId": "A",
+          "instant": false,
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "bargauge",
+      "title": "Time Since Last Heartbeat",
+      "description": "Workers whose heartbeat is older than HEARTBEAT_LIMIT (default 5 s) are declared failed.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 16,
+        "x": 8,
+        "y": 18
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "min": 0,
+          "max": 5000,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1500
+              },
+              {
+                "color": "red",
+                "value": 5000
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "valueMode": "color",
+        "showUnfilled": true,
+        "namePlacement": "left",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "styx_worker_heartbeat_age_ms{worker_id=~\"$worker\"}",
+          "legendFormat": "worker {{worker_id}}",
+          "refId": "A",
+          "instant": true,
+          "range": false
+        }
+      ]
+    }
+  ]
+}
