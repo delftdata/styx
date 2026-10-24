@@ -465,3 +465,20 @@ class TestConsumerHandOver:
 
         consumer.stop.assert_awaited_once()
         assert ingress.take_consumer() is None
+
+    @pytest.mark.asyncio
+    async def test_partition_without_offset_starts_from_the_beginning(self):
+        # E.g. a shadow partition after recovering from the data-load snapshot:
+        # left unseeked, the consumer would start at the latest offset.
+        ingress, *_ = _make_ingress()
+        consumer = MagicMock()
+        consumer.getmany = AsyncMock(side_effect=asyncio.CancelledError())
+        consumer.stop = AsyncMock()
+        ingress.adopt_consumer(consumer)
+        tps = [TopicPartition("users", 0), TopicPartition("users", 4)]
+
+        with pytest.raises(asyncio.CancelledError):
+            await ingress.start_kafka_consumer(tps, {("users", 0): 41})
+
+        consumer.seek.assert_any_call(TopicPartition("users", 0), 42)
+        consumer.seek.assert_any_call(TopicPartition("users", 4), 0)

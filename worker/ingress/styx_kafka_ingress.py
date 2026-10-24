@@ -157,6 +157,12 @@ class StyxKafkaIngress(BaseIngress):
         topic_partitions: list[TopicPartition],
         topic_partition_offsets: dict[OperatorPartition, int],
     ) -> None:
+        # Every assigned partition gets a position: one without an offset starts from
+        # the beginning, never at the consumer's default (the latest offset).
+        topic_partition_offsets = {
+            (tp.topic, tp.partition): topic_partition_offsets.get((tp.topic, tp.partition), -1)
+            for tp in topic_partitions
+        }
         if self.kafka_consumer is not None:
             # Adopted from the previous protocol: already connected. Seeking every
             # assigned partition drops any records it had prefetched.

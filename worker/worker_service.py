@@ -847,8 +847,12 @@ class Worker:
         # that cross-worker dedup works: a request originally processed on
         # worker A may be replayed on worker B after recovery.
         all_dedup_out_offsets = dict(tp_out_offsets)
-        tp_offsets = {k: v for k, v in tp_offsets.items() if k in self.registered_operators}
-        tp_out_offsets = {k: v for k, v in tp_out_offsets.items() if k in self.registered_operators}
+        # A partition the snapshot has no offset for (e.g. a shadow partition and the
+        # snapshot written at data load) had nothing consumed by then: start it from
+        # the beginning. Left out, its consumer would start at the latest offset and
+        # skip what clients wrote to it before and during the failure.
+        tp_offsets = {k: tp_offsets.get(k, -1) for k in self.registered_operators}
+        tp_out_offsets = {k: tp_out_offsets.get(k, -1) for k in self.registered_operators}
 
         logging.debug(
             f"[RECOVERY] W{self.id} filtered tp_offsets: {tp_offsets}",
