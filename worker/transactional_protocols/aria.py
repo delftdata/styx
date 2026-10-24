@@ -1,6 +1,8 @@
 import asyncio
 import contextlib
+import itertools
 import os
+import random
 import time
 from timeit import default_timer as timer
 from typing import TYPE_CHECKING
@@ -159,6 +161,7 @@ class AriaProtocol(BaseTransactionalProtocol):
         self.snapshotting_port: int = snapshotting_port
 
         self.migrating_state: bool = restart_after_migration
+        self._init_async_migration_state()
 
         self.protocol_handlers_map: dict[MessageType, Callable[[bytes], Awaitable[None]]] = {
             MessageType.RunFunRemote: self._handle_run_fun_remote,
@@ -178,7 +181,23 @@ class AriaProtocol(BaseTransactionalProtocol):
             MessageType.DeterministicReordering: self._handle_deterministic_reordering,
             MessageType.RemoteWantsToProceed: self._handle_remote_wants_to_proceed,
             MessageType.AsyncMigration: self._handle_async_migration,
+            MessageType.AsyncMigrationAck: self._handle_async_migration_ack,
         }
+
+    def _init_async_migration_state(self) -> None:
+        # A migration batch must leave its source and land at its destination in
+        # the same epoch, otherwise a snapshot cut can record the source-side
+        # tombstone without the destination-side insert. The epoch closes this
+        # gate and waits for every unacknowledged batch before its barriers.
+        self._migration_gate: asyncio.Event = asyncio.Event()
+        self._migration_gate.set()
+        self._migration_all_acked: asyncio.Event = asyncio.Event()
+        self._migration_all_acked.set()
+        self._migration_unacked: set[int] = set()
+        self._migration_batch_ids = itertools.count()
+        # Distinguishes acks for this protocol's batches from late acks for a
+        # previous protocol instance (recovery or migration rebuilds the protocol).
+        self._migration_nonce: int = random.getrandbits(62)
 
     async def wait_stopped(self) -> None:
         await self.stopped.wait()
@@ -476,17 +495,49 @@ class AriaProtocol(BaseTransactionalProtocol):
             self.ingress.messages_available.set()
 
     async def _handle_async_migration(self, data: bytes) -> None:
-        # Lock-free: no awaits.
-        operator_partition, batch = self.networking.decode_message(data)
+        operator_partition, batch, sender_id, nonce, batch_id = self.networking.decode_message(data)
         logging.debug(f"MIGRATION | Received migration batch for: {operator_partition}")
 
-        self.local_state.set_batch_data_from_migration(operator_partition, batch)
-        # Unblock any transactions waiting for these keys via RequestRemoteKey
         op = tuple(operator_partition)
+        self.local_state.set_batch_data_from_migration(op, batch)
+        # Unblock any transactions waiting for these keys via RequestRemoteKey
         if op in self.networking.wait_remote_key_event:
             for key in batch:
                 if key in self.networking.wait_remote_key_event.get(op, {}):
                     self.networking.wait_remote_key_event[op][key].set()
+
+        # Acknowledge only after the batch is applied (and so in this epoch's delta).
+        if sender_id == self.id:
+            self._ack_migration_batch(nonce, batch_id)
+            return
+        host, _, protocol_port = self.peers[sender_id]
+        await self.networking.send_message(
+            host,
+            protocol_port,
+            msg=(nonce, batch_id),
+            msg_type=MessageType.AsyncMigrationAck,
+            serializer=Serializer.MSGPACK,
+        )
+
+    async def _handle_async_migration_ack(self, data: bytes) -> None:
+        # Lock-free: no awaits.
+        nonce, batch_id = self.networking.decode_message(data)
+        self._ack_migration_batch(nonce, batch_id)
+
+    def _ack_migration_batch(self, nonce: int, batch_id: int) -> None:
+        if nonce != self._migration_nonce:
+            # Ack for a batch sent by a protocol instance that no longer exists.
+            return
+        self._migration_unacked.discard(batch_id)
+        if not self._migration_unacked:
+            self._migration_all_acked.set()
+
+    async def _drain_migration_batches(self) -> None:
+        """Stop the async sender and wait until every batch it sent has been applied
+        at its destination, so the coming snapshot cut sees each migrated key on
+        exactly one side."""
+        self._migration_gate.clear()
+        await self._migration_all_acked.wait()
 
     async def _write_to_wal(self, sequence: list[SequencedItem]) -> tuple[float, float]:
         start_wal = timer()
@@ -508,43 +559,56 @@ class AriaProtocol(BaseTransactionalProtocol):
         self,
         batch: dict,
     ) -> None:
-        """Send a migration batch to destination workers in parallel."""
+        """Send a migration batch to destination workers in parallel.
+
+        Every batch goes over the network, including to this worker, and stays
+        unacknowledged until the destination has applied it."""
         send_tasks = []
         for operator_partition, k_v_pairs in batch.items():
             operator_name, partition = operator_partition
             worker = self.dns[operator_name][partition]
-            if worker == self.id:
-                self.local_state.set_batch_data_from_migration(
-                    operator_partition,
-                    k_v_pairs,
-                )
-            else:
-                send_tasks.append(
-                    self.networking.send_message(
-                        worker[0],
-                        worker[2],
-                        msg=(operator_partition, k_v_pairs),
-                        msg_type=MessageType.AsyncMigration,
-                        serializer=Serializer.MSGPACK,
-                    ),
-                )
+            # Register before the first await so a concurrent drain waits for it.
+            batch_id = next(self._migration_batch_ids)
+            self._migration_unacked.add(batch_id)
+            self._migration_all_acked.clear()
+            send_tasks.append(
+                self.networking.send_message(
+                    worker[0],
+                    worker[2],
+                    msg=(operator_partition, k_v_pairs, self.id, self._migration_nonce, batch_id),
+                    msg_type=MessageType.AsyncMigration,
+                    serializer=Serializer.MSGPACK,
+                ),
+            )
         if send_tasks:
             await asyncio.gather(*send_tasks)
 
     async def _continuous_migration_sender(self) -> None:
         """Background coroutine that continuously sends migration batches
-        independently of epoch barriers, completing migration faster.
+        alongside epoch processing, completing migration faster.
+
+        It pauses while an epoch is between its drain (before the processing-done
+        barrier) and its cleanup barrier, so no batch is in flight across a
+        snapshot cut.
 
         Completion is based only on keys_remaining_to_send() — the coordinator's
         global barrier (all workers report MigrationDone) ensures all data is
         fully transferred.  We do NOT check keys_remaining_to_remote() because
         hash metadata from other workers may not have arrived yet.
         """
+        # Peers may still be loading state until the protocol is started
+        # (ReadyAfterRecovery, or the rebuild after MigrationDone).
+        await self.started.wait()
         logging.warning("MIGRATION | Continuous migration sender started")
         try:
             while self.migrating_state:
+                if not self._migration_gate.is_set():
+                    await self._migration_gate.wait()
+                    continue
                 if not self.local_state.has_keys_to_send():
                     if self.local_state.keys_remaining_to_send() == 0:
+                        # Report done only once every batch has landed.
+                        await self._migration_all_acked.wait()
                         self.migrating_state = False
                         await self.networking.send_message(
                             DISCOVERY_HOST,
@@ -612,6 +676,10 @@ class AriaProtocol(BaseTransactionalProtocol):
 
         timings = await self._run_epoch_functions_and_chain(sequence)
 
+        # Every peer's commit flush and snapshot cut follow this barrier, so batches
+        # that land before it belong to this epoch at both ends.
+        await self._drain_migration_batches()
+
         sync_time = 0.0
         sync_time += await self._sync_processing_done()
 
@@ -666,6 +734,9 @@ class AriaProtocol(BaseTransactionalProtocol):
             fallback_ms=(fallback_end - fallback_start) * 1000,
             snap_ms=(snap_end - snap_start) * 1000,
         )
+        # Every worker has passed this epoch's snapshot cut, so batches sent from
+        # here on belong to the next epoch at both ends.
+        self._migration_gate.set()
 
     async def _run_epoch_functions_and_chain(
         self,
@@ -884,7 +955,7 @@ class AriaProtocol(BaseTransactionalProtocol):
         )
 
     async def send_delta_to_snapshotting_proc(self) -> None:
-        delta_to_send = self.local_state.get_data_for_snapshot()
+        delta_to_send = self.local_state.take_delta_map()
 
         await self.snapshotting_networking_manager.send_message(
             self.networking.host_name,
@@ -893,7 +964,6 @@ class AriaProtocol(BaseTransactionalProtocol):
             msg_type=MessageType.SnapProcDelta,
             serializer=Serializer.MSGPACK,
         )
-        self.local_state.clear_delta_map()
 
     def cleanup_after_epoch(self) -> None:
         self.concurrency_aborts_everywhere.clear()

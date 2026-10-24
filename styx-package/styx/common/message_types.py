@@ -46,3 +46,5 @@ class MessageType(IntEnum):
     RunFunRemoteBatch = 42
     AckBatch = 43
     SnapMigrationReassign = 44
+    AsyncMigrationAck = 45
+    RecoveryMigrationHashes = 46

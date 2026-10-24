@@ -10,7 +10,7 @@ class TestMessageType:
         assert issubclass(MessageType, IntEnum)
 
     def test_total_count(self):
-        assert len(MessageType) == 44
+        assert len(MessageType) == 46
 
     def test_all_values_unique(self):
         values = [m.value for m in MessageType]
@@ -20,7 +20,7 @@ class TestMessageType:
         # 25 (AckCache) was removed when the fallback cache was dropped; the
         # remaining IDs are preserved to keep wire-format stability.
         values = sorted(m.value for m in MessageType)
-        assert values == [v for v in range(45) if v != 25]
+        assert values == [v for v in range(47) if v != 25]
 
     def test_known_values(self):
         assert MessageType.RunFunRemote == 0
@@ -31,6 +31,8 @@ class TestMessageType:
         assert MessageType.RunFunRemoteBatch == 42
         assert MessageType.AckBatch == 43
         assert MessageType.SnapMigrationReassign == 44
+        assert MessageType.AsyncMigrationAck == 45
+        assert MessageType.RecoveryMigrationHashes == 46
 
     def test_int_comparison(self):
         assert MessageType.ClientMsg == 16

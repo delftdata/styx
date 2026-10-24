@@ -215,6 +215,17 @@ class InMemoryOperatorState(BaseAriaState):
         for operator_partition in self.operator_partitions:
             self.delta_map[operator_partition].clear()
 
+    def take_delta_map(self) -> dict[OperatorPartition, KVPairs]:
+        """Hand over the accumulated deltas and continue on a fresh map.
+
+        Swapping (instead of clearing once the caller is done) matters because the
+        caller awaits while shipping the deltas: async-migration writes that land
+        during that await must go into the next delta, not be wiped unsent.
+        """
+        delta = self.delta_map
+        self.delta_map = {operator_partition: {} for operator_partition in self.operator_partitions}
+        return delta
+
     def commit_fallback_transaction(self, t_id: int) -> None:
         if t_id in self.fallback_commit_buffer:
             for operator_partition, kv_pairs in self.fallback_commit_buffer[t_id].items():

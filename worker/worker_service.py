@@ -136,6 +136,13 @@ class Worker:
         self.migration_completed: asyncio.Event = asyncio.Event()
         self._migration_generation: int = 0  # bumped on recovery to invalidate zombie Phase B tasks
 
+        # Post-checkpoint recovery: workers exchange which keys each still holds
+        # for the others' new partitions (all-to-all) before the protocol starts.
+        self._recovery_hash_tag: int = -1  # snapshot id of the recovery, -1 = no exchange
+        self._recovery_hashes_out: dict[OperatorPartition, dict[Any, tuple[int, int]]] = {}
+        self._recovery_hash_senders: set[int] = set()
+        self._recovery_hashes_received: asyncio.Event = asyncio.Event()
+
         self.m_input_offsets: dict[OperatorPartition, int] = {}
         self.m_output_offsets: dict[OperatorPartition, int] = {}
         self.m_epoch_counter: int = -1
@@ -177,6 +184,7 @@ class Worker:
             MessageType.MigrationDone: self._handle_migration_done,
             MessageType.InitRecovery: self._handle_init_recovery,
             MessageType.ReadyAfterRecovery: self._handle_ready_after_recovery,
+            MessageType.RecoveryMigrationHashes: self._handle_recovery_migration_hashes,
         }
 
     @staticmethod
@@ -400,6 +408,10 @@ class Worker:
 
         self._update_peers(peers)
         self.worker_operators = new_worker_operators
+        # Create the new partitions before MigrationInitDone: a peer can finish its
+        # rebuild and send migration batches before this worker has rebuilt.
+        for op_part in new_worker_operators:
+            self.local_state.add_new_operator_partition(op_part)
         await asyncio.sleep(0)
 
     async def _migration_background_repartition(self) -> None:
@@ -748,6 +760,7 @@ class Worker:
         self.migration_completed.set()  # unblock the zombie so it can exit
         await asyncio.sleep(0)  # yield to let the zombie run its bail-out check
         self.migration_completed.clear()
+        self._reset_recovery_hash_exchange(tag=-1, hashes_out={})
 
         (
             self.id,
@@ -832,22 +845,28 @@ class Worker:
             migration_meta = cloudpickle_deserialization(migration_blob)
             new_graph = migration_meta["new_graph"]
 
-            # Re-derive keys_to_send from local state + new partitioner
-            keys_to_send: dict[tuple, set] = defaultdict(set)
+            # Re-derive keys_to_send, and the destinations' remote_keys, from local state + new partitioner
+            keys_to_send: dict[OperatorPartition, set[tuple[Any, int]]] = defaultdict(set)
+            hashes_out: dict[OperatorPartition, dict[Any, tuple[int, int]]] = defaultdict(dict)
             for op_part in self.registered_operators:
-                op_name, partition = op_part
-                partitioner = new_graph.get_operator_by_name(op_name).get_partitioner()
-                op_data = self.local_state.get_operator_data_for_repartitioning(op_part)
-                for key in op_data:
-                    new_part = partitioner.get_partition_no_cache(key)
-                    if new_part != partition:
-                        keys_to_send[op_part].add((key, new_part))
+                part_keys_to_send, part_hashes = self.rehash_only(
+                    op_part,
+                    new_graph.get_operator_by_name(op_part[0]).get_partitioner(),
+                    list(self.local_state.get_operator_data_for_repartitioning(op_part)),
+                    self.id,
+                )
+                for src_part, keys in part_keys_to_send.items():
+                    keys_to_send[src_part].update(keys)
+                for dest_part, key_map in part_hashes.items():
+                    hashes_out[dest_part].update(key_map)
 
             if keys_to_send:
                 self.local_state.add_keys_to_send(keys_to_send)
                 logging.warning(
                     f"[RECOVERY] W{self.id} Re-derived {sum(len(v) for v in keys_to_send.values())} keys to send",
                 )
+            # Sent to the destinations on ReadyAfterRecovery, once every worker has loaded its snapshot.
+            self._reset_recovery_hash_exchange(tag=snapshot_id, hashes_out=hashes_out)
             restart_after_migration = True
 
         request_id_to_t_id_map = await self.get_sequencer_assignments_before_failure(
@@ -889,16 +908,87 @@ class Worker:
         )
 
     async def _handle_ready_after_recovery(self, _data: bytes, _: MessageType) -> None:
+        generation = self._migration_generation
+        protocol = self.function_execution_protocol
+        if self._recovery_hash_tag >= 0:
+            await self._exchange_recovery_migration_hashes()
+            if self._migration_generation != generation:
+                return  # a newer recovery started while we waited for peers
         # All workers have stopped their old protocols by this point (the
         # coordinator only sends ReadyAfterRecovery after all workers reported).
         # Run the dedup scan NOW so it captures every message flushed by every
         # surviving worker's old egress.
-        await self.function_execution_protocol.egress.run_dedup_scan_and_mark_started()
-        self.function_execution_protocol.started.set()
+        await protocol.egress.run_dedup_scan_and_mark_started()
+        protocol.started.set()
         logging.warning(
             f"Worker: {self.id} recovered and ready at : {time.time() * 1000}",
         )
         await asyncio.sleep(0)
+
+    def _reset_recovery_hash_exchange(
+        self,
+        tag: int,
+        hashes_out: dict[OperatorPartition, dict[Any, tuple[int, int]]],
+    ) -> None:
+        self._recovery_hash_tag = tag
+        self._recovery_hashes_out = hashes_out
+        self._recovery_hash_senders = set()
+        # Release anyone still waiting on a previous recovery's exchange; they
+        # see the generation change and bail out.
+        previous = self._recovery_hashes_received
+        self._recovery_hashes_received = asyncio.Event()
+        previous.set()
+
+    async def _exchange_recovery_migration_hashes(self) -> None:
+        """Rebuild the destinations' remote_keys after a post-checkpoint recovery.
+
+        Each worker tells every peer which keys of the peer's new partitions it
+        still holds, and waits for the same from all peers. Without remote_keys a
+        transaction on a key still at its source would read it as missing. This
+        runs on ReadyAfterRecovery, when every worker has loaded its snapshot, and
+        the protocol starts only after it completes.
+        """
+        received = self._recovery_hashes_received
+        addr_to_peer = {(host, port): peer_id for peer_id, (host, port, _) in self.peers.items()}
+        per_peer: dict[int, list] = {peer_id: [] for peer_id in self.peers}
+        for dest_part, key_map in self._recovery_hashes_out.items():
+            host, port, _ = self.dns[dest_part[0]][dest_part[1]]
+            peer_id = addr_to_peer.get((host, port))
+            if peer_id is None:
+                # Destination partition is on this worker
+                self.local_state.add_remote_keys(dest_part, key_map)
+            else:
+                per_peer[peer_id].append((dest_part, key_map))
+        self._recovery_hashes_out = {}
+        # Every peer gets a message, possibly empty: it is also the "done" signal.
+        await asyncio.gather(
+            *[
+                self.networking.send_message(
+                    host,
+                    port,
+                    msg=(self._recovery_hash_tag, self.id, per_peer[peer_id]),
+                    msg_type=MessageType.RecoveryMigrationHashes,
+                    serializer=Serializer.MSGPACK,
+                )
+                for peer_id, (host, port, _) in self.peers.items()
+            ],
+        )
+        if self._recovery_hash_senders >= self.peers.keys():
+            received.set()
+        await received.wait()
+        logging.warning(f"[RECOVERY] W{self.id} remote_keys rebuilt from {len(self.peers)} peers")
+
+    async def _handle_recovery_migration_hashes(self, data: bytes, _: MessageType) -> None:
+        # Lock-free: no awaits.
+        tag, sender_id, hashes = self.networking.decode_message(data)
+        if tag != self._recovery_hash_tag:
+            logging.warning(f"[RECOVERY] Dropping migration hashes from W{sender_id} for recovery {tag}")
+            return
+        for dest_part, key_map in hashes:
+            self.local_state.add_remote_keys(dest_part, key_map)
+        self._recovery_hash_senders.add(sender_id)
+        if self._recovery_hash_senders >= self.peers.keys():
+            self._recovery_hashes_received.set()
 
     async def _handle_unknown(self, _data: bytes, msg_type: MessageType) -> None:
         logging.error(f"Worker Service: Non supported command message type: {msg_type}")
