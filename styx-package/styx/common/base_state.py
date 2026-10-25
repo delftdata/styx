@@ -82,7 +82,8 @@ class BaseOperatorState(ABC):
         new_partition: int,
         key: K,
         old_partition: int,
-    ) -> None:
+    ) -> bool:
+        """Move the key from old_partition; False if it already left in a migration batch."""
         raise NotImplementedError
 
     @abstractmethod

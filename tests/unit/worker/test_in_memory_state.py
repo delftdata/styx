@@ -386,6 +386,42 @@ class TestExists:
         s = _state()
         assert s.exists("k", "other_op", 99) is False
 
+    def test_does_not_rescan_keys_to_send(self):
+        # The ingress calls exists() for every message during a migration.
+        class CountingSet(set):
+            scans = 0
+
+            def __iter__(self):
+                CountingSet.scans += 1
+                return super().__iter__()
+
+        s = _state()
+        s.data[OP_PART] = {"k": "v", "stay": "v"}
+        s.add_keys_to_send({OP_PART: CountingSet({("k", 1)})})
+        for _ in range(100):
+            assert s.exists("k", OP, PART) is False
+            assert s.exists("stay", OP, PART) is True
+        assert CountingSet.scans == 1
+
+    def test_key_that_left_is_answered_by_remote_keys(self):
+        s = _state()
+        s.data[OP_PART] = {"k": "v"}
+        s.add_keys_to_send({OP_PART: {("k", 1)}})
+        assert s.exists("k", OP, PART) is False
+        s.get_async_migrate_batch(10)  # k leaves; keys_to_send empties
+        assert s.exists("k", OP, PART) is False
+        s.data[OP_PART]["k"] = "v2"  # migration over: a key here belongs here
+        assert s.exists("k", OP, PART) is True
+
+    def test_new_transfer_resets_the_index(self):
+        s = _state()
+        s.data[OP_PART] = {"a": 1, "b": 2}
+        s.add_keys_to_send({OP_PART: {("a", 1)}})
+        assert s.exists("b", OP, PART) is True
+        s.add_keys_to_send({OP_PART: {("b", 1)}})
+        assert s.exists("b", OP, PART) is False
+        assert s.exists("a", OP, PART) is True
+
 
 # ---------------------------------------------------------------------------
 # snapshot helpers
@@ -440,10 +476,19 @@ class TestGetKeyToMigrate:
         s = _state()
         s.data[OP_PART]["k1"] = "v1"
         s.keys_to_send[OP_PART] = {("k1", 2)}
-        val = s.get_key_to_migrate((OP, 2), "k1", PART)
-        assert val == "v1"
+        assert s.get_key_to_migrate((OP, 2), "k1", PART) == (True, "v1")
         assert "k1" not in s.data[OP_PART]
         assert ("k1", 2) not in s.keys_to_send[OP_PART]
+
+    def test_none_value_is_found(self):
+        s = _state()
+        s.data[OP_PART]["k1"] = None
+        assert s.get_key_to_migrate((OP, 2), "k1", PART) == (True, None)
+        assert "k1" not in s.data[OP_PART]
+
+    def test_absent_key_is_not_found(self):
+        s = _state()
+        assert s.get_key_to_migrate((OP, 2), "k1", PART) == (False, None)
 
 
 # ---------------------------------------------------------------------------
@@ -478,9 +523,27 @@ class TestMigrateWithinSameWorker:
         s.data[(OP, 0)]["k1"] = "val"
         s.keys_to_send[(OP, 0)] = {("k1", 1)}
         s.remote_keys[(OP, 1)] = {"k1": (0, 0)}
-        s.migrate_within_the_same_worker(OP, 1, "k1", 0)
+        assert s.migrate_within_the_same_worker(OP, 1, "k1", 0) is True
         assert "k1" not in s.data[(OP, 0)]
         assert s.data[(OP, 1)]["k1"] == "val"
+
+    def test_key_with_none_value_is_moved(self):
+        s = InMemoryOperatorState({(OP, 0), (OP, 1)})
+        s.data[(OP, 0)]["k1"] = None
+        s.remote_keys[(OP, 1)] = {"k1": (0, 0)}
+        assert s.migrate_within_the_same_worker(OP, 1, "k1", 0) is True
+        assert s.data[(OP, 1)] == {"k1": None}
+        assert not s.in_remote_keys("k1", OP, 1)
+
+    def test_key_already_in_a_migration_batch_is_not_moved(self):
+        s = InMemoryOperatorState({(OP, 0), (OP, 1)})
+        s.data[(OP, 0)]["k1"] = "val"
+        s.keys_to_send[(OP, 0)] = {("k1", 1)}
+        s.remote_keys[(OP, 1)] = {"k1": (0, 0)}
+        s.get_async_migrate_batch(10)  # the async sender takes it
+        assert s.migrate_within_the_same_worker(OP, 1, "k1", 0) is False
+        assert "k1" not in s.data[(OP, 1)]
+        assert s.in_remote_keys("k1", OP, 1)  # still expected: the batch will deliver it
 
 
 # ---------------------------------------------------------------------------

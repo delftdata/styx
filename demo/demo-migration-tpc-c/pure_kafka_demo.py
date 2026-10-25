@@ -379,6 +379,7 @@ def tpc_c_init(styx: SyncStyxClient):
     populate_order_line(styx)
     populate_item(styx)
     populate_stock(styx)
+    styx.notify_init_data_complete()
     # Sleep for 5 seconds to be sure that all the data are in minio
     time.sleep(5)
     submit_graph(styx)

@@ -63,6 +63,17 @@ class AsyncSnapshottingProcess:
     def init_delta_maps(self, assigned_partitions: list) -> None:
         self.delta_maps = {(op_part[0], op_part[1]): {} for op_part in assigned_partitions}
 
+    def migration_reassign_delta_maps(self, new_assigned_partitions: list) -> None:
+        new_keys = {(op_part[0], op_part[1]) for op_part in new_assigned_partitions}
+        # Add empty entries for newly assigned partitions
+        for key in new_keys:
+            if key not in self.delta_maps:
+                self.delta_maps[key] = {}
+        # Remove entries for partitions no longer assigned
+        for key in list(self.delta_maps.keys()):
+            if key not in new_keys:
+                del self.delta_maps[key]
+
     def take_snapshot(self, metadata: tuple) -> None:
         loop = asyncio.get_running_loop()
         (
@@ -70,24 +81,30 @@ class AsyncSnapshottingProcess:
             topic_partition_output_offsets,
             epoch_counter,
             t_counter,
+            *rest,
         ) = metadata
+        is_migration_checkpoint = bool(rest and rest[0])
+        pending = list(rest[1]) if len(rest) > 1 else []
         logging.warning(f"ASYNC_SN | Starting Snapshot at epoch: {epoch_counter}")
-        self.async_snapshots.start_snapshotting(
+        snapshot_id = self.async_snapshots.start_snapshotting(
             topic_partition_offsets,
             topic_partition_output_offsets,
             epoch_counter,
             t_counter,
+            n_files=len(self.delta_maps),
+            is_migration_checkpoint=is_migration_checkpoint,
+            pending_requests=pending,
         )
         for operator_partition, delta_map in self.delta_maps.items():
             operator_name, partition = operator_partition
             data_to_store: bytes = zstd_msgpack_serialization(delta_map)
-            self.async_snapshots.register_size(len(data_to_store))
+            self.async_snapshots.register_size(snapshot_id, len(data_to_store))
             loop.run_in_executor(
                 self.pool,
                 self.async_snapshots.store_snapshot,
-                f"data/{operator_name}/{partition}/{self.async_snapshots.snapshot_id}.bin",
+                f"data/{operator_name}/{partition}/{snapshot_id}.bin",
                 data_to_store,
-            ).add_done_callback(self.async_snapshots.snapshot_completed_callback)
+            ).add_done_callback(self.async_snapshots.file_stored_callback(snapshot_id))
         self.clear_delta_maps()
 
     def snapshotting_controller(self, data: bytes) -> None:
@@ -110,6 +127,13 @@ class AsyncSnapshottingProcess:
                 )
                 if snapshot_id != -1:
                     self.async_snapshots.set_snapshot_id(snapshot_id)
+            case MessageType.SnapMigrationReassign:
+                (new_assigned_partitions,) = NetworkingManager.decode_message(data)
+                logging.warning("[SN_PROC] Migration reassign: preserving deltas across partition change")
+                self.migration_reassign_delta_maps(new_assigned_partitions)
+                self.async_snapshots.update_n_assigned_partitions(
+                    len(new_assigned_partitions),
+                )
             case _:
                 logging.error(
                     f"Worker Service: Non supported command message type: {message_type}",

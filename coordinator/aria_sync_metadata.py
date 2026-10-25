@@ -15,6 +15,8 @@ class AriaSyncMetadata:
         self.global_read_set: dict | None = None
         self.stop_next_epoch: bool = False
         self.take_snapshot: bool = False
+        # Barriers completed so far, so a stalled one can be told from a new one.
+        self.completed_barriers: int = 0
 
     def check_distributed_barrier(self) -> bool:
         return len(self.arrived) == self.n_workers
@@ -122,6 +124,7 @@ class AriaSyncMetadata:
         return output_dict
 
     def cleanup(self, epoch_end: bool = False, take_snapshot: bool = False) -> None:
+        self.completed_barriers += 1
         self.arrived.clear()
         self.logic_aborts_everywhere: set[int] = set()
         self.sent_proceed_msg: bool = False

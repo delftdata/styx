@@ -59,6 +59,7 @@ def ycsb_init(styx: SyncStyxClient, operator: Operator):
 
     for partition, partition_data in partitions.items():
         styx.init_data(operator, partition, partition_data)
+    styx.notify_init_data_complete()
     time.sleep(5)
     submit_graph(styx)
 

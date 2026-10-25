@@ -88,34 +88,36 @@ def compact_deltas(
 
         sequencer_snapshots_to_delete = [s_sn for _, s_sn in sequencer_snapshots if s_sn != "sequencer/0.bin"]
 
-    # Partition Data
-    data: dict[OperatorPartition, KVPairs] = {}
+    # Partition Data. For each partition, merge its deltas in snapshot-id order
+    # into its latest file, then delete the older ones. A crash part-way leaves
+    # older files that the latest one fully overrides when loading in id order.
     snapshots_to_delete: list[str] = []
-
-    for operator_partition, sn_info in snapshots_per_operator_partition.items():
-        for _, sn_name in sn_info:
+    compacted: dict[str, KVPairs] = {}
+    for sn_info in snapshots_per_operator_partition.values():
+        ordered = sorted(sn_info)
+        merged: KVPairs = {}
+        for _, sn_name in ordered:
             partition_data = zstd_msgpack_deserialization(
                 s3_get_bytes(s3_client, SNAPSHOT_BUCKET_NAME, sn_name),
             )
-            if operator_partition in data:
-                snapshots_to_delete.append(sn_name)
-                if partition_data:
-                    data[operator_partition].update(partition_data)
-            else:
-                data[operator_partition] = partition_data
-
-    for operator_partition, partition_data in data.items():
-        operator_name, partition = operator_partition
-        sn_data: bytes = zstd_msgpack_serialization(partition_data)
-        snapshot_name: str = f"data/{operator_name}/{partition}/0.bin"
-
-        # Store the primary snapshot after compaction
-        s3_put_bytes(s3_client, SNAPSHOT_BUCKET_NAME, snapshot_name, sn_data)
+            if partition_data:
+                merged.update(partition_data)
+        latest_name = ordered[-1][1]
+        # Tombstones (None) still matter while older files exist.
+        s3_put_bytes(s3_client, SNAPSHOT_BUCKET_NAME, latest_name, zstd_msgpack_serialization(merged))
+        snapshots_to_delete.extend(sn_name for _, sn_name in ordered[:-1])
+        compacted[latest_name] = merged
 
     # Cleanup the compacted deltas
     logging.warning("Deleting data snapshots: %s", snapshots_to_delete)
     logging.warning("Deleting sequencer snapshots: %s", sequencer_snapshots_to_delete)
     cleanup_compacted_files(s3_client, sequencer_snapshots_to_delete, snapshots_to_delete)
+
+    # With the older files gone, tombstones are redundant: drop them.
+    for latest_name, merged in compacted.items():
+        if any(v is None for v in merged.values()):
+            live = {k: v for k, v in merged.items() if v is not None}
+            s3_put_bytes(s3_client, SNAPSHOT_BUCKET_NAME, latest_name, zstd_msgpack_serialization(live))
 
 
 def cleanup_compacted_files(

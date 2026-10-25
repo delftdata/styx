@@ -48,6 +48,7 @@ def main(
     )
     missed_requests = joined[joined["timestamp_output"].isna()]
     print(f"missed_requests: {missed_requests}")
+    missed_requests[["request_id", "timestamp_client", "op"]].to_csv(f"{save_dir}/missed_requests.csv", index=False)
     missed = len(missed_requests)
     print(
         f"Missed {missed} messages after the join for which no response "

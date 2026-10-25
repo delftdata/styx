@@ -17,6 +17,11 @@ class MigrationMetadata:
         self.output_offsets: dict[OperatorPartition, int] = {}
         self.epoch_counter: int = -1
         self.t_counter: int = -1
+        # Every worker's requests behind its stop offsets that had not committed;
+        # the rebuilt protocols sequence them (worker/sequencer/pending_requests.py).
+        self.pending_requests: list = []
+        # Latest epoch in which a worker's last migrated key landed
+        self.transfer_done_epoch: int = -1
 
     def check_sum(self, msg_type: MessageType) -> bool:
         return self.sync_sum[msg_type] == self.n_workers
@@ -33,10 +38,12 @@ class MigrationMetadata:
         t_counter: int,
         input_offsets: dict[OperatorPartition, int],
         output_offsets: dict[OperatorPartition, int],
+        pending_requests: list | None = None,
     ) -> bool:
         """Collect epoch/offset counters from each worker during Phase B."""
         async with self.lock:
             self.sync_sum[MessageType.MigrationInitDone] += 1
+            self.pending_requests.extend(pending_requests or [])
             for operator_partition, pio in input_offsets.items():
                 self.input_offsets[operator_partition] = max(
                     pio,
@@ -51,6 +58,13 @@ class MigrationMetadata:
             self.t_counter = max(t_counter, self.t_counter)
             return self.check_sum(MessageType.MigrationInitDone)
 
+    async def migration_done(self, epoch_counter: int) -> bool:
+        """A worker finished its async transfer; its last key landed by epoch_counter."""
+        async with self.lock:
+            self.sync_sum[MessageType.MigrationDone] += 1
+            self.transfer_done_epoch = max(epoch_counter, self.transfer_done_epoch)
+            return self.check_sum(MessageType.MigrationDone)
+
     async def set_empty_sync_done(self, msg_type: MessageType) -> bool:
         async with self.lock:
             self.sync_sum[msg_type] += 1
@@ -64,3 +78,6 @@ class MigrationMetadata:
                 self.t_counter = -1
                 self.input_offsets.clear()
                 self.output_offsets.clear()
+                self.pending_requests = []
+            elif msg_type == MessageType.MigrationDone:
+                self.transfer_done_epoch = -1

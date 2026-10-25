@@ -76,6 +76,73 @@ class StatefulFunction(Function):
         self.__deployed_graph = deployed_graph
         self.__operator_lock: asyncio.Lock = operator_lock
 
+    async def __bring_key_here(self) -> None:
+        """Make sure the key is in this partition before the function runs: during a
+        migration it may still be in another partition, here or on a peer, or in a
+        migration batch on its way here."""
+        # 1) Decide whether we need to fetch/migrate the key, while holding the lock briefly.
+        need_remote_fetch: bool = False
+        key_in_flight: bool = False
+        remote_info: tuple[int, int] | None = None  # (worker_id, old_partition) shape depends on your state
+
+        async with self.__operator_lock:
+            if self.__state.in_remote_keys(
+                self.__key,
+                self.__operator_name,
+                self.__partition,
+            ):
+                remote_info = self.__state.get_worker_id_old_partition(
+                    self.__operator_name,
+                    self.__partition,
+                    self.__key,
+                )
+
+                # Your state seems to return something like (worker_id, old_partition)
+                # since you later access remote_info[1] as the old partition.
+                old_partition = remote_info[1]
+
+                is_local: bool = (
+                    self.__operator_name,
+                    old_partition,
+                ) in self.__state.operator_partitions
+                if is_local:
+                    # Transfer the key from another partition within the same worker
+                    moved = self.__state.migrate_within_the_same_worker(
+                        self.__operator_name,
+                        self.__partition,
+                        self.__key,
+                        old_partition,
+                    )
+                    if not moved:
+                        # The async sender already took the key into a batch to this
+                        # worker: wait for the batch rather than read the key as missing.
+                        self.__networking.expect_remote_key(
+                            self.__operator_name,
+                            self.__partition,
+                            self.__key,
+                        )
+                        key_in_flight = True
+                else:
+                    # We'll do networking outside the lock.
+                    need_remote_fetch = True
+
+        # 2) If needed, fetch the key from a remote worker without holding the operator lock.
+        if need_remote_fetch:
+            if remote_info is None:
+                logging.warning("Remote fetch failed: remote_info is None")
+            await self.__networking.request_key(
+                self.__operator_name,
+                self.__partition,
+                self.__key,
+                remote_info,
+            )
+        if need_remote_fetch or key_in_flight:
+            await self.__networking.wait_for_remote_key_event(
+                self.__operator_name,
+                self.__partition,
+                self.__key,
+            )
+
     async def __call__(self, *args, **kwargs) -> tuple[object, int]:  # noqa: ANN002, ANN003
         """
         Executes the wrapped function and triggers asynchronous remote calls if needed.
@@ -85,57 +152,7 @@ class StatefulFunction(Function):
             (exception, -1) on failure
         """
         try:
-            # 1) Decide whether we need to fetch/migrate the key, while holding the lock briefly.
-            need_remote_fetch: bool = False
-            remote_info: tuple[int, int] | None = None  # (worker_id, old_partition) shape depends on your state
-
-            async with self.__operator_lock:
-                if self.__state.in_remote_keys(
-                    self.__key,
-                    self.__operator_name,
-                    self.__partition,
-                ):
-                    remote_info = self.__state.get_worker_id_old_partition(
-                        self.__operator_name,
-                        self.__partition,
-                        self.__key,
-                    )
-
-                    # Your state seems to return something like (worker_id, old_partition)
-                    # since you later access remote_info[1] as the old partition.
-                    old_partition = remote_info[1]
-
-                    is_local: bool = (
-                        self.__operator_name,
-                        old_partition,
-                    ) in self.__state.operator_partitions
-                    if is_local:
-                        # Transfer the key from another partition within the same worker
-                        self.__state.migrate_within_the_same_worker(
-                            self.__operator_name,
-                            self.__partition,
-                            self.__key,
-                            old_partition,
-                        )
-                    else:
-                        # We'll do networking outside the lock.
-                        need_remote_fetch = True
-
-            # 2) If needed, fetch the key from a remote worker without holding the operator lock.
-            if need_remote_fetch:
-                if remote_info is None:
-                    logging.warning("Remote fetch failed: remote_info is None")
-                await self.__networking.request_key(
-                    self.__operator_name,
-                    self.__partition,
-                    self.__key,
-                    remote_info,
-                )
-                await self.__networking.wait_for_remote_key_event(
-                    self.__operator_name,
-                    self.__partition,
-                    self.__key,
-                )
+            await self.__bring_key_here()
 
             # 3) Run user logic while holding the operator lock.
             async with self.__operator_lock:
