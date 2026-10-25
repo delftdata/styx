@@ -287,6 +287,7 @@ def _stoppable_protocol() -> AriaProtocol:
     proto.function_scheduler_task = asyncio.create_task(asyncio.sleep(10))
     proto.communication_task = asyncio.create_task(asyncio.sleep(10))
     proto.migration_sender_task = None
+    proto._stall_watchdog_task = None
     proto.topic_partition_offsets = {}
     return proto
 

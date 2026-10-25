@@ -54,6 +54,10 @@ ASYNC_MIGRATION_BATCH_SIZE: int = int(os.getenv("ASYNC_MIGRATION_BATCH_SIZE", "5
 ASYNC_MIGRATION_KEYS_PER_EPOCH: int = int(os.getenv("ASYNC_MIGRATION_KEYS_PER_EPOCH", "3_000"))
 # With no epoch running, the budget refills after this long instead.
 ASYNC_MIGRATION_IDLE_REFILL_S: float = 0.01
+# An epoch wait (transactions, chains, a barrier) that lasts this long is logged
+# with what the worker is still waiting for. A stalled epoch stalls every worker
+# at the next barrier, and nothing else would be logged.
+EPOCH_STALL_WARN_S: float = float(os.getenv("EPOCH_STALL_WARN_S", "10"))
 
 
 class AriaProtocol(BaseTransactionalProtocol):
@@ -157,6 +161,10 @@ class AriaProtocol(BaseTransactionalProtocol):
         self.function_scheduler_task: asyncio.Task | None = None
         self.communication_task: asyncio.Task | None = None
         self.migration_sender_task: asyncio.Task | None = None
+        self._stall_watchdog_task: asyncio.Task | None = None
+        # What the epoch is waiting on, and since when (for _stall_watchdog).
+        self._waiting_on: str | None = None
+        self._waiting_since: float = 0.0
 
         self.max_t_counter: int = -1
         self.total_processed_seq_size: int = -1
@@ -260,6 +268,8 @@ class AriaProtocol(BaseTransactionalProtocol):
         self.communication_task.cancel()
         if self.migration_sender_task is not None:
             self.migration_sender_task.cancel()
+        if self._stall_watchdog_task is not None:
+            self._stall_watchdog_task.cancel()
         try:
             await self.function_scheduler_task
             await self.communication_task
@@ -276,9 +286,34 @@ class AriaProtocol(BaseTransactionalProtocol):
         self.communication_task = asyncio.create_task(self.communication_protocol())
         if self.migrating_state and USE_ASYNC_MIGRATION:
             self.migration_sender_task = asyncio.create_task(self._continuous_migration_sender())
+        self._stall_watchdog_task = asyncio.create_task(self._stall_watchdog())
         logging.warning(
             f"Aria protocol started with operator partitions: {list(self.registered_operators.keys())}",
         )
+
+    def _begin_wait(self, what: str) -> None:
+        self._waiting_on = what
+        self._waiting_since = timer()
+
+    def _end_wait(self) -> None:
+        self._waiting_on = None
+
+    async def _stall_watchdog(self) -> None:
+        while True:
+            await asyncio.sleep(EPOCH_STALL_WARN_S)
+            what = self._waiting_on
+            if what is None:
+                continue
+            waited = timer() - self._waiting_since
+            if waited < EPOCH_STALL_WARN_S:
+                continue
+            unacked = [t_id for t_id, ack in self.networking.waited_ack_events.items() if not ack.is_set()]
+            proxied = list(self._proxy_results)
+            logging.warning(
+                f"{self.id} ||| STALL @epoch {self.sequencer.epoch_counter}: waiting on {what} for {waited:.0f}s"
+                f" | unfinished chains: {len(unacked)} {unacked[:10]}"
+                f" | proxied calls pending: {len(proxied)} {proxied[:10]}",
+            )
 
     async def run_function(
         self,
@@ -544,7 +579,8 @@ class AriaProtocol(BaseTransactionalProtocol):
             return
         result = self._proxy_results.pop(t_id, None)
         if result is None or result.done():
-            logging.debug(f"Dropping ProxyResult for unknown T_ID {t_id}")
+            # Its call would never complete; worth seeing even at the default level.
+            logging.warning(f"Dropping ProxyResult for T_ID {t_id} with no pending proxied call")
             return
         result.set_result((response, abort, participants, rw_changed))
 
@@ -699,7 +735,9 @@ class AriaProtocol(BaseTransactionalProtocol):
         at its destination, so the coming snapshot cut sees each migrated key on
         exactly one side."""
         self._migration_gate.clear()
+        self._begin_wait("migration batch acks")
         await self._migration_all_acked.wait()
+        self._end_wait()
 
     async def _write_to_wal(self, sequence: list[SequencedItem]) -> tuple[float, float]:
         start_wal = timer()
@@ -942,6 +980,7 @@ class AriaProtocol(BaseTransactionalProtocol):
         wal_task = asyncio.create_task(self._write_to_wal(sequence))
         try:
             start_func = timer()
+            self._begin_wait("transactions")
             await asyncio.gather(
                 *[self.run_function(item.t_id, item.payload) for item in sequence],
             )
@@ -949,12 +988,15 @@ class AriaProtocol(BaseTransactionalProtocol):
 
             # Wait for chains to finish
             start_chain = timer()
+            self._begin_wait("chains")
             await asyncio.gather(
                 *[ack.wait() for ack in self.networking.waited_ack_events.values()],
             )
             end_chain = timer()
         finally:
+            self._begin_wait("WAL write")
             start_wal, end_wal = await wal_task
+            self._end_wait()
 
         return {
             "wal_ms": (end_wal - start_wal) * 1000,
@@ -1262,7 +1304,9 @@ class AriaProtocol(BaseTransactionalProtocol):
             serializer=Serializer.MSGPACK,
         )
         if fallback_tasks:
+            self._begin_wait("fallback")
             await asyncio.gather(*fallback_tasks)
+            self._end_wait()
             # Flush all fallback egress sends in one batch (each root above
             # used `egress.send`, which enqueues; `send_batch` awaits the
             # producer futures together).
@@ -1345,5 +1389,7 @@ class AriaProtocol(BaseTransactionalProtocol):
             msg_type=msg_type,
             serializer=serializer,
         )
+        self._begin_wait(f"barrier {msg_type.name}")
         await self.sync_workers_event[msg_type].wait()
+        self._end_wait()
         self.sync_workers_event[msg_type].clear()

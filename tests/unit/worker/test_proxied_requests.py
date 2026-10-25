@@ -22,6 +22,7 @@ from styx.common.util.aio_task_scheduler import AIOTaskScheduler
 from worker.ingress.styx_kafka_ingress import StyxKafkaIngress
 from worker.operator_state.aria.in_memory_state import InMemoryOperatorState
 from worker.sequencer.sequencer import Sequencer
+from worker.transactional_protocols import aria as aria_module
 from worker.transactional_protocols.aria import AriaProtocol
 
 OP = "op"
@@ -264,3 +265,43 @@ class TestOffsetNeverPassesAnUnrunRequest:
         answered = {item.payload.kafka_offset for item in sequence if item.t_id in root.networking.client_responses}
         assert recorded == 41
         assert {r.offset for r in records if r.offset <= recorded} <= answered
+
+
+class TestStallDiagnostics:
+    async def test_watchdog_reports_what_a_stalled_epoch_waits_on(self, monkeypatch):
+        _link, root, _owner = _cluster()
+        warnings: list[str] = []
+        monkeypatch.setattr(aria_module, "EPOCH_STALL_WARN_S", 0.01)
+        monkeypatch.setattr(aria_module.logging, "warning", warnings.append)
+        root.sequencer = SimpleNamespace(epoch_counter=5)
+        root.networking.prepare_function_chain(7)
+        root._proxy_results[9] = asyncio.get_running_loop().create_future()
+
+        root._begin_wait("chains")
+        watchdog = asyncio.create_task(root._stall_watchdog())
+        await asyncio.sleep(0.05)
+        root._end_wait()
+        reported = len(warnings)
+        await asyncio.sleep(0.05)
+        watchdog.cancel()
+
+        assert reported > 0
+        assert "STALL @epoch 5: waiting on chains" in warnings[0]
+        assert "unfinished chains: 1 [7]" in warnings[0]
+        assert "proxied calls pending: 1 [9]" in warnings[0]
+        # Nothing once the wait is over.
+        assert len(warnings) == reported
+
+    async def test_result_with_no_pending_call_is_reported(self, monkeypatch):
+        _link, root, _owner = _cluster()
+        warnings: list[str] = []
+        monkeypatch.setattr(aria_module.logging, "warning", warnings.append)
+        data = NetworkingManager.encode_message(
+            msg=(7, "v", None, [2], False, 0),
+            msg_type=MessageType.ProxyResult,
+            serializer=Serializer.MSGPACK,
+        )[8:]
+
+        await root._handle_proxy_result(data)
+
+        assert warnings == ["Dropping ProxyResult for T_ID 7 with no pending proxied call"]
