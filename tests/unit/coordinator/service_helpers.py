@@ -24,6 +24,7 @@ def stub_service(coordinator: Coordinator) -> CoordinatorService:
     svc._migration_checkpoint_task = None
     svc._deferred_migration_graph = None
     svc.unreachable_workers = []
+    svc._unreachable_since = {}
     svc.networking = MagicMock(close_worker_connections=AsyncMock())
     svc.protocol_networking = MagicMock(
         close_worker_connections=AsyncMock(),

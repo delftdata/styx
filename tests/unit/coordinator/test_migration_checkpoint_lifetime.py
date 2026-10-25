@@ -6,6 +6,7 @@ after MigrationDone. Recovery from it resumes the transfer, and the coordinator
 must keep tracking that resumed transfer.
 """
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 from styx.common.local_state_backends import LocalStateBackend
@@ -15,8 +16,11 @@ from styx.common.serialization import Serializer, cloudpickle_serialization, zst
 from styx.common.stateflow_graph import StateflowGraph
 from styx.common.tcp_networking import NetworkingManager
 
+from coordinator import coordinator_service
+from coordinator.aria_sync_metadata import AriaSyncMetadata
 from coordinator.coordinator_metadata import Coordinator
 from coordinator.migration_metadata import MigrationMetadata
+from coordinator.worker_pool import HEARTBEAT_LIMIT
 from tests.unit.coordinator.service_helpers import stub_service
 
 
@@ -224,3 +228,50 @@ class TestUnreachableWorkers:
         svc, _ = self._service_with_workers(True, True)
         await svc.finalize_worker_sync(MessageType.SyncCleanup, (False,))
         assert svc.unreachable_workers == []
+
+    def test_dead_unreachable_worker_is_left_to_the_heartbeat_check(self):
+        # Recovered as a participant, a dead worker would get InitRecovery and
+        # recovery would wait on it forever; the heartbeat check removes it instead.
+        svc, workers = self._service_with_workers(True, True)
+        svc.unreachable_workers = [workers[1]]
+        svc.coordinator.worker_pool.get_participating_workers.return_value = [workers[0]]
+
+        assert svc._unreachable_to_recover(100.0) == []
+        assert svc.unreachable_workers == []
+        assert svc._unreachable_since == {}
+
+    def test_live_unreachable_worker_is_recovered_after_the_heartbeat_limit(self):
+        svc, workers = self._service_with_workers(True, True)
+        svc.unreachable_workers = [workers[1]]
+        limit_s = HEARTBEAT_LIMIT / 1000
+
+        assert svc._unreachable_to_recover(100.0) == []
+        assert svc._unreachable_to_recover(100.0 + limit_s / 2) == []
+        assert svc._unreachable_to_recover(100.0 + limit_s) == [workers[1]]
+
+
+class TestBarrierWatchdog:
+    async def test_names_the_workers_a_stalled_barrier_waits_on(self, monkeypatch):
+        c = Coordinator(MagicMock(), MagicMock())
+        svc = stub_service(c)
+        workers = [MagicMock(worker_id=i) for i in (1, 2, 3)]
+        c.worker_pool = MagicMock(get_participating_workers=MagicMock(return_value=workers))
+        svc.aria_metadata = AriaSyncMetadata(3)
+        svc.aria_metadata.arrived.update({1, 3})
+        warnings: list[str] = []
+        monkeypatch.setattr(coordinator_service, "BARRIER_STALL_WARN_S", 0.01)
+        monkeypatch.setattr(coordinator_service.logging, "warning", warnings.append)
+
+        watchdog = asyncio.create_task(svc.barrier_watchdog())
+        await asyncio.sleep(0.05)
+        stalled = list(warnings)
+        # Barriers completing again: nothing more is reported.
+        for _ in range(10):
+            svc.aria_metadata.cleanup()
+            svc.aria_metadata.arrived.add(1)
+            await asyncio.sleep(0.01)
+        watchdog.cancel()
+
+        assert stalled
+        assert "arrived [1, 3], waiting on [2]" in stalled[0]
+        assert len(warnings) <= len(stalled) + 1

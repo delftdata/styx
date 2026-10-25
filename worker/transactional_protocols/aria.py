@@ -924,7 +924,9 @@ class AriaProtocol(BaseTransactionalProtocol):
         # HERE WE KNOW ALL THE CONCURRENCY ABORTS
         commit_start = timer()
         n_committed = self._commit_and_prepare_responses(sequence)
+        self._begin_wait("snapshot delta")
         await self.send_delta_to_snapshotting_proc()
+        self._end_wait()
         commit_end = timer()
 
         # Share of this worker's own transactions aborted anywhere in the cluster.
@@ -939,11 +941,15 @@ class AriaProtocol(BaseTransactionalProtocol):
         self._advance_offsets(sequence)
 
         self.sequencer.increment_epoch(self.max_t_counter, self.t_ids_to_reschedule)
+        self._begin_wait("responses to Kafka")
         await self.wait_responses_to_be_sent.wait()
+        self._end_wait()
         self.cleanup_after_epoch()
 
         snap_start = timer()
+        self._begin_wait("snapshot request")
         await self.take_snapshot()
+        self._end_wait()
         snap_end = timer()
 
         epoch_end = timer()

@@ -30,6 +30,7 @@ from styx.common.serialization import (
 from styx.common.tcp_networking import MessagingMode, NetworkingManager
 from styx.common.util.aio_task_scheduler import AIOTaskScheduler
 import uvloop
+from worker_pool import HEARTBEAT_LIMIT
 
 from coordinator.migration_metadata import MigrationMetadata
 
@@ -50,6 +51,9 @@ PROTOCOL = Protocols.Aria
 
 SNAPSHOT_BUCKET_NAME: str = os.getenv("SNAPSHOT_BUCKET_NAME", "styx-snapshots")
 SNAPSHOT_FREQUENCY_SEC = int(os.getenv("SNAPSHOT_FREQUENCY_SEC", "30"))
+# A protocol barrier that stays incomplete this long is logged with the workers
+# it still waits on: they stall every other worker, and nothing else is logged.
+BARRIER_STALL_WARN_S: float = float(os.getenv("BARRIER_STALL_WARN_S", "10"))
 HEARTBEAT_CHECK_INTERVAL: int = int(
     os.getenv("HEARTBEAT_CHECK_INTERVAL", "1000"),
 )  # 1000ms
@@ -115,6 +119,8 @@ class CoordinatorService:
         # Workers a barrier or migration message could not be delivered to. The
         # protocol cannot progress without them, so they are handed to recovery.
         self.unreachable_workers: list[Worker] = []
+        # When each unreachable worker was first seen by the heartbeat monitor.
+        self._unreachable_since: dict[int, float] = {}
         self.recovery_lock: asyncio.Lock = asyncio.Lock()
         self.recovery_state: RecoveryState = RecoveryState.IDLE
 
@@ -1266,9 +1272,10 @@ class CoordinatorService:
                     time_since_last_heartbeat_ms,
                 )
 
+            unreachable = self._unreachable_to_recover(heartbeat_check_time)
             # Add workers that re-registered (same IP/ports) to the failed set
             if (
-                workers_to_remove or self.workers_that_re_registered or self.unreachable_workers
+                workers_to_remove or self.workers_that_re_registered or unreachable
             ) and self.recovery_state == RecoveryState.IDLE:
                 logging.debug(
                     f"heartbeat_monitor | entering recovery lock "
@@ -1285,8 +1292,10 @@ class CoordinatorService:
                         re_registered_set = set(self.workers_that_re_registered)
                         workers_to_remove.update(re_registered_set)
                         self.workers_that_re_registered = []
-                        workers_to_remove.update(self.unreachable_workers)
-                        self.unreachable_workers = []
+                        workers_to_remove.update(unreachable)
+                        self.unreachable_workers = [w for w in self.unreachable_workers if w not in unreachable]
+                        for worker in unreachable:
+                            self._unreachable_since.pop(worker.worker_id, None)
 
                         await self._perform_recovery(workers_to_remove)
                     except Exception as e:
@@ -1294,6 +1303,28 @@ class CoordinatorService:
                     finally:
                         self.recovery_state = RecoveryState.IDLE
                         logging.debug("heartbeat_monitor | recovery_state back to IDLE")
+
+    def _unreachable_to_recover(self, now: float) -> list[Worker]:
+        """The unreachable workers still alive HEARTBEAT_LIMIT after they were seen.
+
+        An unreachable worker may be dead. Recovered right away, it would stay a
+        participant (only the heartbeat check removes a worker from the pool and
+        reschedules its partitions), and recovery would wait on it forever. A
+        dead one is removed by the heartbeat check within HEARTBEAT_LIMIT, so the
+        ones still in the pool by then are alive and are recovered as participants.
+        """
+        participating = {w.worker_id for w in self.coordinator.worker_pool.get_participating_workers()}
+        due: list[Worker] = []
+        waiting: list[Worker] = []
+        for worker in self.unreachable_workers:
+            if worker.worker_id not in participating:
+                # Removed as dead: recovered (and rescheduled) as a failed worker.
+                self._unreachable_since.pop(worker.worker_id, None)
+                continue
+            since = self._unreachable_since.setdefault(worker.worker_id, now)
+            (due if (now - since) * 1000 >= HEARTBEAT_LIMIT else waiting).append(worker)
+        self.unreachable_workers = waiting + due
+        return due
 
     async def send_snapshot_marker(self) -> None:
         while True:
@@ -1333,6 +1364,23 @@ class CoordinatorService:
             else:
                 return
 
+    async def barrier_watchdog(self) -> None:
+        last: tuple[AriaSyncMetadata, int] | None = None
+        while True:
+            await asyncio.sleep(BARRIER_STALL_WARN_S)
+            meta = self.aria_metadata
+            if meta is None or not meta.arrived:
+                last = None
+                continue
+            now = (meta, meta.completed_barriers)
+            if now == last:
+                participating = {w.worker_id for w in self.coordinator.worker_pool.get_participating_workers()}
+                logging.warning(
+                    f"BARRIER STALL: no barrier completed for {BARRIER_STALL_WARN_S:.0f}s;"
+                    f" arrived {sorted(meta.arrived)}, waiting on {sorted(participating - meta.arrived)}",
+                )
+            last = now
+
     async def main(self) -> None:
         logging.warning("Coordinator Booted Successfully")
         self.init_snapshot_bucket()
@@ -1345,6 +1393,7 @@ class CoordinatorService:
         logging.warning("Coordinator Heartbeat Sentinel online")
         self.snapshotting_task = asyncio.create_task(self.send_snapshot_marker())
         logging.warning("Coordinator Snapshotting online")
+        self.barrier_watchdog_task = asyncio.create_task(self.barrier_watchdog())
         await self.tcp_service()
 
 
