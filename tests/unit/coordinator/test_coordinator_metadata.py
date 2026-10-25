@@ -7,6 +7,7 @@ import pytest
 from styx.common.exceptions import NotAStateflowGraphError
 from styx.common.local_state_backends import LocalStateBackend
 from styx.common.operator import Operator
+from styx.common.serialization import zstd_msgpack_deserialization
 from styx.common.stateflow_graph import StateflowGraph
 
 from coordinator.coordinator_metadata import Coordinator
@@ -187,10 +188,60 @@ class TestRegisterSnapshot:
             pool=pool,
         )
         assert c.worker_snapshot_ids[0] == 1
-        assert c.completed_input_offsets[("users", 0)] == 10
-        assert c.completed_out_offsets[("users", 0)] == 5
+        # Snapshot 1 is not complete on worker 1 yet: its offsets wait for it.
+        assert c.completed_input_offsets == {}
+
+        c.register_snapshot(
+            worker_id=1,
+            snapshot_id=1,
+            partial_input_offsets={("users", 1): 7},
+            partial_output_offsets={("users", 1): 3},
+            epoch_counter=1,
+            t_counter=100,
+            pool=pool,
+        )
+        assert c.completed_input_offsets == {("users", 0): 10, ("users", 1): 7}
+        assert c.completed_out_offsets == {("users", 0): 5, ("users", 1): 3}
         assert c.completed_epoch_counter == 1
         assert c.completed_t_counter == 100
+
+    def test_sequencer_file_never_takes_a_later_snapshots_report(self):
+        # Worker 0 reports snapshot 2 before worker 1 reports snapshot 1. Merging
+        # it into snapshot 1's file would pair snapshot 1's state with offsets past
+        # requests it does not contain.
+        c = _coordinator()
+        c.worker_snapshot_ids = {0: 0, 1: 0}
+        c.prev_completed_snapshot_id = 0
+        pool = MagicMock()
+
+        def report(worker_id, snapshot_id, offset, pending):
+            c.register_snapshot(
+                worker_id=worker_id,
+                snapshot_id=snapshot_id,
+                partial_input_offsets={("users", worker_id): offset},
+                partial_output_offsets={},
+                epoch_counter=snapshot_id,
+                t_counter=snapshot_id,
+                pool=pool,
+                pending_requests=pending,
+            )
+
+        report(0, 1, 10, [])
+        report(0, 2, 20, [["rq2"]])
+        report(1, 1, 11, [["rq1"]])
+
+        assert c.completed_input_offsets == {("users", 0): 10, ("users", 1): 11}
+        assert c.completed_epoch_counter == 1
+        assert c.completed_pending_requests == [["rq1"]]
+        written = zstd_msgpack_deserialization(c.s3_client.put_object.call_args.kwargs["Body"])
+        assert written[0] == {("users", 0): 10, ("users", 1): 11}
+        assert [list(p) for p in written[5]] == [["rq1"]]
+        assert 2 in c.snapshot_reports
+
+        report(1, 2, 21, [])
+        assert c.completed_input_offsets == {("users", 0): 20, ("users", 1): 21}
+        assert c.completed_pending_requests == [["rq2"]]
+        assert c.snapshot_reports == {}
 
     def test_partial_offsets_take_max(self):
         c = _coordinator()

@@ -84,6 +84,7 @@ class AsyncSnapshottingProcess:
             *rest,
         ) = metadata
         is_migration_checkpoint = bool(rest and rest[0])
+        pending = list(rest[1]) if len(rest) > 1 else []
         logging.warning(f"ASYNC_SN | Starting Snapshot at epoch: {epoch_counter}")
         snapshot_id = self.async_snapshots.start_snapshotting(
             topic_partition_offsets,
@@ -92,6 +93,7 @@ class AsyncSnapshottingProcess:
             t_counter,
             n_files=len(self.delta_maps),
             is_migration_checkpoint=is_migration_checkpoint,
+            pending_requests=pending,
         )
         for operator_partition, delta_map in self.delta_maps.items():
             operator_name, partition = operator_partition

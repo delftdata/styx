@@ -411,13 +411,16 @@ class CoordinatorService:
                 logging.warning("Dropping stale MigrationInitDone (recovery intervened)")
                 return
 
-            epoch_counter, t_counter, input_offsets, output_offsets = self.networking.decode_message(data)
+            epoch_counter, t_counter, input_offsets, output_offsets, pending_requests = self.networking.decode_message(
+                data,
+            )
 
             sync_complete: bool = await self.migration_metadata.init_done(
                 epoch_counter,
                 t_counter,
                 input_offsets,
                 output_offsets,
+                pending_requests,
             )
             logging.warning(f"MIGRATION | MigrationInitDone | {self.migration_metadata.sync_sum}")
 
@@ -512,6 +515,7 @@ class CoordinatorService:
                 t_counter,
                 sn_size,
                 is_migration_checkpoint,
+                pending_requests,
             ) = self.networking.decode_message(data)
 
             snapshot_time = end - start
@@ -536,6 +540,7 @@ class CoordinatorService:
                 t_counter,
                 pool,
                 is_migration_checkpoint=is_migration_checkpoint,
+                pending_requests=pending_requests,
             )
 
             # Check for deferred migration re-trigger: fire once the first
@@ -927,6 +932,7 @@ class CoordinatorService:
                 self.migration_metadata.t_counter,
                 self.migration_metadata.input_offsets,
                 self.migration_metadata.output_offsets,
+                self.migration_metadata.pending_requests,
             ),
             MessageType.MigrationDone,
             Serializer.MSGPACK,
@@ -1048,6 +1054,8 @@ class CoordinatorService:
         self.coordinator.completed_out_offsets.clear()
         self.coordinator.completed_epoch_counter = 0
         self.coordinator.completed_t_counter = 0
+        self.coordinator.completed_pending_requests = []
+        self.coordinator.snapshot_reports.clear()
         self.coordinator.prev_completed_snapshot_id = -1
         # All workers will effectively need to rebuild their snapshot IDs
         self.coordinator.worker_snapshot_ids = {worker.worker_id: -1 for worker in participating_workers}

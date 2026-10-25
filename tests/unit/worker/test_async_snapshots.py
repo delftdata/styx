@@ -91,10 +91,20 @@ class TestSnapshotLifecycle:
         msg = mock_socket.socket.return_value.send.call_args.args[0]
         from styx.common.tcp_networking import NetworkingManager
 
-        (_w, _sid, _start, _end, _in, _out, epoch, t_counter, size, checkpoint) = NetworkingManager.decode_message(
-            msg[8:]
+        (_w, _sid, _start, _end, _in, _out, epoch, t_counter, size, checkpoint, pending) = (
+            NetworkingManager.decode_message(msg[8:])
         )
         assert (epoch, t_counter, size, checkpoint) == (10, 100, 100, False)
+        assert list(pending) == []
+
+    def test_reports_pending_requests(self, mock_socket):
+        from styx.common.tcp_networking import NetworkingManager
+
+        s = _snap(snapshot_id=5)
+        pending = [[b"rq", "k", "op", 1, "f", [], 40, 0]]
+        s.start_snapshotting({("op", 0): 41}, {}, 10, 100, n_files=0, pending_requests=pending)
+        msg = mock_socket.socket.return_value.send.call_args.args[0]
+        assert [list(p) for p in NetworkingManager.decode_message(msg[8:])[10]] == pending
 
     def test_overlapping_snapshots_keep_their_own_ids_and_metadata(self, mock_socket):
         s = _snap(snapshot_id=1)
@@ -155,7 +165,8 @@ class TestStoreSnapshot:
 class TestRetrieveSnapshot:
     def test_snapshot_id_negative_one_returns_empty(self):
         s = _snap()
-        data, tp_off, tp_out_off, epoch, t_counter, migration_blob = s.retrieve_snapshot(-1, [])
+        data, tp_off, tp_out_off, epoch, t_counter, migration_blob, pending = s.retrieve_snapshot(-1, [])
+        assert pending == []
         assert data == {}
         assert tp_off == {}
         assert tp_out_off == {}
@@ -174,7 +185,7 @@ class TestRetrieveSnapshot:
         mock_s3.get_paginator.return_value = paginator
 
         s = _snap()
-        data, _tp_off, _tp_out_off, _epoch, _t_counter, _migration_blob = s.retrieve_snapshot(
+        data, _tp_off, _tp_out_off, _epoch, _t_counter, _migration_blob, _pending = s.retrieve_snapshot(
             0,
             [("users", 0)],
         )
@@ -352,12 +363,35 @@ class TestLoadSequencerStateTupleFormats:
             blob,
         )
 
-        tp_off, tp_out, epoch, t_counter, migration_blob = s._load_sequencer_state(mock_s3, 1)
+        tp_off, tp_out, epoch, t_counter, migration_blob, pending = s._load_sequencer_state(mock_s3, 1)
         assert tp_off == {("users", 0): 10}
         assert tp_out == {("users", 0): 5}
         assert epoch == 3
         assert t_counter == 42
         assert migration_blob == blob
+        assert pending == []
+
+    @patch("worker.fault_tolerance.async_snapshots._get_s3_client")
+    def test_6_element_tuple_with_pending_requests(self, mock_mk):
+        """Sequencer file with the requests behind its offsets that had not committed."""
+        mock_s3 = MagicMock()
+        mock_mk.return_value = mock_s3
+
+        s = _snap()
+        paginator = MagicMock()
+        paginator.paginate.return_value = [{"Contents": [{"Key": "sequencer/1.bin"}, {"Key": "sequencer/2.bin"}]}]
+        mock_s3.get_paginator.return_value = paginator
+
+        files = {
+            "sequencer/1.bin": ({("users", 0): 9}, {}, 2, 40, None, [[b"old", "k", "users", 0, "f", [], 8, 0]]),
+            "sequencer/2.bin": ({("users", 0): 10}, {}, 3, 42, None, [[b"rq", "k", "users", 0, "f", [], 9, 0]]),
+        }
+        s._get_zstd_msgpack = lambda _s3_client, key: files[key]
+
+        tp_off, _tp_out, epoch, _t, migration_blob, pending = s._load_sequencer_state(mock_s3, 2)
+        assert (tp_off, epoch, migration_blob) == ({("users", 0): 10}, 3, None)
+        # Only the recovered snapshot's own pending requests.
+        assert pending == [[b"rq", "k", "users", 0, "f", [], 9, 0]]
 
     @patch("worker.fault_tolerance.async_snapshots._get_s3_client")
     def test_4_element_tuple_legacy_format(self, mock_mk):
@@ -377,12 +411,13 @@ class TestLoadSequencerStateTupleFormats:
             42,
         )
 
-        tp_off, tp_out, epoch, t_counter, migration_blob = s._load_sequencer_state(mock_s3, 1)
+        tp_off, tp_out, epoch, t_counter, migration_blob, pending = s._load_sequencer_state(mock_s3, 1)
         assert tp_off == {("users", 0): 10}
         assert tp_out == {("users", 0): 5}
         assert epoch == 3
         assert t_counter == 42
         assert migration_blob is None
+        assert pending == []
 
     @patch("worker.fault_tolerance.async_snapshots._get_s3_client")
     def test_5_element_with_none_migration_blob(self, mock_mk):
@@ -403,7 +438,7 @@ class TestLoadSequencerStateTupleFormats:
             None,
         )
 
-        *_, migration_blob = s._load_sequencer_state(mock_s3, 1)
+        *_, migration_blob, _pending = s._load_sequencer_state(mock_s3, 1)
         assert migration_blob is None
 
     @patch("worker.fault_tolerance.async_snapshots._get_s3_client")
@@ -417,12 +452,13 @@ class TestLoadSequencerStateTupleFormats:
         paginator.paginate.return_value = [{"Contents": []}]
         mock_s3.get_paginator.return_value = paginator
 
-        tp_off, tp_out, epoch, t_counter, migration_blob = s._load_sequencer_state(mock_s3, 1)
+        tp_off, tp_out, epoch, t_counter, migration_blob, pending = s._load_sequencer_state(mock_s3, 1)
         assert tp_off == {}
         assert tp_out == {}
         assert epoch == 0
         assert t_counter == 0
         assert migration_blob is None
+        assert pending == []
 
 
 @patch("worker.fault_tolerance.async_snapshots.socket")
@@ -432,4 +468,4 @@ def test_checkpoint_flag_is_reported(mock_socket):
     s = _snap(snapshot_id=7)
     s.start_snapshotting({}, {}, 1, 1, n_files=0, is_migration_checkpoint=True)
     msg = mock_socket.socket.return_value.send.call_args.args[0]
-    assert NetworkingManager.decode_message(msg[8:])[-1] is True
+    assert NetworkingManager.decode_message(msg[8:])[9] is True

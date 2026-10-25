@@ -102,23 +102,33 @@ class StyxKafkaIngress(BaseIngress):
                 params=params,
                 kafka_ingress_partition=msg.partition,
             )
-            if key is None or self.state.exists(key, operator_name, partition):
-                # Message received in the correct partition (Normal operation)
-                self.sequencer.sequence(run_func_payload)
-            elif (
-                true_partition := self.registered_operators[(operator_name, msg.partition)].which_partition(key)
-            ) == partition:
-                # Message received in the correct partition, but it was an insert operation (didn't exist in the state)
-                self.sequencer.sequence(run_func_payload)
-            else:
-                # In flight message during migration: the key now belongs to another
-                # partition. It still runs in this worker's epoch, as a remote call
-                # if that partition is on a peer (AriaProtocol.run_function), so the
-                # ingress partition's offset only ever advances here, in order.
-                run_func_payload.partition = true_partition
-                self.sequencer.sequence(run_func_payload)
+            self.route_and_sequence(run_func_payload)
         else:
             logging.error(f"Invalid message type: {message_type} passed to KAFKA")
+
+    def route_and_sequence(self, run_func_payload: RunFuncPayload) -> None:
+        """Sequence a request consumed from its ingress partition, at the partition
+        that holds its key now."""
+        key = run_func_payload.key
+        operator_name = run_func_payload.operator_name
+        partition = run_func_payload.partition
+        if key is None or self.state.exists(key, operator_name, partition):
+            # Message received in the correct partition (Normal operation)
+            self.sequencer.sequence(run_func_payload)
+        elif (
+            true_partition := self.registered_operators[
+                (operator_name, run_func_payload.kafka_ingress_partition)
+            ].which_partition(key)
+        ) == partition:
+            # Message received in the correct partition, but it was an insert operation (didn't exist in the state)
+            self.sequencer.sequence(run_func_payload)
+        else:
+            # In flight message during migration: the key now belongs to another
+            # partition. It still runs in this worker's epoch, as a remote call
+            # if that partition is on a peer (AriaProtocol.run_function), so the
+            # ingress partition's offset only ever advances here, in order.
+            run_func_payload.partition = true_partition
+            self.sequencer.sequence(run_func_payload)
 
     async def start_kafka_consumer(
         self,

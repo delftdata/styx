@@ -44,6 +44,7 @@ from worker.async_snapshotting import AsyncSnapshottingProcess
 from worker.fault_tolerance.async_snapshots import AsyncSnapshotsS3
 from worker.operator_state.aria.in_memory_state import InMemoryOperatorState
 from worker.operator_state.stateless import Stateless
+from worker.sequencer import pending_requests
 from worker.transactional_protocols.aria import AriaProtocol
 from worker.util.container_monitor import ContainerMonitor
 
@@ -148,6 +149,7 @@ class Worker:
 
         self.m_input_offsets: dict[OperatorPartition, int] = {}
         self.m_output_offsets: dict[OperatorPartition, int] = {}
+        self.m_pending_requests: list[pending_requests.PendingRequest] = []
         self.m_epoch_counter: int = -1
         self.m_t_counter: int = -1
 
@@ -579,6 +581,7 @@ class Worker:
             egress=old_egress if old_egress.is_running else None,
             kafka_consumer=old_consumer,
             incarnation=self.incarnation,
+            restored_requests=pending_requests.consumed_by(self.m_pending_requests, self.registered_operators),
         )
 
     async def _handle_receive_migration_hashes(
@@ -693,6 +696,10 @@ class Worker:
                 f"MIGRATION | PHASE B Hash metadata sent | took: {t_hash_send_end - t_hash_send_start}",
             )
 
+            # Requests behind the stop offsets that had not committed: the checkpoint
+            # and the rebuilt protocols carry them, since they are not consumed again.
+            stop_pending = self.function_execution_protocol.pending_requests()
+
             # 5.5 Trigger a migration checkpoint snapshot.
             # This captures the state at the exact moment before data transfer begins,
             # enabling checkpoint-and-resume recovery instead of revert-and-retry.
@@ -706,6 +713,7 @@ class Worker:
                     self.function_execution_protocol.sequencer.epoch_counter,
                     self.function_execution_protocol.sequencer.t_counter,
                     True,  # the migration checkpoint
+                    stop_pending,
                 ),
                 msg_type=MessageType.SnapTakeSnapshot,
                 serializer=Serializer.MSGPACK,
@@ -721,6 +729,7 @@ class Worker:
                     self.function_execution_protocol.sequencer.t_counter,
                     self.function_execution_protocol.topic_partition_offsets,
                     self.function_execution_protocol.egress.topic_partition_output_offsets,
+                    stop_pending,
                 ),
                 msg_type=MessageType.MigrationInitDone,
                 serializer=Serializer.MSGPACK,
@@ -768,6 +777,7 @@ class Worker:
             self.m_t_counter,
             self.m_input_offsets,
             self.m_output_offsets,
+            self.m_pending_requests,
         ) = self.networking.decode_message(data)
         self.migration_completed.set()
         await asyncio.sleep(0)
@@ -821,7 +831,7 @@ class Worker:
         )
         await self._send_snap_assigned(snapshot_id=snapshot_id)
 
-        (snap_data, tp_offsets, tp_out_offsets, epoch, t_counter, migration_blob) = (
+        (snap_data, tp_offsets, tp_out_offsets, epoch, t_counter, migration_blob, snapshot_pending) = (
             self.async_snapshots.retrieve_snapshot(
                 snapshot_id,
                 self.registered_operators.keys(),
@@ -919,6 +929,9 @@ class Worker:
             restart_after_migration=restart_after_migration,
             dedup_output_offsets=all_dedup_out_offsets,
             incarnation=self.incarnation,
+            # Rescheduled requests behind the snapshot's offsets, possibly from a
+            # worker that is gone: this worker consumes their ingress partitions now.
+            restored_requests=pending_requests.consumed_by(snapshot_pending, self.registered_operators),
         )
         self.function_execution_protocol.start()
 

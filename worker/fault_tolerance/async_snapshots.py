@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import functools
 import os
 import socket
@@ -31,7 +31,10 @@ S3_REGION: str = os.getenv("S3_REGION", "us-east-1")
 
 SNAPSHOT_BUCKET_NAME: str = os.getenv("SNAPSHOT_BUCKET_NAME", "styx-snapshots")
 SEQUENCER_PREFIX = "sequencer/"
-# Number of elements in sequencer tuple (with/without migration checkpoint blob)
+# Number of elements in sequencer tuple: offsets, output offsets, epoch, t_counter,
+# then the migration checkpoint blob, then the pending requests. Older files lack
+# the trailing elements.
+_SEQUENCER_TUPLE_LEN_WITH_PENDING = 6
 _SEQUENCER_TUPLE_LEN_WITH_MIGRATION = 5
 _SEQUENCER_TUPLE_LEN_LEGACY = 4
 
@@ -67,6 +70,8 @@ class _SnapshotInProgress:
     t_counter: int
     files_left: int
     is_migration_checkpoint: bool = False
+    # Requests behind input_offsets that had not committed (worker/sequencer/pending_requests.py).
+    pending_requests: list = field(default_factory=list)
     size: int = 0
     failed: bool = False
 
@@ -102,6 +107,7 @@ class AsyncSnapshotsS3(BaseSnapshotter):
         n_files: int,
         *,
         is_migration_checkpoint: bool = False,
+        pending_requests: list | None = None,
     ) -> int:
         """Start a snapshot of n_files files and return its id.
 
@@ -118,6 +124,7 @@ class AsyncSnapshotsS3(BaseSnapshotter):
             t_counter=current_t_counter,
             files_left=n_files,
             is_migration_checkpoint=is_migration_checkpoint,
+            pending_requests=pending_requests or [],
         )
         # A snapshot with no files is complete already.
         self._report_completed()
@@ -165,6 +172,7 @@ class AsyncSnapshotsS3(BaseSnapshotter):
                 snapshot.t_counter,
                 snapshot.size,
                 snapshot.is_migration_checkpoint,
+                snapshot.pending_requests,
             ),
             msg_type=MessageType.SnapID,
             serializer=Serializer.MSGPACK,
@@ -194,15 +202,19 @@ class AsyncSnapshotsS3(BaseSnapshotter):
         int,
         int,
         bytes | None,
+        list,
     ]:
         self.snapshot_id = snapshot_id + 1
         if snapshot_id == -1:
-            return {}, {}, {}, 0, 0, None
+            return {}, {}, {}, 0, 0, None, []
 
         s3 = _get_s3_client()
         data = self._load_operator_state(s3, snapshot_id, registered_operators)
-        tp_offsets, tp_out_offsets, epoch, t_counter, migration_blob = self._load_sequencer_state(s3, snapshot_id)
-        return data, tp_offsets, tp_out_offsets, epoch, t_counter, migration_blob
+        tp_offsets, tp_out_offsets, epoch, t_counter, migration_blob, pending = self._load_sequencer_state(
+            s3,
+            snapshot_id,
+        )
+        return data, tp_offsets, tp_out_offsets, epoch, t_counter, migration_blob, pending
 
     def _load_operator_state(
         self,
@@ -234,16 +246,28 @@ class AsyncSnapshotsS3(BaseSnapshotter):
         self,
         s3: S3Client,
         snapshot_id: int,
-    ) -> tuple[dict[OperatorPartition, int], dict[OperatorPartition, int], int, int, bytes | None]:
+    ) -> tuple[dict[OperatorPartition, int], dict[OperatorPartition, int], int, int, bytes | None, list]:
         topic_partition_offsets: dict[OperatorPartition, int] = {}
         topic_partition_output_offsets: dict[OperatorPartition, int] = {}
         epoch = 0
         t_counter = 0
         migration_blob: bytes | None = None
+        pending: list = []
 
         for _, key in self._iter_snapshot_files(s3, SEQUENCER_PREFIX, snapshot_id):
             loaded = self._get_zstd_msgpack(s3, key)
-            if isinstance(loaded, (tuple, list)) and len(loaded) == _SEQUENCER_TUPLE_LEN_WITH_MIGRATION:
+            pending = []
+            if isinstance(loaded, (tuple, list)) and len(loaded) == _SEQUENCER_TUPLE_LEN_WITH_PENDING:
+                (
+                    topic_partition_offsets,
+                    topic_partition_output_offsets,
+                    epoch,
+                    t_counter,
+                    migration_blob,
+                    pending,
+                ) = loaded
+                pending = list(pending)
+            elif isinstance(loaded, (tuple, list)) and len(loaded) == _SEQUENCER_TUPLE_LEN_WITH_MIGRATION:
                 (
                     topic_partition_offsets,
                     topic_partition_output_offsets,
@@ -260,7 +284,7 @@ class AsyncSnapshotsS3(BaseSnapshotter):
                 ) = loaded
                 migration_blob = None
 
-        return topic_partition_offsets, topic_partition_output_offsets, epoch, t_counter, migration_blob
+        return topic_partition_offsets, topic_partition_output_offsets, epoch, t_counter, migration_blob, pending
 
     def _iter_snapshot_files(
         self,

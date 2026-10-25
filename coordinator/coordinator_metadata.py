@@ -54,6 +54,14 @@ class Coordinator:
         self.completed_out_offsets: dict[OperatorPartition, int] = {}
         self.completed_epoch_counter: int = 0
         self.completed_t_counter: int = 0
+        # Requests behind completed_input_offsets that had not committed, of the
+        # last completed snapshot (worker/sequencer/pending_requests.py).
+        self.completed_pending_requests: list = []
+        # Worker reports of snapshots not yet complete on every worker, by snapshot
+        # id: (input offsets, output offsets, epoch, t_counter, pending requests).
+        # A sequencer file is written from its own snapshot's reports only, never
+        # pairing that snapshot's state with a later one's offsets.
+        self.snapshot_reports: dict[int, list[tuple]] = {}
         self.worker_pool = WorkerPool()
         self.submitted_graph: StateflowGraph | None = None
 
@@ -217,6 +225,7 @@ class Coordinator:
         pool: concurrent.futures.ProcessPoolExecutor,
         *,
         is_migration_checkpoint: bool = False,
+        pending_requests: list | None = None,
     ) -> None:
         self.worker_snapshot_ids[worker_id] = snapshot_id
         if (
@@ -226,19 +235,12 @@ class Coordinator:
         ):
             self._migration_checkpoint_snap_id = snapshot_id
             logging.warning(f"Migration checkpoint is snapshot {snapshot_id}")
-        for operator_partition, pio in partial_input_offsets.items():
-            self.completed_input_offsets[operator_partition] = max(
-                pio,
-                self.completed_input_offsets.get(operator_partition, pio),
-            )
-        for operator_partition, poo in partial_output_offsets.items():
-            self.completed_out_offsets[operator_partition] = max(
-                poo,
-                self.completed_out_offsets.get(operator_partition, poo),
-            )
-        self.completed_epoch_counter = epoch_counter
-        self.completed_t_counter = t_counter
+        self.snapshot_reports.setdefault(snapshot_id, []).append(
+            (partial_input_offsets, partial_output_offsets, epoch_counter, t_counter, pending_requests or []),
+        )
         current_completed_snapshot: int = self.get_current_completed_snapshot_id()
+        if current_completed_snapshot != self.prev_completed_snapshot_id:
+            self._merge_snapshot_reports(current_completed_snapshot)
         logging.debug(
             f"register_snapshot | worker={worker_id} snap={snapshot_id} "
             f"cluster_min={current_completed_snapshot} prev={self.prev_completed_snapshot_id} "
@@ -278,6 +280,7 @@ class Coordinator:
                     self.completed_epoch_counter,
                     self.completed_t_counter,
                     self._migration_checkpoint_blob if self.migration_checkpoint_completed() else None,
+                    self.completed_pending_requests,
                 ),
             )
             self.s3_client.put_object(
@@ -293,6 +296,26 @@ class Coordinator:
                     start_snapshot_compaction,
                     current_completed_snapshot,
                 )
+
+    def _merge_snapshot_reports(self, completed_snapshot_id: int) -> None:
+        """Fold the reports of every snapshot up to the completed one into the
+        completed offsets and counters; its pending requests are that snapshot's."""
+        for snapshot_id in sorted(s for s in self.snapshot_reports if s <= completed_snapshot_id):
+            reports = self.snapshot_reports.pop(snapshot_id)
+            for input_offsets, output_offsets, _, _, _ in reports:
+                for operator_partition, pio in input_offsets.items():
+                    self.completed_input_offsets[operator_partition] = max(
+                        pio,
+                        self.completed_input_offsets.get(operator_partition, pio),
+                    )
+                for operator_partition, poo in output_offsets.items():
+                    self.completed_out_offsets[operator_partition] = max(
+                        poo,
+                        self.completed_out_offsets.get(operator_partition, poo),
+                    )
+            self.completed_epoch_counter = max(report[2] for report in reports)
+            self.completed_t_counter = max(report[3] for report in reports)
+            self.completed_pending_requests = [fields for report in reports for fields in report[4]]
 
     def migration_checkpoint_completed(self) -> bool:
         """Whether the cluster has completed the checkpoint snapshot (or a later one)."""

@@ -21,6 +21,7 @@ from worker.ingress.styx_kafka_ingress import StyxKafkaIngress
 from worker.operator_state.aria.conflict_detection_types import (
     AriaConflictDetectionType,
 )
+from worker.sequencer import pending_requests
 from worker.sequencer.sequencer import Sequencer
 
 if TYPE_CHECKING:
@@ -83,6 +84,7 @@ class AriaProtocol(BaseTransactionalProtocol):
         egress: StyxKafkaBatchEgress | None = None,
         kafka_consumer: AIOKafkaConsumer | None = None,
         incarnation: int = 0,
+        restored_requests: list[pending_requests.PendingRequest] | None = None,
     ) -> None:
         if topic_partition_offsets is None:
             topic_partition_offsets = {(tp.topic, tp.partition): -1 for tp in topic_partitions}
@@ -129,6 +131,9 @@ class AriaProtocol(BaseTransactionalProtocol):
         )
         self.sequencer.set_sequencer_id(list(self.peers.keys()), self.id)
         self.sequencer.set_wal_values_after_recovery(request_id_to_t_id_map)
+        # Requests behind the ingress offsets this protocol starts from that had not
+        # committed (pending_requests); sequenced before anything is consumed.
+        self._restored_requests: list[pending_requests.PendingRequest] = restored_requests or []
 
         self.ingress: StyxKafkaIngress = StyxKafkaIngress(
             networking=self.networking,
@@ -355,6 +360,8 @@ class AriaProtocol(BaseTransactionalProtocol):
                     self.egress.topic_partition_output_offsets,
                     self.sequencer.epoch_counter,
                     self.sequencer.t_counter,
+                    False,  # not the migration checkpoint
+                    self.pending_requests(),
                 ),
                 msg_type=MessageType.SnapTakeSnapshot,
                 serializer=Serializer.MSGPACK,
@@ -362,11 +369,28 @@ class AriaProtocol(BaseTransactionalProtocol):
             self.snapshot_marker_received = False
 
     async def communication_protocol(self) -> None:
+        self._sequence_restored_requests()
         await self.ingress.start(self.topic_partitions, self.topic_partition_offsets)
         logging.warning("Ingress started")
         await self.egress.start(self.id)
         logging.warning("Egress started")
         await self.started.wait()
+
+    def _sequence_restored_requests(self) -> None:
+        if not self._restored_requests:
+            return
+        for fields in self._restored_requests:
+            self.ingress.route_and_sequence(pending_requests.decode(fields))
+        logging.warning(
+            f"{self.id} ||| Sequenced {len(self._restored_requests)} requests rescheduled before the cut",
+        )
+        self._restored_requests = []
+
+    def pending_requests(self) -> list[pending_requests.PendingRequest]:
+        """The sequenced requests behind the recorded ingress offsets: rescheduled
+        ones that have not committed. A cut at these offsets must carry them, since
+        they are not consumed again."""
+        return pending_requests.behind_offsets(self.sequencer.distributed_log, self.topic_partition_offsets)
 
     async def protocol_tcp_controller(self, data: bytes) -> None:
         """Legacy entry point retained for symmetry with the rest of the codebase.
@@ -1134,10 +1158,9 @@ class AriaProtocol(BaseTransactionalProtocol):
         return abort_rate
 
     def _advance_offsets(self, sequence: list[SequencedItem]) -> None:
+        # Past every request of the epoch, the rescheduled ones too: those are back in
+        # the sequencer, and a cut at these offsets carries them (pending_requests).
         for item in sequence:
-            if item.t_id in self.concurrency_aborts_everywhere:
-                continue
-
             payload = item.payload
             tpo_key = (payload.operator_name, payload.kafka_ingress_partition)
 
