@@ -190,6 +190,8 @@ class AriaProtocol(BaseTransactionalProtocol):
         self._proxy_results: dict[int, asyncio.Future] = {}
         # Proxied transactions whose read/write set changed in their fallback run.
         self._proxy_rw_changed: set[int] = set()
+        # Proxied calls sent this epoch, logged when there were any.
+        self._proxied_calls: int = 0
 
         self.protocol_handlers_map: dict[MessageType, Callable[[bytes], Awaitable[None]]] = {
             MessageType.RunFunRemote: self._handle_run_fun_remote,
@@ -430,6 +432,7 @@ class AriaProtocol(BaseTransactionalProtocol):
         workers advance one partition's offset, each by max, past requests the other
         had not run yet.)
         """
+        self._proxied_calls += 1
         host, _, protocol_port = self.dns[payload.operator_name][payload.partition]
         result: asyncio.Future = asyncio.get_running_loop().create_future()
         self._proxy_results[t_id] = result
@@ -1157,6 +1160,9 @@ class AriaProtocol(BaseTransactionalProtocol):
         self.t_ids_to_reschedule.clear()
         self.fallback_rescheduled_t_ids.clear()
         self._proxy_rw_changed.clear()
+        if self._proxied_calls:
+            logging.warning(f"{self.id} ||| Proxied calls this epoch: {self._proxied_calls}")
+            self._proxied_calls = 0
         self.wait_responses_to_be_sent.clear()
         self.networking.cleanup_after_epoch()
         self.local_state.cleanup()

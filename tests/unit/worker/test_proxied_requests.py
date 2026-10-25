@@ -11,6 +11,7 @@ import asyncio
 from types import SimpleNamespace
 
 import pytest
+from styx.common.base_networking import BaseNetworking
 from styx.common.message_types import MessageType
 from styx.common.operator import Operator
 from styx.common.run_func_payload import RunFuncPayload
@@ -18,7 +19,9 @@ from styx.common.serialization import Serializer
 from styx.common.tcp_networking import NetworkingManager
 from styx.common.util.aio_task_scheduler import AIOTaskScheduler
 
+from worker.ingress.styx_kafka_ingress import StyxKafkaIngress
 from worker.operator_state.aria.in_memory_state import InMemoryOperatorState
+from worker.sequencer.sequencer import Sequencer
 from worker.transactional_protocols.aria import AriaProtocol
 
 OP = "op"
@@ -87,6 +90,7 @@ def _worker(link: _Link, worker_id: int, addr: tuple, partitions: set[int]) -> A
     proto.fallback_locking_event_map = {}
     proto._proxy_results = {}
     proto._proxy_rw_changed = set()
+    proto._proxied_calls = 0
     proto.protocol_handlers_map = {
         MessageType.RunFunProxy: proto._handle_run_fun_proxy,
         MessageType.ProxyResult: proto._handle_proxy_result,
@@ -131,6 +135,8 @@ class TestProxiedRequest:
         assert "k" in owner.local_state.read_sets[(OP, 1)][7]
         assert root.networking.chain_participants[7] == [2]
         assert 7 not in root._proxy_results
+        assert root._proxied_calls == 1
+        assert owner._proxied_calls == 0
 
     async def test_logic_abort_reaches_the_root(self):
         _link, root, _owner = _cluster()
@@ -202,3 +208,59 @@ class TestIngressOffsetsStayWithTheConsumer:
         item = SimpleNamespace(t_id=7, payload=_misrouted())
         AriaProtocol._advance_offsets(proto, [item])
         assert proto.topic_partition_offsets == {(OP, 0): 41}
+
+
+def _key_on(operator: Operator, partition: int) -> str:
+    return next(key for key in (f"key{i}" for i in range(1000)) if operator.which_partition(key) == partition)
+
+
+def _record(offset: int, key: str) -> SimpleNamespace:
+    # As the client sent it before the migration: addressed to ingress partition 0.
+    value = BaseNetworking.encode_message(
+        msg=(OP, key, "read", (), 0),
+        msg_type=MessageType.ClientMsg,
+        serializer=Serializer.MSGPACK,
+    )
+    return SimpleNamespace(key=f"rq{offset}".encode(), offset=offset, partition=0, value=value)
+
+
+class TestOffsetNeverPassesAnUnrunRequest:
+    async def test_snapshot_offset_covers_only_requests_that_ran(self):
+        # Regression: the consuming worker used to forward a request for a migrated
+        # key into the owner's epoch and advance the ingress offset past it for its
+        # own later requests. A snapshot taken before the owner ran it recorded an
+        # offset past it, and recovery skipped the request.
+        _link, root, owner = _cluster()
+        operator = root.registered_operators[(OP, 0)]
+        migrated, local = _key_on(operator, 1), _key_on(operator, 0)
+        owner.local_state.batch_insert({migrated: "m"}, OP, 1)
+        root.local_state.batch_insert({local: "l"}, OP, 0)
+
+        sequencer = Sequencer()
+        sequencer.set_sequencer_id([2], 1)
+        ingress = StyxKafkaIngress(
+            networking=root.networking,
+            sequencer=sequencer,
+            state=root.local_state,
+            registered_operators=root.registered_operators,
+            worker_id=1,
+            kafka_url="unused",
+            epoch_interval_ms=1,
+            sequence_max_size=100,
+        )
+        records = [_record(40, migrated), _record(41, local)]
+        for record in records:
+            ingress.handle_message_from_kafka(record)
+
+        # The consuming worker's epoch, up to its snapshot.
+        root.concurrency_aborts_everywhere = set()
+        root.topic_partition_offsets = {(OP, 0): 39}
+        sequence = sequencer.get_epoch()
+        for item in sequence:
+            await root.run_function(item.t_id, item.payload)
+        root._advance_offsets(sequence)
+
+        recorded = root.topic_partition_offsets[(OP, 0)]
+        answered = {item.payload.kafka_offset for item in sequence if item.t_id in root.networking.client_responses}
+        assert recorded == 41
+        assert {r.offset for r in records if r.offset <= recorded} <= answered
