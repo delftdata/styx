@@ -339,9 +339,11 @@ class Worker:
         await self._send_snap_assigned(snapshot_id=snapshot_id)
 
         logging.warning("Retrieving Snapshot from S3")
-        (snap_data, _in_off, _out_off, epoch, t_counter, _migration_blob) = self.async_snapshots.retrieve_snapshot(
-            snapshot_id,
-            self.registered_operators.keys(),
+        (snap_data, _in_off, _out_off, epoch, t_counter, _migration_blob, _pending) = (
+            self.async_snapshots.retrieve_snapshot(
+                snapshot_id,
+                self.registered_operators.keys(),
+            )
         )
         self.attach_state_to_operators_after_snapshot(snap_data)
         logging.warning("State attached to operators")
